@@ -1,0 +1,214 @@
+<? var FILE = '34_EierskifteSkjema.html'; ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <?!= include('AppMetaPartial') ?>
+  <!-- ======================= EierskifteSkjema ===================
+       FILE: 34_EierskifteSkjema.html | VERSION: <?= VERSION || '1.0.0' ?> | UPDATED: 2025-09-14
+       PURPOSE: Innsending av eierskifte
+  ================================================================= -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <base target="_top">
+    <style>
+        :root {
+            --primary: #3b82f6; --success: #10b981; --danger: #ef4444;
+            --border: #cbd5e1; --text-muted: #64748b; --text-main: #1f2937;
+            --bg-light: #f8fafc;
+        }
+        body { 
+            font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            padding: 20px; 
+            background-color: var(--bg-light);
+            color: var(--text-main);
+        }
+        form { position: relative; }
+        h3 { margin: 0 0 16px; font-size: 20px; }
+        label { 
+            display: block; 
+            margin: 12px 0 4px; 
+            font-size: 14px; 
+            font-weight: 500;
+            color: var(--text-muted); 
+        }
+        input, select { 
+            width: 100%; 
+            padding: 10px; 
+            box-sizing: border-box; 
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .row { display: flex; gap: 12px; }
+        .row > div { flex: 1; }
+        .btn-submit { 
+            margin-top: 20px; 
+            padding: 12px 16px; 
+            cursor: pointer;
+            width: 100%;
+            border: none;
+            border-radius: 6px;
+            background-color: var(--primary);
+            color: white;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .btn-submit:disabled { background-color: #93c5fd; cursor: not-allowed; }
+        #msg { min-height: 20px; margin-top: 8px; font-weight: 500; }
+        .ok { color: var(--success); }
+        .err { color: var(--danger); }
+
+        /* Spinner for loading state */
+        .loader-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.7);
+            display: none; align-items: center; justify-content: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3; border-top: 4px solid var(--primary);
+            border-radius: 50%; width: 40px; height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h3>Registrer eierskifte</h3>
+    
+    <form id="eierskifteForm">
+        <div id="msg"></div>
+
+        <label for="seksjonsnr">Seksjonsnummer</label>
+        <select id="seksjonsnr" required></select>
+        <datalist id="personer-liste"></datalist>
+
+        <label for="navn">Ny eiers navn</label>
+        <input id="navn" type="text" placeholder="Fornavn Etternavn" required list="personer-liste"/>
+
+        <label for="epost">Ny eiers e-post</label>
+        <input id="epost" type="email" placeholder="navn@domene.no" required/>
+
+        <div class="row">
+            <div>
+                <label for="fra">Overtakelsesdato</label>
+                <input id="fra" type="date" required/>
+            </div>
+            <div>
+                <label for="vedlegg">Vedlegg-URL (valgfritt)</label>
+                <input id="vedlegg" type="url" placeholder="https://..."/>
+            </div>
+        </div>
+
+        <button id="submitBtn" class="btn-submit" onclick="submitForm(event)">Lagre eierskifte</button>
+        
+        <div class="loader-overlay" id="loader">
+            <div class="spinner"></div>
+        </div>
+    </form>
+
+    <script>
+        const $ = id => document.getElementById(id);
+        let personerData = []; // Lagrer personer for autofyll
+
+        function setLoading(isLoading) {
+            $('loader').style.display = isLoading ? 'flex' : 'none';
+            $('submitBtn').disabled = isLoading;
+        }
+
+        function setMsg(txt, isSuccess) {
+            const msgEl = $('msg');
+            msgEl.textContent = txt || '';
+            msgEl.className = isSuccess ? 'ok' : 'err';
+        }
+
+        function populateForm({seksjoner, personer}) {
+            const selSeksjon = $('seksjonsnr');
+            selSeksjon.innerHTML = '<option value="">Velg seksjon...</option>';
+            if (seksjoner && seksjoner.length > 0) {
+                seksjoner.sort().forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s;
+                    opt.textContent = s;
+                    selSeksjon.appendChild(opt);
+                });
+            }
+            
+            personerData = personer || [];
+            const datalist = $('personer-liste');
+            datalist.innerHTML = '';
+            personerData.forEach(p => {
+                if(p.navn) {
+                    const opt = document.createElement('option');
+                    opt.value = p.navn;
+                    datalist.appendChild(opt);
+                }
+            });
+        }
+        
+        function handleNameInput(event) {
+            const selectedNavn = event.target.value;
+            const person = personerData.find(p => p.navn === selectedNavn);
+            if (person && person.epost) {
+                $('epost').value = person.epost;
+            }
+        }
+
+        function submitForm(event) {
+            event.preventDefault();
+            setMsg('', true);
+            
+            const payload = {
+                seksjonsnr: $('seksjonsnr').value.trim(),
+                navn: $('navn').value.trim(),
+                epost: $('epost').value.trim(),
+                fraDato: $('fra').value,
+                vedleggUrl: $('vedlegg').value.trim()
+            };
+            
+            if (!payload.seksjonsnr || !payload.navn || !payload.epost || !payload.fraDato) {
+                setMsg('Alle felt med * må fylles ut.', false);
+                return;
+            }
+            
+            setLoading(true);
+            setMsg('Lagrer, vennligst vent...', true);
+
+            google.script.run
+                .withSuccessHandler(res => {
+                    setLoading(false);
+                    if (res && res.ok) {
+                        setMsg(res.message || 'Lagret!', true);
+                        setTimeout(() => google.script.host.close(), 2000); // Lukk etter 2 sek
+                    } else {
+                        setMsg(res.error || 'En ukjent feil oppstod.', false);
+                    }
+                })
+                .withFailureHandler(err => {
+                    setLoading(false);
+                    setMsg('Feil: ' + (err && err.message ? err.message : err), false);
+                })
+                .processOwnershipForm(payload);
+        }
+
+        // Initial last inn data når siden er klar
+        document.addEventListener('DOMContentLoaded', () => {
+            setLoading(true);
+            google.script.run
+                .withSuccessHandler(data => {
+                    setLoading(false);
+                    populateForm(data);
+                })
+                .withFailureHandler(err => {
+                    setLoading(false);
+                    setMsg('Kunne ikke laste inn data: ' + err.message, false);
+                })
+                .getSeksjonerAndPersonerForForm();
+            
+            $('navn').addEventListener('input', handleNameInput);
+        });
+    </script>
+</body>
+</html>

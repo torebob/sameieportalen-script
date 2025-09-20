@@ -1,30 +1,24 @@
 /**
- * CoreAnalysisPlus (FULL, v1.2.1)
- * - Constants extracted (no magic numbers)
- * - JSDoc documentation for public API
- * - Light localization via candidates-config
- * - Safer input validation (threshold, arrays)
- * - Performance: column-chunked scans + periodic progress logs
- * - Performance metrics + large-dataset logging
- * - Config overrides via global CONFIG_PLUS
+ * CoreAnalysisPlus (FULL, v1.3.1)
+ * - ES6-lite: const/let, arrow callbacks, template literals, strict equality
+ * - Extracted _getJaccardThreshold_()
+ * - Header index utilities (reduce duplication)
+ * - Safer range bounds for type inference
+ * - Configurable regex & templates via CONFIG_PLUS
+ * - Public API unchanged
  *
- * Public API (unchanged from prior versions):
+ * Public API:
  *   performComprehensiveAnalysis_()
  *   readRequirementsForGapAnalysis_()
  *   generateRequirementCandidates_(analysis)
  *   dedupeCandidates_(candidates, existing, threshold?)
  *   performGapAnalysis_(analysis, existing, deduped)
- *
- * Optional logger integration:
- *   If a function getAppLogger_() exists and returns {info,warn,error}, it will be used.
- *   Otherwise this module falls back to console logging safely.
  */
 
 // ---------------------------- Configuration ----------------------------------
 
-/** Base (defaults). Overridable via CONFIG_PLUS. */
 const CORE_ANALYSIS_CFG = {
-  VERSION: '1.2.1', // Incremented version
+  VERSION: '1.3.1',
   MAX_SCAN_ROWS: 25,
   MAX_HEADER_PREVIEW: 10,
   SCAN_COL_CHUNK: 50,
@@ -33,6 +27,23 @@ const CORE_ANALYSIS_CFG = {
   LARGE_DATA_SHEETS: 50,
   LARGE_DATA_MAXCOLS: 100,
   LARGE_DATA_TOTALROWS: 50000,
+  TOKEN_MIN_LEN: 2,           // new: tokenize minimum length
+  DATA_START_ROW: 2,          // new: safer assumption
+  REQUIREMENT_TEMPLATES: {    // new: simple i18n hooks (can override in CONFIG_PLUS)
+    no: {
+      trigger_clock: (handler) => `Systemet skal periodisk kjøre «${handler}» (tidsstyrt).`,
+      trigger_form_submit: (handler) => `Ved innsending av skjema skal systemet prosessere via «${handler}».`,
+      trigger_open: (handler) => `Ved åpning av regnearket skal systemet kjøre «${handler}».`,
+      trigger_edit: (handler) => `Ved endring i regnearket skal systemet kjøre «${handler}».`,
+      trigger_generic: (evt, handler) => `Systemet skal støtte hendelsen «${evt}» via «${handler}».`,
+      menu_item: (title, fnName) => `Systemet skal tilby menykommando «${title}» som kaller «${fnName}».`,
+      field_item: (field, sheet) => `Systemet skal forvalte datafelt «${field}» i arket «${sheet}».`
+    }
+  },
+  REGEX: {                    // new: configurable patterns
+    email: /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i,
+    url: /^(https?:\/\/|www\.)/i
+  },
   NAMES: {
     kravSheet: ['Krav', 'Requirements', 'KRAV'],
     menuFelles: ['Meny_Felles', 'Meny Felles', 'MENY_FELLES'],
@@ -48,55 +59,67 @@ const CORE_ANALYSIS_CFG = {
   }
 };
 
-/** Constants for priority levels to avoid magic strings. */
-const PRIORITIES = {
-  MUST: 'MÅ',
-  SHOULD: 'BØR',
-  COULD: 'KAN'
-};
-
-/** Constants for requirement sources. */
-const SOURCES = {
-  TRIGGER: 'trigger',
-  MENU: 'menu',
-  FIELD: 'field',
-  HEURISTIC: 'heuristikk'
-};
+const PRIORITIES = { MUST: 'MÅ', SHOULD: 'BØR', COULD: 'KAN' };
+const SOURCES = { TRIGGER: 'trigger', MENU: 'menu', FIELD: 'field', HEURISTIC: 'heuristikk' };
 
 // ---------------------------- Config helpers ---------------------------------
 
-/** Read effective config: CONFIG_PLUS[key] → fallback to CORE_ANALYSIS_CFG[key] → fallback. */
-function _cfgGet_(key, fallback) {
+const _cfgGet_ = (key, fallback) => {
   try {
-    if (typeof CONFIG_PLUS !== 'undefined' && CONFIG_PLUS && Object.prototype.hasOwnProperty.call(CONFIG_PLUS, key)) {
+    if (typeof CONFIG_PLUS !== 'undefined' &&
+        CONFIG_PLUS &&
+        Object.prototype.hasOwnProperty.call(CONFIG_PLUS, key)) {
       return CONFIG_PLUS[key];
     }
   } catch (_) {}
-  if (Object.prototype.hasOwnProperty.call(CORE_ANALYSIS_CFG, key)) return CORE_ANALYSIS_CFG[key];
-  return fallback;
-}
+  return Object.prototype.hasOwnProperty.call(CORE_ANALYSIS_CFG, key)
+    ? CORE_ANALYSIS_CFG[key]
+    : fallback;
+};
+
+const _cfgDeep_ = (path, fallback) => {
+  const segs = String(path || '').split('.');
+  let cur = (typeof CONFIG_PLUS !== 'undefined' && CONFIG_PLUS) ? CONFIG_PLUS : undefined;
+  for (let i = 0; i < segs.length; i++) {
+    if (!cur || !Object.prototype.hasOwnProperty.call(cur, segs[i])) {
+      cur = undefined;
+      break;
+    }
+    cur = cur[segs[i]];
+  }
+  if (cur !== undefined) return cur;
+
+  cur = CORE_ANALYSIS_CFG;
+  for (let i = 0; i < segs.length; i++) {
+    if (!cur || !Object.prototype.hasOwnProperty.call(cur, segs[i])) {
+      cur = undefined;
+      break;
+    }
+    cur = cur[segs[i]];
+  }
+  return (cur !== undefined) ? cur : fallback;
+};
+
+const _numCfg_ = (key, fallback) => {
+  const v = Number(_cfgGet_(key, fallback));
+  return isNaN(v) ? Number(fallback) : v;
+};
 
 // ---------------------------- Logger (safe) ----------------------------------
 
-function _getLoggerPlus_() {
+const _getLoggerPlus_ = () => {
   try {
     if (typeof getAppLogger_ === 'function') return getAppLogger_();
   } catch (_) {}
-  // Fallback to console-based logger
   return {
     info: (fn, msg, details) => { try { console.log('[INFO]', fn || '', msg || '', details || ''); } catch (_) {} },
     warn: (fn, msg, details) => { try { console.warn('[WARN]', fn || '', msg || '', details || ''); } catch (_) {} },
     error: (fn, msg, details) => { try { console.error('[ERROR]', fn || '', msg || '', details || ''); } catch (_) {} }
   };
-}
+};
 
 // ---------------------------- Public API -------------------------------------
 
-/**
- * Performs a full analysis of the spreadsheet, collecting metadata, triggers,
- * menu declarations, functions, and data model details.
- * @returns {Object} A comprehensive analysis object.
- */
 function performComprehensiveAnalysis_() {
   const log = _getLoggerPlus_();
   const started = Date.now();
@@ -114,9 +137,9 @@ function performComprehensiveAnalysis_() {
   const maxCols = sheetsArr.reduce((m, s) => Math.max(m, s.columns || 0), 0);
   const durationMs = Date.now() - started;
 
-  const LD_SHEETS = Number(_cfgGet_('LARGE_DATA_SHEETS', CORE_ANALYSIS_CFG.LARGE_DATA_SHEETS));
-  const LD_MAXCOLS = Number(_cfgGet_('LARGE_DATA_MAXCOLS', CORE_ANALYSIS_CFG.LARGE_DATA_MAXCOLS));
-  const LD_TOTALROWS = Number(_cfgGet_('LARGE_DATA_TOTALROWS', CORE_ANALYSIS_CFG.LARGE_DATA_TOTALROWS));
+  const LD_SHEETS = _numCfg_('LARGE_DATA_SHEETS', CORE_ANALYSIS_CFG.LARGE_DATA_SHEETS);
+  const LD_MAXCOLS = _numCfg_('LARGE_DATA_MAXCOLS', CORE_ANALYSIS_CFG.LARGE_DATA_MAXCOLS);
+  const LD_TOTALROWS = _numCfg_('LARGE_DATA_TOTALROWS', CORE_ANALYSIS_CFG.LARGE_DATA_TOTALROWS);
 
   const isLarge = (sheetsScanned >= LD_SHEETS) || (maxCols >= LD_MAXCOLS) || (totalRows >= LD_TOTALROWS);
   if (isLarge) {
@@ -136,12 +159,7 @@ function performComprehensiveAnalysis_() {
       sheets: dataModel.sheets,
       headerDuplicates: dataModel.headerDuplicates
     },
-    performanceMetrics: {
-      sheetsScanned,
-      totalRows,
-      maxCols,
-      scanDurationMs: durationMs
-    },
+    performanceMetrics: { sheetsScanned, totalRows, maxCols, scanDurationMs: durationMs },
     version: _cfgGet_('VERSION', CORE_ANALYSIS_CFG.VERSION)
   };
 
@@ -154,10 +172,6 @@ function performComprehensiveAnalysis_() {
   return result;
 }
 
-/**
- * Reads existing requirements from the designated 'Krav' sheet.
- * @returns {Array<Object>} An array of requirement objects, each with id, text, priority, and progressPct.
- */
 function readRequirementsForGapAnalysis_() {
   const log = _getLoggerPlus_();
   const fn = 'readRequirementsForGapAnalysis_';
@@ -170,21 +184,11 @@ function readRequirementsForGapAnalysis_() {
     if (!vals || vals.length < 2) return [];
 
     const headers = vals[0].map(h => String(h || '').trim().toLowerCase());
-    const idxOfAny = (alts) => {
-      for (let i = 0; i < headers.length; i++) {
-        const h = headers[i];
-        for (let j = 0; j < alts.length; j++) {
-          if (h === alts[j]) return i;
-        }
-      }
-      return -1;
-    };
-
     const KH = _cfgGet_('HEADERS', CORE_ANALYSIS_CFG.HEADERS).krav;
-    const idIdx = idxOfAny(KH.id);
-    const textIdx = idxOfAny(KH.text);
-    const prioIdx = idxOfAny(KH.priority);
-    const progIdx = idxOfAny(KH.progress);
+    const idIdx = _indexOfHeaderAny_(headers, KH.id);
+    const textIdx = _indexOfHeaderAny_(headers, KH.text);
+    const prioIdx = _indexOfHeaderAny_(headers, KH.priority);
+    const progIdx = _indexOfHeaderAny_(headers, KH.progress);
 
     const out = [];
     for (let r = 1; r < vals.length; r++) {
@@ -203,47 +207,43 @@ function readRequirementsForGapAnalysis_() {
   }
 }
 
-/**
- * Generates potential new requirement candidates based on the analysis object.
- * @param {Object} analysis The object returned by performComprehensiveAnalysis_().
- * @returns {Array<Object>} An array of candidate objects.
- */
 function generateRequirementCandidates_(analysis) {
   const log = _getLoggerPlus_();
   const fn = 'generateRequirementCandidates_';
   const A = analysis || {};
   const out = [];
+  const T = _cfgDeep_('REQUIREMENT_TEMPLATES.no', CORE_ANALYSIS_CFG.REQUIREMENT_TEMPLATES.no);
 
-  // From triggers
-  (A.triggers && A.triggers.details || []).forEach(t => {
+  // Triggers
+  (A.triggers?.details || []).forEach(t => {
     out.push({
-      text: _requirementTextFromTrigger_(t),
+      text: _requirementTextFromTrigger_(t, T),
       autoPriority: _priorityFromTrigger_(t),
       source: SOURCES.TRIGGER,
       extra: { handler: t.handler, eventType: t.eventType, source: t.source }
     });
   });
 
-  // From menu declarations in sheets
-  (A.menus && A.menus.fromSheets || []).forEach(m => {
+  // Menu declarations
+  (A.menus?.fromSheets || []).forEach(m => {
     const title = m.title || m.functionName || '';
     const fnName = m.functionName || '';
     if (!fnName) return;
     out.push({
-      text: `Systemet skal tilby menykommando «${title}» som kaller «${fnName}».`,
+      text: T.menu_item(title, fnName),
       autoPriority: PRIORITIES.SHOULD,
       source: SOURCES.MENU,
       extra: { sheet: m.sheet, role: m.role || '', active: !!m.active }
     });
   });
 
-  // From data fields
-  (A.sheets && A.sheets.sheets || []).forEach(s => {
+  // Data fields
+  (A.sheets?.sheets || []).forEach(s => {
     const headers = _splitHeaderPreview_(s.headerPreview);
     headers.forEach(h => {
       if (!h) return;
       out.push({
-        text: `Systemet skal forvalte datafelt «${h}» i arket «${s.name}».`,
+        text: T.field_item(h, s.name),
         autoPriority: PRIORITIES.SHOULD,
         source: SOURCES.FIELD,
         extra: { sheet: s.name, header: h }
@@ -251,22 +251,14 @@ function generateRequirementCandidates_(analysis) {
     });
   });
 
-  // Heuristics (domain-driven)
-  const fnNames = (A.functions && A.functions.global || []).map(f => String(f.name || '').toLowerCase());
-  out.push.apply(out, _domainHeuristicCandidates_(fnNames));
+  // Heuristics
+  const fnNames = (A.functions?.global || []).map(f => String(f.name || '').toLowerCase());
+  out.push(..._domainHeuristicCandidates_(fnNames));
 
   log.info(fn, 'Requirement candidates generated.', { count: out.length });
   return out;
 }
 
-/**
- * Filters a list of new candidates, removing duplicates of existing requirements
- * and other new candidates based on a Jaccard similarity threshold.
- * @param {Array<Object>} candidates The array of new candidates.
- * @param {Array<Object>} existing The array of existing requirements.
- * @param {number} [threshold] The Jaccard similarity threshold (0-1). Overrides config if provided.
- * @returns {Array<Object>} The filtered array of unique candidates.
- */
 function dedupeCandidates_(candidates, existing, threshold) {
   const log = _getLoggerPlus_();
   const fn = 'dedupeCandidates_';
@@ -280,26 +272,7 @@ function dedupeCandidates_(candidates, existing, threshold) {
     existing = [];
   }
 
-  let th = (typeof threshold === 'number' ? threshold : undefined);
-  if (typeof th !== 'number' || isNaN(th)) {
-    let cfgOverride;
-    try {
-      if (typeof CONFIG_PLUS !== 'undefined' && CONFIG_PLUS) {
-        if (typeof CONFIG_PLUS.DEFAULT_JACCARD_THRESHOLD === 'number') {
-          cfgOverride = CONFIG_PLUS.DEFAULT_JACCARD_THRESHOLD;
-        } else if (typeof CONFIG_PLUS.DEDUPLE_JACCARD === 'number') {
-          cfgOverride = CONFIG_PLUS.DEDUPLE_JACCARD; // legacy
-        }
-      }
-    } catch (_) {}
-    th = (typeof cfgOverride === 'number') ? cfgOverride
-        : _cfgGet_('DEFAULT_JACCARD_THRESHOLD', CORE_ANALYSIS_CFG.DEFAULT_JACCARD_THRESHOLD);
-  }
-  if (th < 0 || th > 1) {
-    log.warn(fn, 'Threshold out of range, clamping to [0,1].', { provided: threshold });
-    th = Math.max(0, Math.min(1, th));
-  }
-
+  const th = _getJaccardThreshold_(threshold);
   const existTexts = existing.map(e => String(e.text || ''));
   const seen = [];
   const out = [];
@@ -318,18 +291,11 @@ function dedupeCandidates_(candidates, existing, threshold) {
   return out;
 }
 
-/**
- * Compares code and requirements to find gaps.
- * @param {Object} analysis The full analysis object.
- * @param {Array<Object>} existing The array of existing requirements.
- * @param {Array<Object>} deduped The array of new, unique candidates.
- * @returns {Object} An object containing lists of unimplementedRequirements and undocumentedFunctions.
- */
 function performGapAnalysis_(analysis, existing, deduped) {
   const A = analysis || {};
   const unimpl = (existing || []).filter(r => Number(r.progressPct || 0) === 0);
 
-  const publicFns = (A.functions && A.functions.global || []).map(f => String(f.name || '')).filter(Boolean);
+  const publicFns = (A.functions?.global || []).map(f => String(f.name || '')).filter(Boolean);
   const kravTekster = (existing || []).map(r => String(r.text || '').toLowerCase());
   const undocumented = [];
 
@@ -342,13 +308,20 @@ function performGapAnalysis_(analysis, existing, deduped) {
     }
   });
 
-  return {
-    unimplementedRequirements: unimpl,
-    undocumentedFunctions: undocumented
-  };
+  return { unimplementedRequirements: unimpl, undocumentedFunctions: undocumented };
 }
 
 // ---------------------------- Private Helpers --------------------------------
+
+const _indexOfHeaderAny_ = (headersLower, alts) => {
+  for (let i = 0; i < headersLower.length; i++) {
+    const h = headersLower[i];
+    for (let j = 0; j < alts.length; j++) {
+      if (h === alts[j]) return i;
+    }
+  }
+  return -1;
+};
 
 function _collectMetadata_() {
   const log = _getLoggerPlus_();
@@ -367,15 +340,7 @@ function _collectMetadata_() {
     };
   } catch (e) {
     log.error(fn, 'Failed to collect metadata.', { error: e.message });
-    return {
-      spreadsheetName: '',
-      spreadsheetUrl: '',
-      spreadsheetId: '',
-      timeZone: '',
-      locale: '',
-      sheetsCount: 0,
-      user: ''
-    };
+    return { spreadsheetName: '', spreadsheetUrl: '', spreadsheetId: '', timeZone: '', locale: '', sheetsCount: 0, user: '' };
   }
 }
 
@@ -386,18 +351,11 @@ function _collectTriggers_() {
   try {
     const trig = ScriptApp.getProjectTriggers() || [];
     trig.forEach(t => {
-      let eventType = '';
-      let source = '';
-      let handler = '';
+      let eventType = '', source = '', handler = '';
       try { handler = String(t.getHandlerFunction() || ''); } catch (_) {}
       try { eventType = String(t.getEventType && t.getEventType()); } catch (_) {}
       try { source = String(t.getTriggerSource && t.getTriggerSource()); } catch (_) {}
-      out.push({
-        handler: handler,
-        eventType: eventType || 'UNKNOWN',
-        source: source || 'UNKNOWN',
-        raw: { eventType, source }
-      });
+      out.push({ handler, eventType: eventType || 'UNKNOWN', source: source || 'UNKNOWN', raw: { eventType, source } });
     });
   } catch (e) {
     log.error(fn, 'Failed to collect triggers.', { error: e.message });
@@ -413,8 +371,8 @@ function _collectMenuFunctions_() {
     const names = _cfgGet_('NAMES', CORE_ANALYSIS_CFG.NAMES);
     const shFelles = _getSheetByAnyName_(names.menuFelles);
     const shMin = _getSheetByAnyName_(names.menuMin);
-    if (shFelles) out.push.apply(out, _readMenuSheet_(shFelles, 'Meny_Felles'));
-    if (shMin) out.push.apply(out, _readMenuSheet_(shMin, 'Meny_Min'));
+    if (shFelles) out.push(..._readMenuSheet_(shFelles, 'Meny_Felles'));
+    if (shMin) out.push(..._readMenuSheet_(shMin, 'Meny_Min'));
   } catch (e) {
     log.error(fn, 'Failed reading menu sheets.', { error: e.message });
   }
@@ -425,19 +383,12 @@ function _readMenuSheet_(sh, sheetLabel) {
   const vals = sh.getDataRange().getValues();
   if (!vals || vals.length < 2) return [];
   const hdr = vals[0].map(h => String(h || '').trim().toLowerCase());
-  const idx = (keyList) => {
-    for (let k = 0; k < keyList.length; k++) {
-      const wanted = keyList[k];
-      const pos = hdr.indexOf(wanted);
-      if (pos >= 0) return pos;
-    }
-    return -1;
-  };
-  const titleIdx = idx(['tittel', 'title', 'kommando', 'menu', 'meny']);
-  const fnIdx    = idx(['funksjon', 'function', 'handler']);
-  const roleIdx  = idx(['rollekrav', 'rolle', 'role']);
-  const userIdx  = idx(['bruker', 'user']);
-  const actIdx   = idx(['aktiv', 'active', 'enabled']);
+
+  const titleIdx = _indexOfHeaderAny_(hdr, ['tittel', 'title', 'kommando', 'menu', 'meny']);
+  const fnIdx    = _indexOfHeaderAny_(hdr, ['funksjon', 'function', 'handler']);
+  const roleIdx  = _indexOfHeaderAny_(hdr, ['rollekrav', 'rolle', 'role']);
+  const userIdx  = _indexOfHeaderAny_(hdr, ['bruker', 'user']);
+  const actIdx   = _indexOfHeaderAny_(hdr, ['aktiv', 'active', 'enabled']);
 
   const out = [];
   for (let r = 1; r < vals.length; r++) {
@@ -449,14 +400,7 @@ function _readMenuSheet_(sh, sheetLabel) {
     const user = (userIdx >= 0 ? row[userIdx] : '') || '';
     const activeRaw = (actIdx >= 0 ? row[actIdx] : '');
     const active = _truthy_(activeRaw);
-    out.push({
-      sheet: sheetLabel,
-      title: String(title),
-      functionName: String(fn),
-      role: String(role),
-      user: String(user),
-      active: active
-    });
+    out.push({ sheet: sheetLabel, title: String(title), functionName: String(fn), role: String(role), user: String(user), active });
   }
   return out;
 }
@@ -467,28 +411,27 @@ function _collectDataModel_() {
   const ss = SpreadsheetApp.getActive();
   const sheets = ss.getSheets() || [];
   const outSheets = [];
-  const headerIndexGlobal = {}; // normalizedHeader -> [{sheet, col}]
-  const everyN = Math.max(1, Number(_cfgGet_('PROGRESS_LOG_EVERY_SHEETS', CORE_ANALYSIS_CFG.PROGRESS_LOG_EVERY_SHEETS)));
+  const headerIndexGlobal = {};
+  const everyN = Math.max(1, _numCfg_('PROGRESS_LOG_EVERY_SHEETS', CORE_ANALYSIS_CFG.PROGRESS_LOG_EVERY_SHEETS));
+  const yieldEvery = _numCfg_('YIELD_EVERY_SHEETS', 0);
 
   for (let i = 0; i < sheets.length; i++) {
     const sh = sheets[i];
     try {
-      if (i % everyN === 0) {
-        _getLoggerPlus_().info(fn, 'Scanning sheets progress...', { index: i, total: sheets.length });
-      }
+      if (i % everyN === 0) log.info(fn, 'Scanning sheets progress...', { index: i, total: sheets.length });
+      if (yieldEvery > 0 && i > 0 && i % yieldEvery === 0) { try { Utilities.sleep(1); } catch (_) {} }
+
       const name = sh.getName();
       const rows = sh.getLastRow();
       const cols = sh.getLastColumn();
       const isHidden = (typeof sh.isSheetHidden === 'function') ? sh.isSheetHidden() : false;
 
       let header = [];
-      if (cols > 0) {
-        header = sh.getRange(1, 1, 1, cols).getValues()[0] || [];
-      }
+      if (cols > 0) header = sh.getRange(1, 1, 1, cols).getValues()[0] || [];
+
       const preview = _buildHeaderPreview_(header);
       const typesByHeader = _inferTypesForSheetChunked_(sh, header);
 
-      // Collect header duplicates (across sheets)
       header.forEach((h, idx) => {
         const norm = _normalizeHeader_(h);
         if (!norm) return;
@@ -496,35 +439,32 @@ function _collectDataModel_() {
         headerIndexGlobal[norm].push({ sheet: name, col: idx + 1 });
       });
 
-      outSheets.push({
-        name: name,
-        rows: rows,
-        columns: cols,
-        hidden: isHidden,
-        headerPreview: preview,
-        typesByHeader: typesByHeader
-      });
+      outSheets.push({ name, rows, columns: cols, hidden: isHidden, headerPreview: preview, typesByHeader });
     } catch (e) {
-      _getLoggerPlus_().warn(fn, 'Failed scanning sheet (skipping).', { sheet: _safe(() => sheets[i].getName(), `#${i+1}`), error: e.message });
+      log.warn(fn, 'Failed scanning sheet (skipping).', {
+        sheet: _safe(() => sheets[i].getName(), `#${i + 1}`),
+        error: e.message
+      });
     }
   }
 
-  // Compute duplicates list
   const duplicates = [];
   Object.keys(headerIndexGlobal).forEach(h => {
     const occ = headerIndexGlobal[h];
-    if (occ && occ.length > 1) {
-      duplicates.push({ header: h, occurrences: occ });
-    }
+    if (occ && occ.length > 1) duplicates.push({ header: h, occurrences: occ });
   });
 
   return { sheets: outSheets, headerDuplicates: duplicates };
 }
 
 function _inferTypesForSheetChunked_(sh, headers) {
-  const rowsToScan = Math.max(0, Math.min(Number(_cfgGet_('MAX_SCAN_ROWS', CORE_ANALYSIS_CFG.MAX_SCAN_ROWS)), Math.max(0, sh.getLastRow() - 1)));
+  const totalRows = sh.getLastRow();
+  const startRow = Math.max(CORE_ANALYSIS_CFG.DATA_START_ROW, 2);
+  if (totalRows < startRow) return {};
+
+  const rowsToScan = Math.max(0, Math.min(_numCfg_('MAX_SCAN_ROWS', CORE_ANALYSIS_CFG.MAX_SCAN_ROWS), Math.max(0, totalRows - (startRow - 1))));
   const totalCols = sh.getLastColumn();
-  const chunkSize = Math.max(1, Number(_cfgGet_('SCAN_COL_CHUNK', CORE_ANALYSIS_CFG.SCAN_COL_CHUNK)));
+  const chunkSize = Math.max(1, _numCfg_('SCAN_COL_CHUNK', CORE_ANALYSIS_CFG.SCAN_COL_CHUNK));
 
   const out = {};
   if (rowsToScan <= 0 || totalCols <= 0) return out;
@@ -532,14 +472,12 @@ function _inferTypesForSheetChunked_(sh, headers) {
   let colIndex = 1;
   while (colIndex <= totalCols) {
     const thisChunk = Math.min(chunkSize, totalCols - colIndex + 1);
-    const range2D = sh.getRange(2, colIndex, rowsToScan, thisChunk).getValues(); // rowsToScan x thisChunk
+    const range2D = sh.getRange(startRow, colIndex, rowsToScan, thisChunk).getValues();
     for (let c = 0; c < thisChunk; c++) {
       const headerName = String(headers[colIndex - 1 + c] || '').trim();
       if (!headerName) continue;
       const samples = [];
-      for (let r = 0; r < range2D.length; r++) {
-        samples.push(range2D[r][c]);
-      }
+      for (let r = 0; r < range2D.length; r++) samples.push(range2D[r][c]);
       out[headerName] = _inferTypeFromSamples_(samples);
     }
     colIndex += thisChunk;
@@ -548,11 +486,9 @@ function _inferTypesForSheetChunked_(sh, headers) {
 }
 
 function _inferTypeFromSamples_(arr) {
-  // Heuristics with priority: date > number > boolean > email > url > string/empty
+  const RX = _cfgGet_('REGEX', CORE_ANALYSIS_CFG.REGEX);
   let hasDate = false, hasNumber = false, hasBool = false, hasEmail = false, hasUrl = false;
   let nonEmpty = 0;
-  const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
-  const urlRx = /^(https?:\/\/|www\.)/i;
 
   for (let i = 0; i < arr.length; i++) {
     const v = arr[i];
@@ -566,11 +502,11 @@ function _inferTypeFromSamples_(arr) {
     const s = String(v).trim();
     if (!s) continue;
     if (!isNaN(Number(s))) { hasNumber = true; continue; }
-    if (s.toLowerCase() === 'true' || s.toLowerCase() === 'false' || s.toLowerCase() === 'ja' || s.toLowerCase() === 'nei') {
-      hasBool = true; continue;
-    }
-    if (emailRx.test(s)) { hasEmail = true; continue; }
-    if (urlRx.test(s)) { hasUrl = true; continue; }
+
+    const lower = s.toLowerCase();
+    if (lower === 'true' || lower === 'false' || lower === 'ja' || lower === 'nei') { hasBool = true; continue; }
+    if (RX.email.test(s)) { hasEmail = true; continue; }
+    if (RX.url.test(s)) { hasUrl = true; continue; }
   }
 
   if (nonEmpty === 0) return 'empty';
@@ -610,7 +546,6 @@ function _getSheetByAnyName_(candidates) {
       if (n === cand[j]) return sheets[i];
     }
   }
-  // Also try a looser match (ignoring underscores/spaces fully)
   for (let i = 0; i < sheets.length; i++) {
     const n = _normalizeName_(sheets[i].getName(), true);
     for (let j = 0; j < cand.length; j++) {
@@ -620,41 +555,33 @@ function _getSheetByAnyName_(candidates) {
   return null;
 }
 
-function _normalizeName_(s, stripAll) {
+const _normalizeName_ = (s, stripAll) => {
   let out = String(s || '').toLowerCase().trim();
   out = out.replace(/\s+/g, stripAll ? '' : ' ');
   out = out.replace(/_/g, stripAll ? '' : '_');
   return out;
-}
+};
 
 function _buildHeaderPreview_(headerArr) {
-  const max = Math.max(0, Number(_cfgGet_('MAX_HEADER_PREVIEW', CORE_ANALYSIS_CFG.MAX_HEADER_PREVIEW)));
+  const max = Math.max(0, _numCfg_('MAX_HEADER_PREVIEW', CORE_ANALYSIS_CFG.MAX_HEADER_PREVIEW));
   const preview = (headerArr || []).slice(0, max).map(h => String(h || '').trim()).filter(Boolean);
   return preview.join(' | ');
 }
 
-function _splitHeaderPreview_(s) {
+const _splitHeaderPreview_ = (s) => {
   if (Array.isArray(s)) return s;
   if (!s) return [];
   return String(s).split('|').map(x => String(x || '').trim()).filter(Boolean);
-}
+};
 
-function _requirementTextFromTrigger_(t) {
+function _requirementTextFromTrigger_(t, T) {
   const evt = String(t.eventType || '').toUpperCase();
   const handler = t.handler || '';
-  if (evt.indexOf('CLOCK') >= 0 || evt.indexOf('TIME') >= 0) {
-    return `Systemet skal periodisk kjøre «${handler}» (tidsstyrt).`;
-  }
-  if (evt.indexOf('FORM_SUBMIT') >= 0) {
-    return `Ved innsending av skjema skal systemet prosessere via «${handler}».`;
-  }
-  if (evt.indexOf('OPEN') >= 0) {
-    return `Ved åpning av regnearket skal systemet kjøre «${handler}».`;
-  }
-  if (evt.indexOf('EDIT') >= 0) {
-    return `Ved endring i regnearket skal systemet kjøre «${handler}».`;
-  }
-  return `Systemet skal støtte hendelsen «${evt}» via «${handler}».`;
+  if (evt.indexOf('CLOCK') >= 0 || evt.indexOf('TIME') >= 0) return T.trigger_clock(handler);
+  if (evt.indexOf('FORM_SUBMIT') >= 0) return T.trigger_form_submit(handler);
+  if (evt.indexOf('OPEN') >= 0) return T.trigger_open(handler);
+  if (evt.indexOf('EDIT') >= 0) return T.trigger_edit(handler);
+  return T.trigger_generic(evt, handler);
 }
 
 function _priorityFromTrigger_(t) {
@@ -675,54 +602,34 @@ function _domainHeuristicCandidates_(fnNamesLower) {
     out.push({ text, autoPriority: priority || PRIORITIES.SHOULD, source: SOURCES.HEURISTIC, extra: extra || {} });
   };
 
-  const joined = ' ' + (fnNamesLower || []).join(' ') + ' ';
-
-  if (/\bhms\b/.test(joined)) {
-    add('Systemet skal sikre at HMS-planer genereres, varsles og synkroniseres i kalender.', PRIORITIES.MUST, { area: 'HMS' });
-  }
-  if (/\bvaktmester\b/.test(joined)) {
-    add('Systemet skal la vaktmester motta, oppdatere og ferdigstille oppgaver.', PRIORITIES.SHOULD, { area: 'Tasks' });
-  }
-  if (/\bbudget\b|\bbudsjett\b/.test(joined)) {
-    add('Systemet skal støtte budsjetthåndtering med validering, import og rapportering.', PRIORITIES.SHOULD, { area: 'Budget' });
-  }
-  if (/\bvote\b|\bvoter\b|\bstemme\b/.test(joined)) {
-    add('Systemet skal støtte digital stemmegivning med oppsummering og låsing av vedtak.', PRIORITIES.SHOULD, { area: 'Møter' });
-  }
-  if (/\bmeeting\b|\bmøte\b|\bmoter\b/.test(joined)) {
-    add('Systemet skal forvalte møter, agenda og protokoll for godkjenning.', PRIORITIES.SHOULD, { area: 'Møter' });
-  }
-  if (/\brbac\b|\brole\b|\btilgang\b/.test(joined)) {
-    add('Systemet skal håndheve rollebasert tilgangsstyring (RBAC) for brukerhandlinger.', PRIORITIES.MUST, { area: 'Security' });
-  }
+  const joined = ` ${(fnNamesLower || []).join(' ')} `;
+  if (/\bhms\b/.test(joined)) add('Systemet skal sikre at HMS-planer genereres, varsles og synkroniseres i kalender.', PRIORITIES.MUST, { area: 'HMS' });
+  if (/\bvaktmester\b/.test(joined)) add('Systemet skal la vaktmester motta, oppdatere og ferdigstille oppgaver.', PRIORITIES.SHOULD, { area: 'Tasks' });
+  if (/\bbudget\b|\bbudsjett\b/.test(joined)) add('Systemet skal støtte budsjetthåndtering med validering, import og rapportering.', PRIORITIES.SHOULD, { area: 'Budget' });
+  if (/\bvote\b|\bvoter\b|\bstemme\b/.test(joined)) add('Systemet skal støtte digital stemmegivning med oppsummering og låsing av vedtak.', PRIORITIES.SHOULD, { area: 'Møter' });
+  if (/\bmeeting\b|\bmøte\b|\bmoter\b/.test(joined)) add('Systemet skal forvalte møter, agenda og protokoll for godkjenning.', PRIORITIES.SHOULD, { area: 'Møter' });
+  if (/\brbac\b|\brole\b|\btilgang\b/.test(joined)) add('Systemet skal håndheve rollebasert tilgangsstyring (RBAC) for brukerhandlinger.', PRIORITIES.MUST, { area: 'Security' });
 
   return out;
 }
 
-function _normalizeHeader_(h) {
-  return String(h || '').trim().toLowerCase();
-}
-
-function _truthy_(v) {
+const _normalizeHeader_ = (h) => String(h || '').trim().toLowerCase();
+const _truthy_ = (v) => {
   const s = String(v).trim().toLowerCase();
   if (!s) return false;
-  if (s === '1' || s === 'true' || s === 'ja' || s === 'x' || s === 'on') return true;
-  return !!v;
-}
+  return (s === '1' || s === 'true' || s === 'ja' || s === 'x' || s === 'on');
+};
 
-// -- small safe util
-function _safe(fn, fallback) {
-  try { return fn(); } catch (_) { return fallback; }
-}
+const _safe = (fn, fallback) => { try { return fn(); } catch (_) { return fallback; } };
 
 // ---------------------------- Text Similarity --------------------------------
 
-function _tokenize_(txt) {
+const _tokenize_ = (txt) => {
+  const minLen = _numCfg_('TOKEN_MIN_LEN', CORE_ANALYSIS_CFG.TOKEN_MIN_LEN);
   const s = String(txt || '').toLowerCase();
   const raw = s.split(/[^a-z0-9æøå]+/i).filter(Boolean);
-  // Drop very short tokens
-  return raw.filter(t => t.length >= 2);
-}
+  return raw.filter(t => t.length >= minLen);
+};
 
 function _jaccard_(a, b) {
   const A = _tokenize_(a);
@@ -737,12 +644,29 @@ function _jaccard_(a, b) {
   return union === 0 ? 0 : inter / union;
 }
 
-// ---------------------------- Optional Smoke Test ----------------------------
-// You can keep or remove these helpers. They’re useful during rollout.
+// ------------------------- Threshold helper (new) ----------------------------
 
-/**
- * Quick smoke test: runs analysis and writes an OK row to a report-ish sheet.
- */
+function _getJaccardThreshold_(providedThreshold) {
+  if (typeof providedThreshold === 'number' && !isNaN(providedThreshold)) {
+    const clamped = Math.max(0, Math.min(1, providedThreshold));
+    return clamped;
+  }
+  let cfgOverride;
+  try {
+    if (typeof CONFIG_PLUS !== 'undefined' && CONFIG_PLUS) {
+      if (typeof CONFIG_PLUS.DEFAULT_JACCARD_THRESHOLD === 'number') {
+        cfgOverride = CONFIG_PLUS.DEFAULT_JACCARD_THRESHOLD;
+      } else if (typeof CONFIG_PLUS.DEDUPLE_JACCARD === 'number') {
+        cfgOverride = CONFIG_PLUS.DEDUPLE_JACCARD; // legacy support
+      }
+    }
+  } catch (_) {}
+  const coreValue = _cfgGet_('DEFAULT_JACCARD_THRESHOLD', CORE_ANALYSIS_CFG.DEFAULT_JACCARD_THRESHOLD);
+  return (typeof cfgOverride === 'number') ? cfgOverride : coreValue;
+}
+
+// ---------------------------- Smoke Test helper ------------------------------
+
 function runCoreAnalysis_Smoke() {
   const res = performComprehensiveAnalysis_();
   const m = res.performanceMetrics || {};

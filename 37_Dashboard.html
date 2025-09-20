@@ -1,10 +1,6 @@
-<? var FILE = '37_Dashboard.html'; var VERSION = '1.2.1'; var UPDATED = '2025-09-14'; ?>
+<? var FILE = '37_Dashboard.html'; var VERSION = '1.3.0'; var UPDATED = '2025-09-20'; ?>
 <?!= include && include('AppMetaPartial') ?>
 <!doctype html>
-<!-- ======================= Sameieportal — Dashbord (Modal) =======================
-     FILE: 37_Dashboard.html | VERSION: <?= VERSION ?> | UPDATED: <?= UPDATED ?>
-     PURPOSE: Stort, brukervendt dashbord som åpner moduler via dashOpen().
-================================================================================= -->
 <html lang="no">
 <head>
   <meta charset="utf-8" />
@@ -24,14 +20,17 @@
     .kpis{display:flex;gap:10px;flex-wrap:wrap}
     .kpi{border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:#0b1b33}
     .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
     .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
     .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:10px}
     .link{padding:12px;border:1px solid var(--border);border-radius:10px;background:#0c1526;cursor:pointer}
     .link:hover{background:#101a33}
-    /* Toasts */
     .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
     .toast.ok{background:var(--success)}
     .toast.err{background:var(--danger)}
+    /* --- NEW: Skeleton Loader --- */
+    .skeleton{background-color:var(--border);color:transparent;border-radius:4px;animation:pulse 1.5s cubic-bezier(0.4,0,0.6,1) infinite}
+    @keyframes pulse{50%{opacity:.5}}
   </style>
 </head>
 <body>
@@ -41,7 +40,7 @@
         <div class="title">Dashbord
           <span id="roleBadge" class="badge" style="display:none"></span>
         </div>
-        <div class="muted">Versjon <?= VERSION ?> • Sist oppdatert <?= UPDATED ?></div>
+        <div class="muted">Versjon <?= VERSION ?> • <span id="status" aria-live="polite">Laster inn...</span></div>
       </div>
       <button class="btn" id="btnRefresh">Oppdater tall</button>
     </div>
@@ -73,10 +72,28 @@
   </div>
 
   <script>
+    const kpiElements = [
+      document.getElementById('kMeet'),
+      document.getElementById('kTasks'),
+      document.getElementById('kMy'),
+      document.getElementById('kAppr'),
+    ];
+
     function toast(msg, kind){ 
       const t=document.createElement('div'); t.className='toast ' + (kind||'');
       t.textContent=String(msg||''); document.body.appendChild(t);
       setTimeout(()=>t.remove(), 2800);
+    }
+
+    function toggleSkeletons(isLoading) {
+      kpiElements.forEach(el => {
+        if (isLoading) {
+          el.textContent = '00'; // Placeholder for width
+          el.classList.add('skeleton');
+        } else {
+          el.classList.remove('skeleton');
+        }
+      });
     }
 
     function applyPermissions(res){
@@ -91,24 +108,37 @@
     }
 
     function renderKpis(r){
-      document.getElementById('kMeet').textContent  = r.counts.upcomingMeetings;
-      document.getElementById('kTasks').textContent = r.counts.openTasks;
-      document.getElementById('kMy').textContent    = r.counts.myTasks;
-      document.getElementById('kAppr').textContent  = r.counts.pendingApprovals;
+      kpiElements[0].textContent = r.counts.upcomingMeetings;
+      kpiElements[1].textContent = r.counts.openTasks;
+      kpiElements[2].textContent = r.counts.myTasks;
+      kpiElements[3].textContent = r.counts.pendingApprovals;
     }
 
     function refresh(forceFresh){
       const btn = document.getElementById('btnRefresh');
-      btn.disabled = true; btn.textContent = 'Oppdaterer…';
+      const statusEl = document.getElementById('status');
+      
+      btn.disabled = true; 
+      statusEl.textContent = 'Oppdaterer…';
+      toggleSkeletons(true);
+
       google.script.run
         .withSuccessHandler(function(r){
-          btn.disabled = false; btn.textContent = 'Oppdater tall';
+          btn.disabled = false; 
+          statusEl.textContent = `Sist oppdatert ${new Date().toLocaleTimeString()}`;
+          toggleSkeletons(false);
+          
           if (!r || !r.ok) { toast('Kunne ikke hente tall', 'err'); return; }
-          applyPermissions(r); renderKpis(r);
+          applyPermissions(r); 
+          renderKpis(r);
           if (forceFresh) toast('Tall oppdatert', 'ok');
         })
         .withFailureHandler(function(e){
-          btn.disabled = false; btn.textContent = 'Oppdater tall';
+          btn.disabled = false; 
+          statusEl.textContent = 'Feil ved lasting';
+          toggleSkeletons(false);
+          kpiElements.forEach(el => el.textContent = '!'); // Show error indicator
+          
           toast((e && e.message) ? e.message : 'Ukjent feil', 'err');
         })
         .dashMetrics(!!forceFresh);
@@ -116,13 +146,15 @@
 
     function openMod(key){
       google.script.run
-        .withFailureHandler(function(e){ toast(e && e.message ? e.message : 'Tilgang nektet', 'err'); })
+        .withFailureHandler(function(e){ 
+          const errorMessage = (e && e.message) ? e.message : 'Tilgang nektet eller ukjent feil';
+          toast(errorMessage, 'err');
+        })
         .dashOpen(key, {});
     }
 
     document.getElementById('btnRefresh').addEventListener('click', ()=>refresh(true));
-    // initial (bruk cache)
-    refresh(false);
+    refresh(false); // Initial load (from cache if available)
   </script>
 </body>
 </html>

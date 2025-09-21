@@ -1,21 +1,26 @@
 /**
- * CoreAnalysisPlus – Analysis Engine (v1.8.0, single-file)
- * + Historical metrics, HTML dashboard, rule plugin system, CI helpers.
+ * CoreAnalysisPlus – Analysis Engine (v1.9.0, single-file)
+ * + Historical metrics, HTML dashboard (Mermaid + D3), rule plugins, JSON API.
  *
- * Public entrypoints you’ll use:
+ * Public entrypoints:
  *   performComprehensiveAnalysis_(options?)
  *   readRequirementsForGapAnalysis_()
  *   performGapAnalysis_(analysis, existing, newCandidates?, options?)
  *   dedupeCandidates_(candidates, existing, threshold?, options?)
- *   ae_runAndLogAnalysis_(options?)                 // ← write historical row
- *   ae_getLatestMetrics_()                          // ← compact JSON for CI
- *   ae_openDashboard_()                             // ← open sidebar dashboard
- *   doGet(e)                                        // ← webapp dashboard
+ *   ae_runAndLogAnalysis_(options?)                 // writes a row to Analysis_Log
+ *   ae_getLatestMetrics_()                          // compact JSON for CI
+ *   ae_openDashboard_()                             // sidebar dashboard
+ *   doGet(e)                                        // web app (HTML or JSON API)
  *   validateAnalysisConfig_(), clearAnalysisTokenCache_()
  *
  * Quick start:
- *   ae_runAndLogAnalysis_({ commit: 'abc123' });  // logs a row in Analysis_Log
- *   ae_openDashboard_();                          // sidebar UI
+ *   ae_runAndLogAnalysis_({ commit: 'abc123' });
+ *   ae_openDashboard_(); // sidebar
+ *
+ * Deploy as Web App (Execute as you; accessible to your domain):
+ *   - GET .../exec?format=json&view=latest   // analysis+gap+health
+ *   - GET .../exec?format=json&view=history  // all history rows
+ *   - GET .../exec?format=json&view=metrics  // compact metrics
  */
 
 /* ---------------------------- Safe dependency bridges ---------------------------- */
@@ -34,7 +39,7 @@ function __ae_safe_(fn,fb){try{return fn();}catch(_){return fb;}}
 var __AE_CONST={ LD_SHEETS:__ae_numCfg_('LARGE_DATA_SHEETS',12),
   LD_MAXCOLS:__ae_numCfg_('LARGE_DATA_MAXCOLS',60),
   LD_TOTALROWS:__ae_numCfg_('LARGE_DATA_TOTALROWS',50000),
-  VERSION:__ae_cfgGet_('VERSION','1.8.0'),
+  VERSION:__ae_cfgGet_('VERSION','1.9.0'),
   TOKEN_MIN:__ae_numCfg_('TOKEN_MIN_LEN',2),
   JACCARD_DEF:__ae_numCfg_('DEFAULT_JACCARD_THRESHOLD',0.78),
   DEDUPE_BATCH:__ae_numCfg_('DEDUPE_BATCH_SIZE',400),
@@ -85,13 +90,12 @@ function __ae_mergeFunctions_(triggers,menus){
 /* ------------------------------------ Orchestrator ------------------------------------ */
 function performComprehensiveAnalysis_(options){
   validateAnalysisConfig_();
-  var log=__ae_log_(), started=Date.now(), progressCb=options&&options.progressCb;
+  var started=Date.now(), progressCb=options&&options.progressCb;
   var meta=__ae_safe_(_collectMetadata_,{}),
       triggers=__ae_safe_(_collectTriggers_,[]),
       menus=__ae_safe_(_collectMenuFunctions_,[]),
       model={sheets:[],headerDuplicates:[]};
 
-  // Prefer progress-aware DataCollector if available
   try{
     if(typeof _collectDataModel_==='function' && _collectDataModel_.length>=1){
       model=_collectDataModel_(function(p){__ae_progress_(progressCb,{phase:'dataModel', sheetName:p&&p.sheetName, current:p&&p.current, total:p&&p.total, percentage:p&&p.percentage});});
@@ -105,14 +109,12 @@ function performComprehensiveAnalysis_(options){
   for(var i=0;i<arr.length;i++){var r=Number(arr[i].rows||0), c=Number(arr[i].columns||0); rows+=r; if(c>maxCols)maxCols=c; cells+=r*c;}
   var large=(sheets>=__AE_CONST.LD_SHEETS)||(maxCols>=__AE_CONST.LD_MAXCOLS)||(rows>=__AE_CONST.LD_TOTALROWS);
   var tokenKeys=0; try{tokenKeys=Object.keys(__ae_tokenCache).length;}catch(_){}
-  var res={ version:__AE_CONST.VERSION, timestamp:__ae_nowISO_(), metadata:meta,
+  return { version:__AE_CONST.VERSION, timestamp:__ae_nowISO_(), metadata:meta,
     triggers:{count:(triggers||[]).length,details:triggers||[]},
     menus:{fromSheets:menus||[]},
     functions:{global:functions,private:[]},
     sheets:{count:sheets, sheets:arr, headerDuplicates:model.headerDuplicates||[]},
     performanceMetrics:{sheetsScanned:sheets,totalRows:rows,maxCols:maxCols,totalCells:cells,scanDurationMs:Date.now()-started,largeDataset:large,tokenCacheKeys:tokenKeys}};
-  __ae_log_().info('performComprehensiveAnalysis_','done',{perf:res.performanceMetrics,fn:functions.length});
-  return res;
 }
 
 /* ------------------------------ Requirements reader ------------------------------ */
@@ -184,10 +186,7 @@ function performGapAnalysis_(analysis, existing, newCandidates, options){
 }
 
 /* ------------------------------- Rule Plugin System ------------------------------- */
-// Add new analysis rules without touching core (accepts {analysis,gap}, returns findings[])
 var __ae_rules = [];
-
-// Rule #1: Near-duplicate functions (semantic)
 __ae_rules.push(function rule_duplicateFunctions(ctx){
   var fns=(ctx.analysis.functions&&ctx.analysis.functions.global)||[];
   var th=0.95, findings=[];
@@ -199,8 +198,6 @@ __ae_rules.push(function rule_duplicateFunctions(ctx){
   }
   return findings;
 });
-
-// Rule #2: Dead-code heuristic (not referenced by triggers/menus/requirements)
 __ae_rules.push(function rule_deadCode(ctx){
   var fns=(ctx.analysis.functions&&ctx.analysis.functions.global)||[];
   var kravL=(ctx.requirements||[]).map(function(r){return String(r.text||'').toLowerCase();});
@@ -214,7 +211,6 @@ __ae_rules.push(function rule_deadCode(ctx){
   }
   return out;
 });
-
 function ae_runRules_(analysis, requirements, gap){
   var ctx={analysis:analysis, requirements:requirements, gap:gap};
   var all=[]; for(var i=0;i<__ae_rules.length;i++){ try{var f=__ae_rules[i](ctx)||[]; all=all.concat(f);}catch(e){__ae_log_().warn('ae_runRules_', 'rule failed', {i:i, err:e&&e.message});}}
@@ -226,7 +222,6 @@ function ae_codeHealthSummary_(analysis, gap){
   var perf=analysis.performanceMetrics||{};
   var undocumented=(gap.undocumentedFunctions||[]).length;
   var implPct=gap.coverage && gap.coverage.implementedPct || 0;
-  // Simple weighted health score 0..100
   var score=Math.max(0, Math.min(100,
     (implPct*0.6) +
     ((100 - Math.min(undocumented*5,60))*0.3) +
@@ -246,32 +241,20 @@ function __ae_getOrCreateLog_(){
   }
   return sh;
 }
-
-/**
- * Run analysis, compute gap + score, append to Analysis_Log.
- * @param {{commit?:string, progressCb?:function}} [options]
- * @return {{analysis:Object,gap:Object,health:Object,logRow:number}}
- */
 function ae_runAndLogAnalysis_(options){
   options=options||{};
   var analysis=performComprehensiveAnalysis_({progressCb:options.progressCb});
   var reqs=readRequirementsForGapAnalysis_();
   var gap=performGapAnalysis_(analysis, reqs, [], {});
   var health=ae_codeHealthSummary_(analysis, gap);
-
   var sh=__ae_getOrCreateLog_();
   var perf=analysis.performanceMetrics||{};
   var row=[ new Date(), analysis.version, String(options.commit||''),
     perf.sheetsScanned||0, perf.totalRows||0, perf.maxCols||0, perf.totalCells||0, perf.scanDurationMs||0,
     (gap.undocumentedFunctions||[]).length, health.implementedPct, health.grade, health.score ];
   sh.appendRow(row);
-
   return {analysis:analysis, gap:gap, health:health, logRow: sh.getLastRow()};
 }
-
-/**
- * Compact JSON for CI/CD (emit via logger or WebApp fetch)
- */
 function ae_getLatestMetrics_(){
   var sh=__ae_getOrCreateLog_(); var r=sh.getLastRow(); if(r<2) return null;
   var vals=sh.getRange(r,1,1,sh.getLastColumn()).getValues()[0];
@@ -280,15 +263,90 @@ function ae_getLatestMetrics_(){
     undocumented: vals[8], implementedPct: vals[9], grade: vals[10], score: vals[11] };
 }
 
+/* --------------------------- Dependency graph (Mermaid) --------------------------- */
+/**
+ * Build a simple dependency graph: Functions, Sheets, Triggers, Menus.
+ * Returns Mermaid flowchart string (graph LR).
+ */
+function ae_buildMermaid_(analysis){
+  var A=analysis||{};
+  var lines=['graph LR'];
+  function safeId(s){return (String(s||'').replace(/[^a-zA-Z0-9_]/g,'_')||'X');}
+
+  // Nodes
+  var sheets=(A.sheets&&A.sheets.sheets)||[];
+  var funcs=(A.functions&&A.functions.global)||[];
+  var trigs=(A.triggers&&A.triggers.details)||[];
+  var menus=(A.menus&&A.menus.fromSheets)||[];
+
+  // Declare nodes with types
+  for(var i=0;i<sheets.length;i++){
+    var sn=String(sheets[i].name||''); if(!sn)continue;
+    lines.push(safeId('sheet_'+sn)+'["Sheet: '+sn+'"]:::sheet');
+  }
+  for(var j=0;j<funcs.length;j++){
+    var fn=String(funcs[j].name||''); if(!fn)continue;
+    lines.push(safeId('fn_'+fn)+'(("Fn: '+fn+'")):::fn');
+  }
+  for(var k=0;k<trigs.length;k++){
+    var et=String(trigs[k].eventType||'UNKNOWN'), hf=String(trigs[k].handler||'');
+    lines.push(safeId('trig_'+hf)+'["Trig: '+et+'"]:::trig');
+  }
+  for(var m=0;m<menus.length;m++){
+    var mt=String(m.title||m.functionName||'');
+    lines.push(safeId('menu_'+mt)+'["Menu: '+mt+'"]:::menu');
+  }
+
+  // Edges: triggers -> function
+  for(var t=0;t<trigs.length;t++){
+    var h=String(trigs[t].handler||''); if(!h) continue;
+    lines.push(safeId('trig_'+h)+' --> '+safeId('fn_'+h));
+  }
+  // Edges: menu -> function
+  for(var mm=0;mm<menus.length;mm++){
+    var fnn=String(menus[mm].functionName||''); var ttl=String(menus[mm].title||menus[mm].functionName||'');
+    if(fnn) lines.push(safeId('menu_'+ttl)+' --> '+safeId('fn_'+fnn));
+  }
+  // Heuristic: function -> sheet (if sheet name appears in header preview or vice versa)
+  for(var f=0;f<funcs.length;f++){
+    var fname=String(funcs[f].name||''); if(!fname)continue;
+    var fl=fname.toLowerCase();
+    for(var s=0;s<sheets.length;s++){
+      var sname=String(sheets[s].name||''); var hp=String(sheets[s].headerPreview||'').toLowerCase();
+      if(hp.indexOf(fl)>=0 || sname.toLowerCase().indexOf(fl)>=0){
+        lines.push(safeId('fn_'+fname)+' --> '+safeId('sheet_'+sname));
+      }
+    }
+  }
+
+  // Styles
+  lines.push('classDef sheet fill:#ECFCCB,stroke:#84CC16,color:#1a1a1a;');
+  lines.push('classDef fn fill:#E0F2FE,stroke:#38BDF8,color:#1a1a1a;');
+  lines.push('classDef trig fill:#FFE4E6,stroke:#FB7185,color:#1a1a1a;');
+  lines.push('classDef menu fill:#F3E8FF,stroke:#A78BFA,color:#1a1a1a;');
+  return lines.join('\n');
+}
+
 /* ---------------------------------- Dashboard UI ---------------------------------- */
-// Open as sidebar inside Sheets
 function ae_openDashboard_(){
-  var html=HtmlService.createHtmlOutput(__ae_dashboardHTML_()).setTitle(__AE_CONST.DASH_TITLE).setWidth(420);
+  var html=HtmlService.createHtmlOutput(__ae_dashboardHTML_()).setTitle(__AE_CONST.DASH_TITLE).setWidth(520);
   SpreadsheetApp.getUi().showSidebar(html);
 }
-// Web app entry (Deploy → Web app). Also serves same dashboard.
-function doGet(e){ return HtmlService.createHtmlOutput(__ae_dashboardHTML_()).setTitle(__AE_CONST.DASH_TITLE); }
-
+function doGet(e){
+  var p=(e&&e.parameter)||{};
+  if(String(p.format||'')==='json'){
+    var view=String(p.view||'latest');
+    var payload=null;
+    if(view==='history'){ payload=__ae_getHistory_(); }
+    else if(view==='metrics'){ payload=ae_getLatestMetrics_(); }
+    else { // latest
+      var latest = ae_runPreview_();
+      payload = latest ? { analysis:latest.analysis, gap:latest.gap, health:latest.health } : null;
+    }
+    return ContentService.createTextOutput(JSON.stringify(payload||null)).setMimeType(ContentService.MimeType.JSON);
+  }
+  return HtmlService.createHtmlOutput(__ae_dashboardHTML_()).setTitle(__AE_CONST.DASH_TITLE);
+}
 function __ae_dashboardHTML_(){
   var title=__AE_CONST.DASH_TITLE;
   return `
@@ -298,95 +356,146 @@ function __ae_dashboardHTML_(){
   body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;margin:12px;}
   h1{font-size:18px;margin:0 0 8px;}
   .kpi{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;}
-  .card{border:1px solid #e5e7eb;border-radius:10px;padding:10px;flex:1 1 120px}
+  .card{border:1px solid #e5e7eb;border-radius:10px;padding:10px;flex:1 1 140px;min-width:140px}
   .muted{color:#6b7280}
+  .row{display:flex;gap:8px;align-items:center;margin:8px 0}
+  .pill{padding:2px 8px;border-radius:999px;background:#f3f4f6;font-size:11px}
+  .tabs{display:flex;gap:6px;margin:8px 0}
+  .tab{padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer}
+  .tab.active{background:#eef2ff;border-color:#c7d2fe}
   table{border-collapse:collapse;width:100%;font-size:12px}
   th,td{border:1px solid #eee;padding:6px;text-align:left}
   th{background:#fafafa;cursor:pointer}
-  .btn{padding:6px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fff;cursor:pointer}
-  .btn:active{transform:translateY(1px)}
-  .row{display:flex;gap:8px;align-items:center;margin:8px 0}
-  .pill{padding:2px 8px;border-radius:999px;background:#f3f4f6;font-size:11px}
-  #chart{height:160px;margin:8px 0;border:1px solid #eee;border-radius:8px;display:flex;align-items:flex-end;padding:8px;gap:4px}
-  .bar{background:#93c5fd;width:16px}
+  #hist{height:180px;border:1px solid #eee;border-radius:8px;padding:4px}
+  #graph{border:1px solid #eee;border-radius:8px;padding:8px;max-height:420px;overflow:auto}
 </style>
 </head><body>
   <h1>${title}</h1>
   <div class="row">
-    <button class="btn" onclick="runNow()">Kjør analyse nå</button>
-    <span id="status" class="muted"></span>
-  </div>
-  <div class="kpi">
-    <div class="card"><div class="muted">Karakter</div><div id="grade" style="font-size:24px">–</div></div>
-    <div class="card"><div class="muted">Score</div><div id="score" style="font-size:24px">–</div></div>
-    <div class="card"><div class="muted">Implementert</div><div id="impl" style="font-size:24px">–</div></div>
-    <div class="card"><div class="muted">Udekket</div><div id="undoc" style="font-size:24px">–</div></div>
+    <button class="tab active" id="tDash">Dashboard</button>
+    <button class="tab" id="tUndoc">Undocumented</button>
+    <button class="tab" id="tGraph">Dependency Graph</button>
+    <span id="status" class="muted" style="margin-left:auto"></span>
   </div>
 
-  <div class="row"><div class="muted">Historikk</div><span class="pill" id="histCount">–</span></div>
-  <div id="chart" title="Implementert % over tid"></div>
+  <div id="vDash">
+    <div class="kpi">
+      <div class="card"><div class="muted">Karakter</div><div id="grade" style="font-size:24px">–</div></div>
+      <div class="card"><div class="muted">Score</div><div id="score" style="font-size:24px">–</div></div>
+      <div class="card"><div class="muted">Implementert</div><div id="impl" style="font-size:24px">–</div></div>
+      <div class="card"><div class="muted">Udekket</div><div id="undoc" style="font-size:24px">–</div></div>
+    </div>
 
-  <h3>Foreslåtte tiltak</h3>
-  <ul id="recs"></ul>
+    <div class="row"><div class="muted">Historikk</div><span class="pill" id="histCount">–</span>
+      <button class="tab" style="margin-left:auto" onclick="runNow()">Kjør analyse nå</button>
+    </div>
+    <div id="hist" title="Implementert % over tid">Laster historikk…</div>
 
-  <h3>Udekkede funksjoner (semantisk)</h3>
-  <table id="tblUndoc"><thead><tr><th onclick="sortUndoc(0)">Funksjon</th></tr></thead><tbody></tbody></table>
+    <h3>Foreslåtte tiltak</h3>
+    <ul id="recs"></ul>
+  </div>
+
+  <div id="vUndoc" style="display:none">
+    <h3>Udekkede funksjoner (semantisk)</h3>
+    <table id="tblUndoc"><thead><tr><th onclick="sortUndoc(0)">Funksjon</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div id="vGraph" style="display:none">
+    <h3>Avhengighetsgraf</h3>
+    <div id="graph">Laster graf…</div>
+  </div>
 
 <script>
   function setStatus(t){document.getElementById('status').textContent=t||'';}
   function $(id){return document.getElementById(id);}
-  function renderChart(hist){
-    const c=$('chart'); c.innerHTML='';
-    if(!hist || hist.length===0){ c.textContent='Ingen data ennå'; return; }
-    const max=100;
-    hist.slice(-20).forEach(r=>{
-      const v = Number(r[9]||0); // ImplementedPct col
-      const bar=document.createElement('div'); bar.className='bar';
-      bar.style.height=(Math.max(5,(v/max)*100))+'%';
-      bar.title = new Date(r[0]).toLocaleString()+': '+v+'%';
-      c.appendChild(bar);
-    });
-    $('histCount').textContent = String(hist.length);
+  function show(tab){
+    $('tDash').classList.toggle('active',tab==='dash'); $('vDash').style.display=(tab==='dash'?'block':'none');
+    $('tUndoc').classList.toggle('active',tab==='undoc'); $('vUndoc').style.display=(tab==='undoc'?'block':'none');
+    $('tGraph').classList.toggle('active',tab==='graph'); $('vGraph').style.display=(tab==='graph'?'block':'none');
   }
+  $('tDash').onclick=()=>show('dash');
+  $('tUndoc').onclick=()=>show('undoc');
+  $('tGraph').onclick=()=>show('graph');
+
+  function renderHistoryD3(hist){
+    const root=$('hist'); root.innerHTML='';
+    if(!hist||hist.length===0){root.textContent='Ingen data ennå'; return;}
+    // Try load D3, fallback to simple bars if blocked.
+    const scr=document.createElement('script');
+    scr.src='https://cdn.jsdelivr.net/npm/d3@7';
+    scr.onload=()=>drawD3(hist);
+    scr.onerror=()=>drawFallback(hist);
+    root.appendChild(scr);
+
+    function drawD3(data){
+      const vals=data.slice(-40).map(r=>Number(r[9]||0)); // ImplementedPct
+      const w=root.clientWidth-8, h=root.clientHeight-8;
+      const svg=d3.select(root).append('svg').attr('width',w).attr('height',h);
+      const x=d3.scaleBand().domain(d3.range(vals.length)).range([0,w]).padding(0.1);
+      const y=d3.scaleLinear().domain([0,100]).range([h,0]);
+      svg.selectAll('rect').data(vals).enter().append('rect')
+        .attr('x',(d,i)=>x(i)).attr('y',d=>y(d))
+        .attr('width',x.bandwidth()).attr('height',d=>h-y(d)).attr('fill','#60a5fa');
+    }
+    function drawFallback(data){
+      const wrap=document.createElement('div'); wrap.style.display='flex'; wrap.style.alignItems='flex-end'; wrap.style.gap='4px'; wrap.style.height='100%';
+      const vals=data.slice(-40).map(r=>Number(r[9]||0));
+      vals.forEach(v=>{const b=document.createElement('div'); b.style.width='10px'; b.style.height=Math.max(6,(v/100)*160)+'px'; b.style.background='#60a5fa'; wrap.appendChild(b);});
+      root.appendChild(wrap);
+    }
+  }
+
+  function renderGraphMermaid(mmd){
+    const root=$('graph'); root.innerHTML='';
+    const scr=document.createElement('script');
+    scr.src='https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+    scr.onload=()=>{
+      try { mermaid.initialize({ startOnLoad:false, theme:'default', securityLevel:'loose' }); } catch(e){}
+      const div=document.createElement('div'); div.className='mermaid'; div.textContent=mmd;
+      root.appendChild(div);
+      try { mermaid.init(undefined, div); } catch(e){ root.textContent='Kunne ikke render graf.'; }
+    };
+    scr.onerror=()=>{
+      root.textContent='Mermaid kunne ikke lastes (nettverk/CSP).';
+      const pre=document.createElement('pre'); pre.textContent=mmd; root.appendChild(pre);
+    };
+    root.appendChild(scr);
+  }
+
   function loadLatest(){
-    setStatus('Laster...');
+    setStatus('Laster…');
     google.script.run.withSuccessHandler(function(payload){
       setStatus('');
-      if(!payload){return;}
+      if(!payload){$('grade').textContent='–'; return;}
       $('grade').textContent=payload.health.grade;
       $('score').textContent=payload.health.score;
       $('impl').textContent=payload.health.implementedPct+'%';
       $('undoc').textContent=payload.gap.undocumentedFunctions.length;
-
       const recs=$('recs'); recs.innerHTML='';
-      (payload.gap.recommendations||[]).forEach(r=>{
-        const li=document.createElement('li'); li.textContent=r.message; recs.appendChild(li);
-      });
-
-      renderChart(payload.history||[]);
+      (payload.gap.recommendations||[]).forEach(r=>{const li=document.createElement('li'); li.textContent=r.message; recs.appendChild(li);});
+      // History & chart
+      google.script.run.withSuccessHandler(function(hist){ $('histCount').textContent=String(hist.length); renderHistoryD3(hist); }).__ae_getHistory__();
+      // Undocumented table
       const tb=$('tblUndoc').querySelector('tbody'); tb.innerHTML='';
-      (payload.gap.undocumentedFunctions||[]).slice(0,200).forEach(u=>{
-        const tr=document.createElement('tr'); const td=document.createElement('td'); td.textContent=u.function; tr.appendChild(td); tb.appendChild(tr);
-      });
+      (payload.gap.undocumentedFunctions||[]).slice(0,500).forEach(u=>{const tr=document.createElement('tr'); const td=document.createElement('td'); td.textContent=u.function; tr.appendChild(td); tb.appendChild(tr);});
+      // Graph
+      google.script.run.withSuccessHandler(function(mmd){ renderGraphMermaid(mmd); }).__ae_mermaidForLatest__();
     }).__ae_dashboardData__();
   }
   function runNow(){
-    setStatus('Kjører analyse...');
+    setStatus('Kjører analyse…');
     google.script.run.withSuccessHandler(function(){ setStatus('Ferdig'); loadLatest(); })
       .ae_runAndLogAnalysis_({});
   }
-  function sortUndoc(col){ /* tiny no-op sorter for future columns */ }
   // bootstrap
   loadLatest();
 </script>
 </body></html>`;
 }
-
-// Data provider for dashboard
+// Data providers for dashboard
 function __ae_dashboardData__(){
-  var latest = ae_runPreview_(); // non-logging quick run if needed
-  var hist = __ae_getHistory_();
-  return latest ? { health: latest.health, gap: latest.gap, history: hist } : null;
+  var latest = ae_runPreview_();
+  return latest ? { analysis:latest.analysis, gap:latest.gap, health:latest.health } : null;
 }
 function ae_runPreview_(){
   try{
@@ -402,23 +511,18 @@ function __ae_getHistory_(){
   if(sh.getLastRow()<2) return [];
   return sh.getRange(2,1,sh.getLastRow()-2+1, sh.getLastColumn()).getValues();
 }
+function __ae_mermaidForLatest__(){
+  var latest=ae_runPreview_(); if(!latest) return 'graph LR\nEmpty["Ingen data"]';
+  return ae_buildMermaid_(latest.analysis);
+}
 
-/* ------------------------------------ CI helpers ------------------------------------ */
-// Minimal JSON you can emit inside CI (clasp or WebApp GET to /exec).
+/* ---------------------------------- CI helpers ------------------------------------ */
 function ae_ciPrintLatest_(){
   var m=ae_getLatestMetrics_(); Logger.log(JSON.stringify(m));
 }
 
-/* ---------------------------------- Smoke runner ----------------------------------- */
+/* ---------------------------------- Smoke runner ---------------------------------- */
 function runCoreAnalysis_Smoke(){
   var out=ae_runAndLogAnalysis_({});
   __ae_log_().info('runCoreAnalysis_Smoke','ok',{row:out.logRow,health:out.health});
 }
-
-/* -------------------------- Notes for CI/CD & Git integration -----------------------
-- Add a script property RSP_COMMIT with your current git SHA (or pass {commit:'<sha>'} to ae_runAndLogAnalysis_).
-- In GitHub Actions (clasp), run a simple Apps Script function (via clasp run or WebApp) that calls:
-      ae_runAndLogAnalysis_({ commit: process.env.GITHUB_SHA });
-  Then call ae_ciPrintLatest_() and parse the JSON to decide pass/fail
-  (e.g., fail if undocumented increased or score decreased).
-------------------------------------------------------------------------------------- */

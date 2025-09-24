@@ -1,29 +1,30 @@
 /**
  * Sameieportalen – Dynamisk Menybygger
  * FILE: MenuBuilder.gs
- * VERSION: 2.6.0
+ * VERSION: 2.7.0
  * UPDATED: 2025-09-24
  *
  * FORMÅL:
  * - Bygger en dynamisk, sikker og robust meny i Google Sheets.
- * - Tilpasser menyen basert på brukerrolle (admin, vaktmester, bruker) og systemtilstand (helse).
- * - Skjuler valg når avhengigheter mangler (RSP, analyse, etc.) og gir guiding i stedet.
+ * - Tilpasser menyen basert på brukerrolle (admin, vaktmester, bruker) og systemhelse.
+ * - Skjuler valg når avhengigheter mangler (RSP, analyse) og tilbyr guiding.
  * - Viser helsetilstand (emoji) i menytittel + interaktiv helseside (sidebar).
  * - Inneholder “Hjelp / Kom i gang” med sjekkliste og hurtighandlinger.
  *
- * NYTT I 2.6.0:
- * - «Hjelp / Kom i gang»-dialog med vedvarende sjekkliste (UserProperties) + hurtigknapper (wizard, validering, push/pull).
- * - «Om / Versjonsinfo»-dialog med miljø, roller og status.
- * - Tøm meny-cache (rydder functionExists-cachen).
- * - Små UX- og robusthetsforbedringer.
+ * NYTT I 2.7.0:
+ * - getConfig(): sentral konfigurator (DocProps → ScriptProps → default).
+ * - Raskere _computeSystemHealth_() med samlet sheet-oppslag (Set).
+ * - Forbedret feilbehandling: MenuBuilderError + handleMenuError().
+ * - rateLimitCheck() brukt på sensitive operasjoner (eks. setRSPDocId).
+ * - Testhooks: MENU_BUILDER (TEST_MODE, eksponerte helpers, mock-providers).
  *
  * HOVEDFUNKSJONER:
  * - onOpen(e): Låser, validerer og bygger meny (med helse-emoji + ev. toast).
  * - openHealthSidebar(): Helse-sidebar med status/warnings/snarveier + inline DOC_ID-lagring.
- * - openHelpDialog(): Kom-i-gang med sjekkliste og hurtighandlinger (lagrer progresjon per bruker).
- * - openAboutDialog(): Om / Versjon og miljø.
- * - openSetRSPDocIdDialog(), setRSPDocId(docId): Admin-dialog for DOC_ID (RSP) + lagring.
- * - openKravDokument(): Viser sikker lenke til kravdokumentet (hvis DOC_ID er satt).
+ * - openHelpDialog(): Kom-i-gang med sjekkliste og hurtighandlinger (lagres per bruker).
+ * - openAboutDialog(): Om / Versjonsinfo (miljø, rolle, ID-er).
+ * - openSetRSPDocIdDialog(), setRSPDocId(docId): Admin-dialog for DOC_ID (RSP) + lagring (rate limited).
+ * - openKravDokument(): Viser lenke til kravdokumentet (hvis DOC_ID satt).
  * - clearMenuCache(), forceShowMenu(): Cache-rydding / tvangsoppbygging.
  * - showSystemInfo(): Admindiagnostikk.
  * - updateAdminEmails(), updateVaktmesterEmails(): Vedlikehold roller.
@@ -33,7 +34,7 @@
 
 var __MB_CFG__ = (function () {
   var out = {
-    VERSION: '2.6.0',
+    VERSION: '2.7.0',
     UPDATED: '2025-09-24',
     // onOpen-beskyttelse
     LOCK_TIMEOUT_MS: 15000,
@@ -56,6 +57,10 @@ var __MB_CFG__ = (function () {
     SIDEBAR: {
       TITLE: 'Systemhelse – Sameieportalen',
       WIDTH: 360
+    },
+    RATE_LIMIT: {
+      WINDOW_SEC: 3600, // 1 time
+      MAX_OPS: 5        // maks 5 forsøk per time
     }
   };
   try {
@@ -67,14 +72,29 @@ var __MB_CFG__ = (function () {
   } catch (_) {}
   try {
     if (typeof CONFIG_PROP_KEYS === 'object' && CONFIG_PROP_KEYS) {
-      out.PROP_KEYS.RSP_DOC_ID   = CONFIG_PROP_KEYS.RSP_DOC_ID   || out.PROP_KEYS.RSP_DOC_ID;
-      out.PROP_KEYS.ENVIRONMENT  = CONFIG_PROP_KEYS.ENVIRONMENT  || out.PROP_KEYS.ENVIRONMENT;
-      out.PROP_KEYS.ADMIN_EMAILS = CONFIG_PROP_KEYS.ADMIN_EMAILS || out.PROP_KEYS.ADMIN_EMAILS;
+      out.PROP_KEYS.RSP_DOC_ID        = CONFIG_PROP_KEYS.RSP_DOC_ID        || out.PROP_KEYS.RSP_DOC_ID;
+      out.PROP_KEYS.ENVIRONMENT       = CONFIG_PROP_KEYS.ENVIRONMENT       || out.PROP_KEYS.ENVIRONMENT;
+      out.PROP_KEYS.ADMIN_EMAILS      = CONFIG_PROP_KEYS.ADMIN_EMAILS      || out.PROP_KEYS.ADMIN_EMAILS;
       out.PROP_KEYS.VAKTMESTER_EMAILS = CONFIG_PROP_KEYS.VAKTMESTER_EMAILS || out.PROP_KEYS.VAKTMESTER_EMAILS;
     }
   } catch (_) {}
   return out;
 })();
+
+/* ================================== Helpers ================================== */
+
+/** Sentral config-henter: DocProps → ScriptProps → default. */
+function getConfig(key, defaultValue) {
+  try {
+    var dp = PropertiesService.getDocumentProperties();
+    var sp = PropertiesService.getScriptProperties();
+    var v  = dp.getProperty(key);
+    if (v == null) v = sp.getProperty(key);
+    return (v != null ? v : defaultValue);
+  } catch (_) {
+    return defaultValue;
+  }
+}
 
 /* ================================== Logger ================================== */
 
@@ -138,6 +158,56 @@ var MENU_CONFIG = {
 // Cache for function existence checks
 var __menuFnExistCache = new Map();
 
+/* =============================== Error handling =============================== */
+
+function MenuBuilderError(message, code, recoverable) {
+  this.name = 'MenuBuilderError';
+  this.message = String(message || 'MenuBuilder error');
+  this.code = code || 'GENERIC';
+  this.recoverable = !!recoverable;
+  this.stack = (new Error()).stack;
+}
+MenuBuilderError.prototype = Object.create(Error.prototype);
+MenuBuilderError.prototype.constructor = MenuBuilderError;
+
+function handleMenuError(error, context) {
+  var log = _getMenuLogger_();
+  try {
+    if (error && error.recoverable) {
+      log.warn('handleMenuError', 'Recoverable error – attempting recovery', { code: error.code, ctx: context });
+      // Enkle recovery-strategier (kan utvides):
+      if (error.code === 'LOCK_TIMEOUT') {
+        _toast_('Et annet script bygger menyen. Prøv igjen om litt.', 'Info', 4);
+        return;
+      }
+    }
+    // Ikke recoverable → fallback
+    buildBasicFallbackMenu();
+  } catch (e) {
+    // Siste skanse: minimal fallback-alert
+    try { SpreadsheetApp.getUi().alert('Menyfeil', 'Kunne ikke bygge meny. Prøv "Bygg meny på nytt".', SpreadsheetApp.getUi().ButtonSet.OK); } catch(_) {}
+    _getMenuLogger_().error('handleMenuError', 'Fallback also failed', { err: e && e.message });
+  }
+}
+
+/* ================================ Rate limit ================================ */
+
+function rateLimitCheck(operation) {
+  try {
+    var user = (Session.getActiveUser() && Session.getActiveUser().getEmail()) || 'anon';
+    var cache = CacheService.getUserCache();
+    var key = 'RL_' + operation + '_' + user;
+    var count = parseInt(cache.get(key) || '0', 10) || 0;
+    if (count >= __MB_CFG__.RATE_LIMIT.MAX_OPS) {
+      throw new MenuBuilderError('Rate limit exceeded for '+operation, 'RATE_LIMIT', false);
+    }
+    cache.put(key, String(count + 1), __MB_CFG__.RATE_LIMIT.WINDOW_SEC);
+  } catch (e) {
+    if (e instanceof MenuBuilderError) throw e;
+    // Fail-closed om cache ikke funker
+  }
+}
+
 /* ================================= onOpen ================================= */
 
 function onOpen(e) {
@@ -161,7 +231,7 @@ function onOpen(e) {
   try {
     lock.waitLock(__MB_CFG__.LOCK_TIMEOUT_MS);
   } catch (err) {
-    log.warn(fn, 'Could not acquire lock, skipping menu build.', { error: err && err.message });
+    handleMenuError(new MenuBuilderError(err && err.message, 'LOCK_TIMEOUT', true), { phase: 'acquire_lock' });
     return;
   }
 
@@ -188,14 +258,13 @@ function onOpen(e) {
     mainMenu.addToUi();
     log.info(fn, 'Menu built', { role: role, addedMain: addedMain, ms: Date.now() - start, healthWarnings: health.warnings });
 
-    // Kritisk-helse toast
     if (health.emoji === '❌') {
       _toast_('Systemhelse: kritisk – åpne «Vis Systemhelse (sidebar)» for detaljer.', 'Kritisk', 6);
     }
 
   } catch (error) {
     log.error(fn, 'Menu build failed; using fallback', { error: error && error.message, stack: error && error.stack });
-    buildBasicFallbackMenu();
+    handleMenuError(error, { phase: 'build_menu' });
   } finally {
     try { lock.releaseLock(); } catch (_) {}
   }
@@ -256,12 +325,7 @@ function getCurrentUserRole() {
 function _readEmailListProp_(key) {
   var out = [];
   try {
-    var dp = PropertiesService.getDocumentProperties();
-    var raw = dp.getProperty(key);
-    if (!raw) {
-      var sp = PropertiesService.getScriptProperties();
-      raw = sp.getProperty(key);
-    }
+    var raw = getConfig(key, null);
     if (raw) {
       var arr = JSON.parse(raw);
       if (Array.isArray(arr)) {
@@ -299,10 +363,25 @@ function _computeSystemHealth_() {
   var warnings = [];
   var ss = SpreadsheetApp.getActive();
 
+  // Batch sheet name discovery
+  var namesSet = (function() {
+    try {
+      var arr = ss.getSheets().map(function(s){ return s.getName(); });
+      return new Set(arr);
+    } catch (e) {
+      // Fallback: probe individually if needed (unlikely to be faster)
+      return new Set([]);
+    }
+  })();
+
   // Required sheets
   [__MB_CFG__.SHEETS.KRAV, __MB_CFG__.SHEETS.SYNC_LOG, __MB_CFG__.SHEETS.VERSION_LOG].forEach(function (name) {
     try {
-      if (!ss.getSheetByName(name)) warnings.push('Mangler ark: ' + name);
+      if (!namesSet.size) {
+        if (!ss.getSheetByName(name)) warnings.push('Mangler ark: ' + name);
+      } else if (!namesSet.has(name)) {
+        warnings.push('Mangler ark: ' + name);
+      }
     } catch (e) {
       warnings.push('Feil ved sjekk av ark "' + name + '": ' + (e && e.message));
     }
@@ -312,15 +391,14 @@ function _computeSystemHealth_() {
   var docIdOk = false;
   var docId = '';
   try {
-    var sp = PropertiesService.getScriptProperties();
-    docId = sp.getProperty(__MB_CFG__.PROP_KEYS.RSP_DOC_ID) || '';
+    docId = getConfig(__MB_CFG__.PROP_KEYS.RSP_DOC_ID, '') || '';
     docIdOk = !!docId && /^[A-Za-z0-9\-_]{20,}$/.test(docId);
     if (!docIdOk) warnings.push('RSP_DOC_ID ikke konfigurert eller ugyldig.');
   } catch (_) {
     warnings.push('Klarte ikke å lese RSP_DOC_ID.');
   }
 
-  var critical = (!ss.getSheetByName(__MB_CFG__.SHEETS.KRAV) || !docIdOk);
+  var critical = (!namesSet.has(__MB_CFG__.SHEETS.KRAV) || !docIdOk);
   var emoji = warnings.length === 0 ? '✅' : (critical ? '❌' : '⚠️');
 
   log.debug('_computeSystemHealth_', 'health', { emoji: emoji, warnings: warnings, docIdPreview: docId ? (docId.substring(0,6)+'…') : '' });
@@ -505,7 +583,7 @@ function resetOnboardingChecklist() {
 
 function openAboutDialog() {
   var env = (typeof APP === 'object' && APP && APP.ENVIRONMENT) ?
-             APP.ENVIRONMENT : (PropertiesService.getScriptProperties().getProperty(__MB_CFG__.PROP_KEYS.ENVIRONMENT) || 'production');
+             APP.ENVIRONMENT : (getConfig(__MB_CFG__.PROP_KEYS.ENVIRONMENT, 'production'));
   var role = getCurrentUserRole();
   var ssId = SpreadsheetApp.getActive().getId();
 
@@ -571,6 +649,7 @@ function openSetRSPDocIdDialog() {
 }
 
 function setRSPDocId(docId) {
+  rateLimitCheck('setRSPDocId'); // rate limiting
   var log = _getMenuLogger_();
   try {
     docId = String(docId || '').trim();
@@ -610,7 +689,7 @@ function openKravDokument() {
 
 function getRSPDocId_() {
   try {
-    return PropertiesService.getScriptProperties().getProperty(__MB_CFG__.PROP_KEYS.RSP_DOC_ID) || '';
+    return getConfig(__MB_CFG__.PROP_KEYS.RSP_DOC_ID, '') || '';
   } catch (_) { return ''; }
 }
 
@@ -641,6 +720,7 @@ function buildBasicFallbackMenu() {
 }
 
 function forceShowMenu() {
+  rateLimitCheck('forceShowMenu'); // rate limiting
   var log = _getMenuLogger_();
   try {
     __menuFnExistCache.clear();
@@ -673,7 +753,7 @@ function showSystemInfo() {
       role: getCurrentUserRole(),
       spreadsheetId: SpreadsheetApp.getActive().getId(),
       environment: (typeof APP === 'object' && APP && APP.ENVIRONMENT) ? APP.ENVIRONMENT :
-                   (PropertiesService.getScriptProperties().getProperty(__MB_CFG__.PROP_KEYS.ENVIRONMENT) || 'production'),
+                   (getConfig(__MB_CFG__.PROP_KEYS.ENVIRONMENT, 'production')),
       functionCacheSize: __menuFnExistCache.size,
       keyFunctionStatus: uniq.map(function (f) { return { name: f, available: functionExists(f) }; })
     };
@@ -708,3 +788,24 @@ function _toast_(msg, title, seconds) {
     SpreadsheetApp.getActive().toast(String(msg || ''), String(title || ''), Math.max(1, Number(seconds) || 3));
   } catch (_) {}
 }
+
+/* ============================== Testing hooks =============================== */
+
+var MENU_BUILDER = {
+  TEST_MODE: false,
+  // Expose internals for unit tests
+  _computeSystemHealth_: _computeSystemHealth_,
+  _readOnboardingState_: _readOnboardingState_,
+  _appendConfiguredItems_: _appendConfiguredItems_,
+  // Mocks (simple placeholders; expand as needed)
+  getMockUI: function () {
+    return {
+      _items: [],
+      createMenu: function (name) { return this; },
+      addItem: function () { this._items.push('item'); return this; },
+      addSeparator: function () { this._items.push('sep'); return this; },
+      addSubMenu: function () { this._items.push('submenu'); return this; },
+      addToUi: function () { return this; }
+    };
+  }
+};

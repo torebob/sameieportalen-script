@@ -1,0 +1,343 @@
+<!-- =============================================================================
+  Budsjett – Dashboard App (fullskjerm)
+  FILE: 51_Budsjett_App.html
+  VERSION: 1.0.1
+  UPDATED: 2025-09-15
+  COMPAT: 52_Budsjett_API.gs v1.1.1+ (getBudgetSchema, getBudget, saveBudgetLines, calculateBudgetSummary, getCurrentUserProfile)
+  CHANGELOG:
+    - 1.0.1: Renamet fra 50_* til 51_*, ingen funksjonelle endringer
+    - 1.0.0: Første versjon for Dashbord, rollebasert UI
+============================================================================= -->
+
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Budsjett – Dashboard</title>
+  <style>
+    :root { --primary:#1976d2; --muted:#666; --ok:#2e7d32; --err:#c62828; --info:#1565c0; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; margin:0; color:#222; background:#f5f7fb; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 18px; background:#fff; border-bottom:1px solid #e7e7ea; position:sticky; top:0; z-index:5; }
+    .title { display:flex; flex-direction:column; }
+    .title h2 { margin:0; font-weight:700; }
+    .title .ver { font-size:12px; color:#777; }
+    .user-pill { font-size:12px; color:#333; background:#f0f2f6; padding:6px 10px; border-radius:999px; border:1px solid #e0e3ea; }
+    .container { padding:18px; max-width:1200px; margin:0 auto; }
+
+    .toolbar { display:grid; grid-template-columns: 1fr auto; gap:10px; margin-bottom:14px; }
+    .fields { display:grid; gap:8px; grid-template-columns: repeat(4, minmax(160px,1fr)); }
+    .fields label { display:flex; flex-direction:column; font-size:12px; color:#555; }
+    .fields input[type=text], .fields input[type=number], .fields select {
+      padding:7px 10px; border:1px solid #dcdde1; border-radius:8px; background:#fff; font-size:14px;
+    }
+    .btnbar { display:flex; gap:8px; justify-content:flex-end; align-items:end; }
+    button { padding:8px 12px; border:1px solid #d6d8df; background:#fff; border-radius:8px; cursor:pointer; font-size:14px; }
+    button.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+    button:hover { background:#f5f6fa; }
+    button.primary:hover { filter:brightness(0.95); }
+    button[disabled] { opacity:.55; cursor:not-allowed; }
+
+    #status { margin:10px 0; padding:10px 12px; border-radius:8px; font-size:13px; display:none; }
+    #status.success { display:block; background:#e8f5e8; color:var(--ok); }
+    #status.error { display:block; background:#ffebee; color:var(--err); }
+    #status.info { display:block; background:#e3f2fd; color:var(--info); }
+
+    .card { background:#fff; border:1px solid #e5e7ee; border-radius:12px; padding:12px; margin-top:12px; }
+    .card h4 { margin:0 0 8px 0; }
+    .muted { color:var(--muted); font-size:12px; }
+
+    .table-wrap { overflow:auto; border:1px solid #eef0f5; border-radius:10px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    thead th { position:sticky; top:0; background:#f8f9fc; border-bottom:1px solid #e9ebf2; font-weight:600; padding:8px; }
+    tbody td { border-bottom:1px solid #f1f2f7; padding:6px; background:#fff; }
+    tbody tr:hover { background:#fafcff; }
+    td input, td select {
+      width:100%; padding:6px 8px; border:1px solid #ddd; border-radius:6px; background:#fff; font-size:13px;
+    }
+    td .row-actions { display:flex; gap:6px; justify-content:center; }
+    .summary-table thead th { background:#eef6ff; }
+    .summary-table tfoot td { font-weight:700; background:#fafafa; }
+    .badge { padding:2px 8px; border-radius:999px; background:#eef6ff; border:1px solid #d9e8ff; color:#2a5ea3; font-size:11px; }
+    .badge.ro { background:#fff7e6; color:#885400; border-color:#ffe0a6; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="title">
+      <h2>Budsjett</h2>
+      <div class="ver" id="ver"></div>
+    </div>
+    <div class="user-pill" id="userPill">Laster bruker …</div>
+  </div>
+
+  <div class="container">
+    <div class="toolbar">
+      <div class="fields">
+        <label>År
+          <input type="number" id="year" placeholder="2025" min="1900" max="3000" />
+        </label>
+        <label>Versjon
+          <input type="text" id="version" placeholder="2025-main" />
+        </label>
+        <label>MVA default
+          <input type="text" id="defaultVat" placeholder="0 / 25 / Utenfor" />
+        </label>
+        <label>Type default
+          <select id="defaultType">
+            <option value="">(ingen)</option>
+            <option>Drift</option>
+            <option>Investering</option>
+            <option>Inntekt</option>
+          </select>
+        </label>
+      </div>
+      <div class="btnbar">
+        <button id="loadBtn">Last budsjett</button>
+        <button id="addRowBtn">Ny rad</button>
+        <button class="primary" id="saveBtn">Lagre</button>
+        <button id="sumBtn">Oppsummer</button>
+      </div>
+    </div>
+
+    <div id="status" class="info"></div>
+
+    <div class="card">
+      <h4>Linjer</h4>
+      <div class="muted" style="margin-bottom:6px;">Én rad per konto per måned</div>
+      <div class="table-wrap">
+        <table id="grid">
+          <thead>
+            <tr>
+              <th style="min-width:90px;">Konto</th>
+              <th style="min-width:140px;">Navn</th>
+              <th style="min-width:110px;">Kostnadssted</th>
+              <th style="min-width:110px;">Prosjekt</th>
+              <th style="min-width:85px;">MVA</th>
+              <th style="min-width:110px;">Type</th>
+              <th style="min-width:110px;">Måned</th>
+              <th style="min-width:110px;">Beløp</th>
+              <th style="min-width:160px;">Kommentar</th>
+              <th style="min-width:70px;">Rad</th>
+            </tr>
+          </thead>
+          <tbody id="gridBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" id="roNotice" style="margin-top:6px; display:none;">
+        <span class="badge ro">Lesetilgang</span> Du har ikke redigeringstilgang (kun Leder/Kasserer kan lagre).
+      </div>
+    </div>
+
+    <div class="card" id="summaryCard" style="display:none;">
+      <h4>Oppsummering</h4>
+      <div class="muted" style="margin-bottom:6px;">Pr. konto og måned (backend anvender enkel MVA-logikk)</div>
+      <div class="table-wrap">
+        <table class="summary-table" id="summaryTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const __UI_VERSION__ = '1.0.1';
+    const __UI_UPDATED__ = '2025-09-15';
+
+    const $ = (id) => document.getElementById(id);
+    const monthsFallback = ['Jan','Feb','Mar','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Des'];
+    let schema = { months: monthsFallback, required: ['year','account','month','amount'], optional: [], defaults: { version: 'main' } };
+    let profile = { email:'', role:'LESER', canEdit:false, displayName:'' };
+    let readOnly = true;
+
+    function showVersion() { $('ver').textContent = `v${__UI_VERSION__} • oppdatert ${__UI_UPDATED__}`; }
+    function showStatus(msg, kind = 'info') { const el=$('status'); el.className=kind; el.textContent=msg; el.style.display='block'; }
+    function hideStatus(){ $('status').style.display='none'; }
+    function setUserPill(){ $('userPill').textContent = `${profile.displayName || profile.email} • Rolle: ${profile.role}${profile.canEdit?' (rediger)':' (lese)'}`; }
+    function applyAccessMode(){
+      readOnly = !profile.canEdit;
+      $('addRowBtn').disabled = readOnly;
+      $('saveBtn').disabled = readOnly;
+      $('roNotice').style.display = readOnly ? 'block':'none';
+      Array.from(document.querySelectorAll('.row-actions button')).forEach(b => b.disabled = readOnly);
+      Array.from(document.querySelectorAll('#gridBody input, #gridBody select')).forEach(el => el.disabled = readOnly);
+    }
+
+    function toNumberNorwegian(s) {
+      if (s === null || s === undefined) return NaN;
+      let v = String(s).trim().replace(/\s/g,'');
+      const hasComma = v.includes(','), hasDot = v.includes('.');
+      if (hasComma && !hasDot) v = v.replace(/\./g,'').replace(',','.');
+      else if (hasComma && hasDot && v.lastIndexOf(',') > v.lastIndexOf('.')) v = v.replace(/\./g,'').replace(',','.');
+      const n = Number(v);
+      return isNaN(n) ? NaN : n;
+    }
+
+    function monthSelect(value = '') {
+      const m = (schema.months && schema.months.length) ? schema.months : monthsFallback;
+      const opts = m.map(x => `<option ${x===value ? 'selected' : ''}>${x}</option>`).join('');
+      return `<select class="cell-month" ${readOnly?'disabled':''}>${opts}</select>`;
+    }
+    function typeSelect(value = '') {
+      const opts = ['', 'Drift', 'Investering', 'Inntekt'].map(x => `<option ${x===value ? 'selected':''}>${x}</option>`).join('');
+      return `<select class="cell-type" ${readOnly?'disabled':''}>${opts}</select>`;
+    }
+
+    function addRow(data = {}) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input class="cell-account" type="text" placeholder="Konto" value="${data.account || ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-name" type="text" placeholder="Navn" value="${data.name || ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-cc" type="text" placeholder="Kostnadssted" value="${data.costCenter || ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-proj" type="text" placeholder="Prosjekt" value="${data.project || ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-vat" type="text" placeholder="${$('defaultVat').value || '0'}" value="${data.vat || ''}" ${readOnly?'disabled':''}></td>
+        <td>${typeSelect(data.type || $('defaultType').value || '')}</td>
+        <td>${monthSelect(data.month || '')}</td>
+        <td><input class="cell-amount" type="text" placeholder="0,00" value="${data.amount != null ? data.amount : ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-comment" type="text" placeholder="Kommentar" value="${data.comment || ''}" ${readOnly?'disabled':''}></td>
+        <td class="row-actions"><button ${readOnly?'disabled':''} title="Slett rad" onclick="this.closest('tr').remove();">Slett</button></td>
+      `;
+      $('gridBody').appendChild(tr);
+    }
+
+    function clearRows(){ $('gridBody').innerHTML=''; }
+
+    function collectLinesFromTable() {
+      const lines = [];
+      const year = Number($('year').value);
+      const version = $('version').value.trim() || (schema.defaults?.version || 'main');
+      const rows = Array.from($('gridBody').querySelectorAll('tr'));
+      for (const r of rows) {
+        const account = r.querySelector('.cell-account').value.trim();
+        const name = r.querySelector('.cell-name').value.trim();
+        const costCenter = r.querySelector('.cell-cc').value.trim();
+        const project = r.querySelector('.cell-proj').value.trim();
+        const vat = (r.querySelector('.cell-vat').value.trim() || $('defaultVat').value.trim() || '');
+        const type = r.querySelector('.cell-type').value;
+        const month = r.querySelector('.cell-month').value;
+        const amountRaw = r.querySelector('.cell-amount').value;
+        const amount = toNumberNorwegian(amountRaw);
+        const comment = r.querySelector('.cell-comment').value.trim();
+        lines.push({ year, version, account, name, costCenter, project, vat, type, month, amount, comment });
+      }
+      return lines;
+    }
+
+    function validate(lines) {
+      const errs = [];
+      if (!lines.length) errs.push('Ingen linjer å lagre.');
+      const y = lines[0]?.year;
+      if (!Number.isInteger(y)) errs.push('År må være et heltall (f.eks. 2025).');
+      const months = new Set(schema.months || monthsFallback);
+      lines.forEach((ln, i) => {
+        if (!ln.account) errs.push(`Rad ${i+1}: Konto mangler.`);
+        if (!ln.month || !months.has(ln.month)) errs.push(`Rad ${i+1}: Ugyldig måned.`);
+        if (!isFinite(ln.amount)) errs.push(`Rad ${i+1}: Beløp er ikke et tall.`);
+      });
+      return errs;
+    }
+
+    function populateFromItems(items) {
+      clearRows();
+      if (!items || !items.length) { addRow(); return; }
+      for (const it of items) {
+        addRow({ account: it.account, name: it.name, costCenter: it.costCenter, project: it.project,
+                 vat: it.vat, type: it.type, month: it.month, amount: it.amount, comment: it.comment });
+      }
+    }
+
+    function renderSummaryTable(rows) {
+      const tbl = $('summaryTable');
+      if (!rows || !rows.length) { $('summaryCard').style.display='none'; tbl.innerHTML=''; return; }
+      const m = schema.months || monthsFallback;
+      let thead = '<thead><tr><th>Konto</th><th>Navn</th>' + m.map(x=>`<th>${x}</th>`).join('') + '<th>Sum</th></tr></thead>';
+      let tfootSum = new Array(m.length).fill(0);
+      let body = '<tbody>';
+      for (const r of rows) {
+        body += `<tr><td>${r.account || ''}</td><td>${r.name || ''}</td>`;
+        for (let i=0;i<m.length;i++) {
+          const v = Number(r[m[i]] || 0);
+          tfootSum[i] += v;
+          body += `<td style="text-align:right;">${v.toLocaleString('no-NO')}</td>`;
+        }
+        body += `<td style="text-align:right;">${Number(r.sum||0).toLocaleString('no-NO')}</td></tr>`;
+      }
+      body += '</tbody>';
+      let foot = '<tfoot><tr><td></td><td style="font-weight:700;">Totalsum</td>';
+      for (let i=0;i<m.length;i++) foot += `<td style="text-align:right;font-weight:700;">${tfootSum[i].toLocaleString('no-NO')}</td>`;
+      const grand = tfootSum.reduce((a,b)=>a+b,0);
+      foot += `<td style="text-align:right;font-weight:700;">${grand.toLocaleString('no-NO')}</td></tr></tfoot>`;
+      tbl.innerHTML = thead + body + foot;
+      $('summaryCard').style.display='block';
+    }
+
+    async function loadSchema() {
+      await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler((s)=>{ schema = s || schema; resolve(); })
+          .withFailureHandler(reject).getBudgetSchema();
+      });
+    }
+    async function loadProfile() {
+      await new Promise((resolve, reject) => {
+        google.script.run.withSuccessHandler((p)=>{ profile = p || profile; setUserPill(); applyAccessMode(); resolve(); })
+          .withFailureHandler(()=>{ profile = { email:'', role:'LESER', canEdit:false }; setUserPill(); applyAccessMode(); resolve(); })
+          .getCurrentUserProfile();
+      });
+    }
+
+    function onLoad() {
+      showVersion();
+      showStatus('Laster …', 'info');
+      Promise.all([loadSchema(), loadProfile()]).then(()=>{
+        hideStatus();
+        const now = new Date();
+        $('year').value = now.getFullYear();
+        $('version').value = `${now.getFullYear()}-main`;
+        addRow();
+      }).catch(()=> showStatus('Klarte ikke å laste skjema/profil.', 'error'));
+    }
+
+    function doLoad() {
+      const year = Number($('year').value);
+      const version = $('version').value.trim();
+      if (!Number.isInteger(year)) { showStatus('Oppgi gyldig år (f.eks. 2025).', 'error'); return; }
+      showStatus('Laster budsjett …', 'info');
+      google.script.run.withSuccessHandler(res=>{
+        if(res?.ok){ populateFromItems(res.items||[]); showStatus(`Lastet ${res.rows||0} linjer for ${year} • ${version||'main'}.`, 'success'); applyAccessMode(); }
+        else showStatus(res?.error || 'Feil ved lasting.', 'error');
+      }).withFailureHandler(err=>showStatus(err?.message || 'Feil ved lasting.', 'error'))
+        .getBudget(year, version || null);
+    }
+
+    function doSave() {
+      if (readOnly) { showStatus('Du har ikke redigeringstilgang.', 'error'); return; }
+      const lines = collectLinesFromTable();
+      const errs = validate(lines);
+      if (errs.length) { showStatus(errs[0], 'error'); return; }
+      showStatus('Lagrer …', 'info');
+      google.script.run.withSuccessHandler(res=>{
+        if(res?.ok) showStatus(`Lagret ${res.appended} linjer til BUDSJETT.`, 'success');
+        else showStatus(res?.error || 'Kunne ikke lagre.', 'error');
+      }).withFailureHandler(err=>showStatus(err?.message || 'Feil ved lagring.', 'error'))
+        .saveBudgetLines(lines);
+    }
+
+    function doSummary() {
+      const year = Number($('year').value);
+      const version = $('version').value.trim();
+      if (!Number.isInteger(year)) { showStatus('Oppgi gyldig år (f.eks. 2025).', 'error'); return; }
+      showStatus('Beregner oppsummering …', 'info');
+      google.script.run.withSuccessHandler(res=>{
+        if(res?.ok){ renderSummaryTable(res.rows||[]); showStatus(`Oppsummering oppdatert for ${year} • ${version||'main'}.`, 'success'); }
+        else showStatus(res?.error || 'Feil ved beregning.', 'error');
+      }).withFailureHandler(err=>showStatus(err?.message || 'Feil ved beregning.', 'error'))
+        .calculateBudgetSummary(year, version || null);
+    }
+
+    document.addEventListener('DOMContentLoaded', onLoad);
+    $('loadBtn').addEventListener('click', doLoad);
+    $('addRowBtn').addEventListener('click', () => { addRow(); applyAccessMode(); });
+    $('saveBtn').addEventListener('click', doSave);
+    $('sumBtn').addEventListener('click', doSummary);
+  </script>
+</body>
+</html>

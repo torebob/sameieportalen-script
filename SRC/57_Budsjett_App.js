@@ -13,26 +13,17 @@ function handleBudgetAppRequest(e) {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); // tillat innbygging i dashbord
 }
 
-// MERK: onOpen() er fjernet herfra. Menyen "Økonomi" er integrert i 00_App_Core.js.
-
 function openBudgetWebapp() {
   let url = ScriptApp.getService().getUrl();
   if (!url) {
-    SpreadsheetApp.getUi().alert('Budsjett-appen er ikke publisert som en webapp ennå.');
+    _ui()?.alert('Budsjett-appen er ikke publisert som en webapp ennå.');
     return;
   }
-
-  // Legg til page-parameter for routeren
   url += '?page=budget';
 
-  // Viser en enkel HTML-side med en lenke som kan åpnes i ny fane.
-  const html = `
-    <p>Klikk på lenken for å åpne budsjett-appen:</p>
-    <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>
-    <script>document.querySelector('a').click(); setTimeout(google.script.host.close, 500);</script>
-  `;
-  SpreadsheetApp.getUi().showModalDialog(
-    HtmlService.createHtmlOutput(html).setWidth(400).setHeight(100),
-    'Åpner Budsjett Webapp...'
-  );
+  // Bruker en liten HTML-dialog til å trigge åpning av ny fane via JavaScript.
+  const html = HtmlService.createHtmlOutput(
+    `<script>window.open("${url}", "_blank"); google.script.host.close();</script>`
+  ).setHeight(10).setWidth(100);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Åpner...');
 }

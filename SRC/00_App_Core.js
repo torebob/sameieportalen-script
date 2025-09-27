@@ -50,10 +50,10 @@ globalThis.UI_FILES = Object.freeze({
   MOTE_SAK_EDITOR:           { file:'31_MoteSakEditor.html',            title:'Møtesaker – Editor',         w:1100, h:760 },
 
   // Skjema/visninger
-  EIERSKIFTE:                { file:'32_Eierskifteskjema.html',         title:'Eierskifteskjema',           w:980,  h:760 },
-  PROTOKOLL_GODKJENNING:     { file:'33_ProtokollGodkjenningSkjema.html', title:'Protokoll-godkjenning',   w:980,  h:760 },
-  SEKSJON_HISTORIKK:         { file:'34_SeksjonHistorikk.html',         title:'Seksjonshistorikk',          w:1100, h:760 },
-  VAKTMESTER:                { file:'35_VaktmesterVisning.html',        title:'Vaktmester',                 w:1100, h:800 }
+  EIERSKIFTE:                { file:'34_EierskifteSkjema.html',         title:'Eierskifteskjema',           w:980,  h:760 },
+  PROTOKOLL_GODKJENNING:     { file:'35_ProtokollGodkjenningSkjema.html', title:'Protokoll-godkjenning',   w:980,  h:760 },
+  SEKSJON_HISTORIKK:         { file:'32_SeksjonHistorikk.html',         title:'Seksjonshistorikk',          w:1100, h:760 },
+  VAKTMESTER:                { file:'33_VaktmesterVisning.html',        title:'Vaktmester',                 w:1100, h:800 }
 });
 
 /* ---------- UI helpers ---------- */

@@ -1,346 +1,267 @@
 /* ====================== Forms Scheduler (reminders & auto-close) ======================
- * FILE: 04_Forms_Scheduler.gs  |  VERSION: 1.7.0  |  UPDATED: 2025-09-13
- * FORMÅL: Daglig tidsstyrt håndtering av frister/påminnelser/auto-stenging for Google Forms
- *         basert på rader i Skjema-register-fanen. Oppdaterer også svarstatistikk.
- * Endringer v1.7.0: Robust fallback for arknavn, automatisk opprettelse av registerark,
- *                   router med tilstedeværelses-sjekk, forbedret logging og validering.
- * Avhenger av: _logEvent(), _tz_(), SHEETS (valgfritt for SKJEMA_REG)
+ * FILE: 04_Forms_Scheduler.gs  |  VERSION: 2.0.0  |  UPDATED: 2025-09-26
+ * FORMÅL: Daglig tidsstyrt håndtering av frister/påminnelser/auto-stenging for Google Forms.
+ * ENDRINGER v2.0.0:
+ *  - Modernisert til let/const og arrow functions.
+ *  - Fjernet lokale hjelpefunksjoner; bruker nå 000_Utils.js.
+ *  - Forbedret kodestruktur for lesbarhet.
  * ================================================================================ */
 
-/* -------------------- Lokale konstanter (failsafe) -------------------- */
-const FORMS_REG_SHEET = (typeof SHEETS !== 'undefined' && SHEETS && SHEETS.SKJEMA_REG)
-  ? SHEETS.SKJEMA_REG
-  : 'SkjemaRegister';
+const FORMS_REG_SHEET = globalThis.SHEETS?.SKJEMA_REG || 'SkjemaRegister';
 
-/* ====================== Offentlige "entrypoints" ====================== */
-
-/** Opprett én daglig trigger kl. 09:00 som kjører runFormsDailyScheduler(). */
-function setupFormsDailySchedulerTrigger(){
+function setupFormsDailySchedulerTrigger() {
   _removeFormsDailySchedulerTrigger_();
-  ScriptApp.newTrigger('runFormsDailyScheduler')
-    .timeBased()
-    .atHour(9).nearMinute(0) // lokal tidssone fra prosjektet
-    .everyDays(1)
-    .create();
-  if (typeof _logEvent === 'function') _logEvent('FormsScheduler','Daglig trigger satt kl. 09:00.');
+  ScriptApp.newTrigger('runFormsDailyScheduler').timeBased().atHour(9).nearMinute(0).everyDays(1).create();
+  _safeLog_('FormsScheduler', 'Daglig trigger satt kl. 09:00.');
 }
 
-/** Fjern ev. eksisterende triggere for runFormsDailyScheduler(). */
-function clearFormsDailySchedulerTrigger(){
+function clearFormsDailySchedulerTrigger() {
   _removeFormsDailySchedulerTrigger_();
-  if (typeof _logEvent === 'function') _logEvent('FormsScheduler','Daglig trigger fjernet.');
+  _safeLog_('FormsScheduler', 'Daglig trigger fjernet.');
 }
 
-/** Kjør scheduler nå (manuelt fra editor/meny). */
-function runFormsDailyScheduler(){
-  const tz = (typeof _tz_ === 'function') ? _tz_() : (Session.getScriptTimeZone() || 'Europe/Oslo');
-  const today = _midnight_(new Date(), tz);
-
-  // Sørg for at register-arket finnes og har riktige kolonner
+function runFormsDailyScheduler() {
+  const today = _midnight_(new Date());
   const sh = _ensureFormsRegisterSheet_();
-  if (!sh){ if (typeof _logEvent === 'function') _logEvent('FormsScheduler','Klarte ikke å opprette/finne registerark.'); return; }
+  if (!sh) {
+    _safeLog_('FormsScheduler', 'Klarte ikke å opprette/finne registerark.');
+    return;
+  }
 
   const map = _headerMap_(sh);
-  if (!map.skjemaNavn || !(map.formId || map.formURL) || !map.status){
-    if (typeof _logEvent === 'function') _logEvent('FormsScheduler','Mangler minimumskolonner (SkjemaNavn, FormId/URL, Status).');
+  if (!map.skjemaNavn || !(map.formId || map.formURL) || !map.status) {
+    _safeLog_('FormsScheduler', 'Mangler minimumskolonner (SkjemaNavn, FormId/URL, Status).');
     return;
   }
 
   const lastRow = sh.getLastRow();
-  if (lastRow < 2){ if (typeof _logEvent === 'function') _logEvent('FormsScheduler','Ingen rader i Skjema-register.'); return; }
+  if (lastRow < 2) {
+    _safeLog_('FormsScheduler', 'Ingen rader i Skjema-register.');
+    return;
+  }
 
-  const values = sh.getRange(2,1,lastRow-1,sh.getLastColumn()).getValues();
+  const values = sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).getValues();
   let processed = 0, reminders = 0, closed = 0, statsUpdated = 0;
 
-  for (let i=0; i<values.length; i++){
-    const row = values[i];
+  for (const [i, row] of values.entries()) {
     const rObj = _rowToObj_(row, map);
-
     if (!rObj.SkjemaNavn) continue;
 
-    // Status-normalisering
     const status = String(rObj.Status || '').trim().toUpperCase();
-    const isActive = (status === 'ACTIVE' || status === 'TRUE' || status === 'ON' || status === 'ÅPEN' || status === '');
+    const isActive = ['ACTIVE', 'TRUE', 'ON', 'ÅPEN', ''].includes(status);
 
-    // Hopp over lukkede eller fremtidige skjemaer for å spare ytelse
-    if (!isActive || (rObj.StartDato && today < _midnight_(rObj.StartDato, tz))) {
+    if (!isActive || (rObj.StartDato && today < _midnight_(rObj.StartDato))) {
       continue;
     }
 
     processed++;
     const dueHasDate = !!rObj.FristDato;
-    const daysLeft = dueHasDate ? _daysDiff_(today, _midnight_(rObj.FristDato, tz)) : NaN;
+    const daysLeft = dueHasDate ? _daysDiff_(today, _midnight_(rObj.FristDato)) : NaN;
+    const isReminderDay = dueHasDate && rObj.PaaminnelseDager?.includes(daysLeft);
+    const isAutoCloseDay = rObj.AutoSteng && dueHasDate && today > _midnight_(rObj.FristDato);
 
-    // Handlinger som kan være aktuelle i dag
-    const isReminderDay = dueHasDate && Array.isArray(rObj.PaaminnelseDager) && rObj.PaaminnelseDager.includes(daysLeft);
-    const isAutoCloseDay = rObj.AutoSteng === true && dueHasDate && today > _midnight_(rObj.FristDato, tz);
-    const shouldUpdateStats = isActive; // oppdater kun aktive skjema
+    if (!isReminderDay && !isAutoCloseDay && !isActive) continue;
 
-    // Åpne form kun dersom nødvendig
-    if (!isReminderDay && !isAutoCloseDay && !shouldUpdateStats) continue;
-
-    let form = null;
-    const formId = rObj.FormId || _extractFormIdFromUrl_(rObj.FormURL);
-    if (formId){
-      try { form = FormApp.openById(formId); }
-      catch(e){ if (typeof _logEvent === 'function') _logEvent('FormsScheduler','Åpning av form "' + rObj.SkjemaNavn + '" feilet: ' + e.message); }
+    let form;
+    try {
+      const formId = rObj.FormId || _extractFormIdFromUrl_(rObj.FormURL);
+      if (formId) form = FormApp.openById(formId);
+    } catch (e) {
+      _safeLog_('FormsScheduler', `Åpning av form "${rObj.SkjemaNavn}" feilet: ${e.message}`);
     }
     if (!form) continue;
 
-    // Oppdater svarstatistikk
-    if (shouldUpdateStats) {
+    if (isActive) {
       const stats = _calcFormStats_(form);
-      const statsChanged = _writeBackStats_(sh, i+2, map, stats, rObj);
-      if (statsChanged) statsUpdated++;
+      if (_writeBackStats_(sh, i + 2, map, stats, rObj)) statsUpdated++;
     }
 
-    // Påminnelse
-    if (isReminderDay){
-      const markerKey = 'D-' + daysLeft;
-      if (!_reminderAlreadySent_(rObj.RemindersSent, markerKey)){
-        const seg = (String(rObj.Segment||'').trim().toUpperCase() || 'STYRET');
-        let to = [];
-        if (seg === 'STYRET') to = _getBoardEmails_();
-        const subject = `[${APP.NAME}] Påminnelse: ${rObj.SkjemaNavn} (frist ${_fmtDate_(rObj.FristDato, tz)})`;
-        const body =
-          `Hei,\n\nDette er en påminnelse om skjemaet "${rObj.SkjemaNavn}".\n` +
-          (rObj.FormURL ? `Skjema: ${rObj.FormURL}\n` : '') +
-          (rObj.FristDato ? `Frist: ${_fmtDate_(rObj.FristDato, tz)}\n` : '') +
-          `\nMvh\n${APP.NAME}`;
-
-        if (to.length){
-          try {
-            MailApp.sendEmail({ to: to.join(','), subject, body });
-            if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `Påminnelse D${daysLeft>=0?'-':''}${daysLeft} sendt til STYRET (${to.length}) for "${rObj.SkjemaNavn}".`);
-            reminders++;
-            _appendReminderMarker_(sh, i+2, map.remindersSent, markerKey, tz);
-            _setCell_(sh, i+2, map.sisteUts, new Date());
-          } catch(e){
-            if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `E-post feilet for "${rObj.SkjemaNavn}": ` + e.message);
-          }
-        } else {
-          if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `Påminnelse (ikke sendt – segment=${seg}, ingen mottakere) for "${rObj.SkjemaNavn}".`);
-        }
-      }
+    if (isReminderDay) {
+      reminders += _sendReminderForForm_(sh, i + 2, rObj, daysLeft, map);
     }
 
-    // Auto-steng
-    if (isAutoCloseDay){
+    if (isAutoCloseDay) {
       try {
-        if (form.isAcceptingResponses()){
+        if (form.isAcceptingResponses()) {
           form.setAcceptingResponses(false);
-          if (map.status) _setCell_(sh, i+2, map.status, 'CLOSED');
-          if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `Auto-stengte "${rObj.SkjemaNavn}" (frist utløpt).`);
+          if (map.status) _setCell_(sh, i + 2, map.status, 'CLOSED');
+          _safeLog_('FormsScheduler', `Auto-stengte "${rObj.SkjemaNavn}" (frist utløpt).`);
           closed++;
         }
-      } catch(e){
-        if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `Auto-stenging feilet for "${rObj.SkjemaNavn}": ` + e.message);
+      } catch (e) {
+        _safeLog_('FormsScheduler', `Auto-stenging feilet for "${rObj.SkjemaNavn}": ${e.message}`);
       }
     }
   }
 
-  // Enkel "last touched"-markør (NB: skriver i header-cellen)
   if (map.sistOppdatert) _setCell_(sh, 1, map.sistOppdatert, new Date());
-  if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `Kjøring ferdig. Aktive: ${processed}. Påminnelser: ${reminders}. Auto-stengt: ${closed}. Stats oppdatert: ${statsUpdated}.`);
+  _safeLog_('FormsScheduler', `Kjøring ferdig. Aktive: ${processed}. Påminnelser: ${reminders}. Auto-stengt: ${closed}. Stats oppdatert: ${statsUpdated}.`);
 }
 
-/* ====================== Hjelpere (internt) ====================== */
+function _sendReminderForForm_(sh, rowIndex, rObj, daysLeft, map) {
+  const markerKey = `D-${daysLeft}`;
+  if (_reminderAlreadySent_(rObj.RemindersSent, markerKey)) return 0;
 
-/** Sørger for at register-arket finnes og har riktige kolonner. */
-function _ensureFormsRegisterSheet_(){
-  try{
-    const headers = [
-      'SkjemaNavn','FormId','FormURL','Status',
-      'StartDato','FristDato','PaaminnelseDager','AutoSteng','Segment',
-      'SvarTeller','SistSvarTs','SisteUtsendelse','RemindersSent','SistOppdatert'
-    ];
+  const seg = (String(rObj.Segment || '').trim().toUpperCase() || 'STYRET');
+  const to = (seg === 'STYRET') ? _getBoardEmails_() : [];
+  if (to.length === 0) {
+    _safeLog_('FormsScheduler', `Påminnelse (ikke sendt – segment=${seg}, ingen mottakere) for "${rObj.SkjemaNavn}".`);
+    return 0;
+  }
+
+  const subject = `[${APP.NAME}] Påminnelse: ${rObj.SkjemaNavn} (frist ${_fmtDate_(rObj.FristDato)})`;
+  const body = `Hei,\n\nDette er en påminnelse om skjemaet "${rObj.SkjemaNavn}".\n${rObj.FormURL ? `Skjema: ${rObj.FormURL}\n` : ''}${rObj.FristDato ? `Frist: ${_fmtDate_(rObj.FristDato)}\n` : ''}\nMvh\n${APP.NAME}`;
+
+  try {
+    MailApp.sendEmail({ to: to.join(','), subject, body });
+    _safeLog_('FormsScheduler', `Påminnelse D${daysLeft >= 0 ? '-' : ''}${daysLeft} sendt til STYRET (${to.length}) for "${rObj.SkjemaNavn}".`);
+    _appendReminderMarker_(sh, rowIndex, map.remindersSent, markerKey);
+    _setCell_(sh, rowIndex, map.sisteUts, new Date());
+    return 1;
+  } catch (e) {
+    _safeLog_('FormsScheduler', `E-post feilet for "${rObj.SkjemaNavn}": ${e.message}`);
+    return 0;
+  }
+}
+
+function _ensureFormsRegisterSheet_() {
+  try {
+    const headers = ['SkjemaNavn', 'FormId', 'FormURL', 'Status', 'StartDato', 'FristDato', 'PaaminnelseDager', 'AutoSteng', 'Segment', 'SvarTeller', 'SistSvarTs', 'SisteUtsendelse', 'RemindersSent', 'SistOppdatert'];
     const ss = SpreadsheetApp.getActive();
     let sh = ss.getSheetByName(FORMS_REG_SHEET);
     if (!sh) sh = ss.insertSheet(FORMS_REG_SHEET);
 
-    const cur = sh.getRange(1,1,1,headers.length).getValues()[0];
-    const mismatch = JSON.stringify(cur) !== JSON.stringify(headers);
-    if (sh.getLastRow() === 0 || mismatch){
-      sh.getRange(1,1,1,Math.max(headers.length, sh.getLastColumn())).clearContent();
-      sh.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
+    const cur = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+    if (sh.getLastRow() === 0 || JSON.stringify(cur) !== JSON.stringify(headers)) {
+      sh.getRange(1, 1, 1, Math.max(headers.length, sh.getLastColumn())).clearContent();
+      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
       if (sh.getFrozenRows() < 1) sh.setFrozenRows(1);
     }
     return sh;
-  } catch(e){
-    if (typeof _logEvent === 'function') _logEvent('FormsScheduler', 'Klarte ikke sikre registerark: ' + e.message);
+  } catch (e) {
+    _safeLog_('FormsScheduler', `Klarte ikke sikre registerark: ${e.message}`);
     return null;
   }
 }
 
-function _removeFormsDailySchedulerTrigger_(){
-  const triggers = ScriptApp.getProjectTriggers() || [];
-  triggers.forEach(t => {
-    if (t.getHandlerFunction && t.getHandlerFunction() === 'runFormsDailyScheduler'){
+function _removeFormsDailySchedulerTrigger_() {
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'runFormsDailyScheduler') {
       ScriptApp.deleteTrigger(t);
     }
   });
 }
 
-function _headerMap_(sh){
-  const hdr = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-  const norm = s => String(s||'').toLowerCase().replace(/[\s_]+/g,'').trim();
+function _headerMap_(sh) {
+  const hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const norm = s => String(s || '').toLowerCase().replace(/[\s_]+/g, '').trim();
   const want = {
-    skjemaNavn: ['skjemanavn','navn'],
-    formId:     ['formid','id'],
-    formURL:    ['formurl','url'],
-    status:     ['status','aktiv'],
-    startDato:  ['startdato','start','aktivfra'],
-    fristDato:  ['fristdato','deadline','due'],
-    paaminnelseDager: ['paaminnelsedager','påminnelsedager','reminderdays'],
-    autoSteng:  ['autosteng','autostengning','autoclose'],
-    segment:    ['segment','målgruppe','malgruppe'],
-    svarTeller: ['svarteller','antallsvar','responses','count'],
-    sistSvarTs: ['sistsvarts','lastresponse','lastrapporttid','sistsvar'],
-    sisteUts:   ['sisteutsendelse','lastsent','notified'],
-    remindersSent: ['reminderssent','sendtepåminnelser','påminnelserlogg'],
-    sistOppdatert: ['sistoppdatert','oppdatert','lastupdated']
+    skjemaNavn: ['skjemanavn', 'navn'],
+    formId: ['formid', 'id'],
+    formURL: ['formurl', 'url'],
+    status: ['status', 'aktiv'],
+    startDato: ['startdato', 'start', 'aktivfra'],
+    fristDato: ['fristdato', 'deadline', 'due'],
+    paaminnelseDager: ['paaminnelsedager', 'påminnelsedager', 'reminderdays'],
+    autoSteng: ['autosteng', 'autostengning', 'autoclose'],
+    segment: ['segment', 'målgruppe', 'malgruppe'],
+    svarTeller: ['svarteller', 'antallsvar', 'responses', 'count'],
+    sistSvarTs: ['sistsvarts', 'lastresponse', 'lastrapporttid', 'sistsvar'],
+    sisteUts: ['sisteutsendelse', 'lastsent', 'notified'],
+    remindersSent: ['reminderssent', 'sendtepåminnelser', 'påminnelserlogg'],
+    sistOppdatert: ['sistoppdatert', 'oppdatert', 'lastupdated']
   };
-  const res = {};
-  for (let c=0; c<hdr.length; c++){
-    const n = norm(hdr[c]);
-    if (!n) continue;
-    for (const key of Object.keys(want)){
-      if (res[key] != null) continue;
-      if (want[key].some(alias => n === alias)){ res[key] = c+1; }
-    }
-  }
-  return res;
+  return Object.keys(want).reduce((res, key) => {
+    const foundIndex = hdr.findIndex(h => want[key].includes(norm(h)));
+    if (foundIndex !== -1) res[key] = foundIndex + 1;
+    return res;
+  }, {});
 }
 
-function _rowToObj_(row, map){
-  const get = (idx) => (idx ? row[idx-1] : '');
-  const parseBool = (v) => {
-    const s = String(v).trim().toLowerCase();
-    return (s === 'true' || s === '1' || s === 'ja' || s === 'yes' || v === true);
-  };
-  const parseCSVints = (v) => {
-    if (v == null || v === '') return [];
-    return String(v).split(',').map(x => parseInt(String(x).trim(),10)).filter(n => !isNaN(n));
-  };
-  const parseDate = (v) => {
-    if (v instanceof Date && !isNaN(v.getTime())) return v;
-    if (!v) return null;
-    const d = new Date(v);
-    return isNaN(d.getTime()) ? null : d;
-  };
+function _rowToObj_(row, map) {
+  const get = (idx) => (idx ? row[idx - 1] : '');
+  const parseBool = (v) => /^(true|1|ja|yes)$/i.test(String(v).trim());
+  const parseCSVints = (v) => String(v || '').split(',').map(x => parseInt(x.trim(), 10)).filter(n => !isNaN(n));
+  const parseDate = (v) => (v instanceof Date && !isNaN(v)) ? v : (v ? new Date(v) : null);
+
   return {
     SkjemaNavn: get(map.skjemaNavn),
-    FormId:     get(map.formId),
-    FormURL:    get(map.formURL),
-    Status:     get(map.status),
-    StartDato:  parseDate(get(map.startDato)),
-    FristDato:  parseDate(get(map.fristDato)),
+    FormId: get(map.formId),
+    FormURL: get(map.formURL),
+    Status: get(map.status),
+    StartDato: parseDate(get(map.startDato)),
+    FristDato: parseDate(get(map.fristDato)),
     PaaminnelseDager: parseCSVints(get(map.paaminnelseDager)),
-    AutoSteng:  parseBool(get(map.autoSteng)),
-    Segment:    get(map.segment),
+    AutoSteng: parseBool(get(map.autoSteng)),
+    Segment: get(map.segment),
     SvarTeller: get(map.svarTeller),
     SistSvarTs: parseDate(get(map.sistSvarTs)),
     RemindersSent: get(map.remindersSent)
   };
 }
 
-function _calcFormStats_(form){
-  if (!form) return { count:null, last:null };
-  try{
+function _calcFormStats_(form) {
+  if (!form) return { count: null, last: null };
+  try {
     const res = form.getResponses();
-    const n = res.length;
-    const last = n ? res[n-1].getTimestamp() : null;
-    return { count:n, last:last };
-  }catch(e){
-    if (typeof _logEvent === 'function') _logEvent('FormsScheduler','getResponses() feilet: ' + e.message);
-    return { count:null, last:null };
+    return { count: res.length, last: res.length ? res[res.length - 1].getTimestamp() : null };
+  } catch (e) {
+    _safeLog_('FormsScheduler', `getResponses() feilet: ${e.message}`);
+    return { count: null, last: null };
   }
 }
 
-/** Skriv tilbake statistikk, returnerer true hvis noe ble endret. */
-function _writeBackStats_(sh, rowIndex, map, newStats, oldRowObj){
+function _writeBackStats_(sh, rowIndex, map, newStats, oldRowObj) {
   let changed = false;
   if (map.svarTeller && newStats.count != null && String(newStats.count) !== String(oldRowObj.SvarTeller)) {
     _setCell_(sh, rowIndex, map.svarTeller, newStats.count);
     changed = true;
   }
-  if (map.sistSvarTs && newStats.last) {
-    const oldTime = oldRowObj.SistSvarTs ? oldRowObj.SistSvarTs.getTime() : 0;
-    if (newStats.last.getTime() !== oldTime) {
-       _setCell_(sh, rowIndex, map.sistSvarTs, newStats.last);
-       changed = true;
-    }
+  if (map.sistSvarTs && newStats.last && newStats.last.getTime() !== oldRowObj.SistSvarTs?.getTime()) {
+    _setCell_(sh, rowIndex, map.sistSvarTs, newStats.last);
+    changed = true;
   }
-  if (changed && map.sistOppdatert){
+  if (changed && map.sistOppdatert) {
     _setCell_(sh, rowIndex, map.sistOppdatert, new Date());
   }
   return changed;
 }
 
-function _appendReminderMarker_(sh, rowIndex, colIndex, markerKey, tz){
+function _appendReminderMarker_(sh, rowIndex, colIndex, markerKey) {
   if (!colIndex) return;
   const cur = String(sh.getRange(rowIndex, colIndex).getValue() || '').trim();
-  const stamp = _fmtDate_(new Date(), tz);
+  const stamp = _fmtDate_(new Date());
   const add = `${markerKey}|${stamp}`;
-  const nextVal = cur ? (cur + ';' + add) : add;
+  const nextVal = cur ? `${cur};${add}` : add;
   sh.getRange(rowIndex, colIndex).setValue(nextVal);
 }
 
-function _reminderAlreadySent_(val, markerKey){
-  if (!val) return false;
-  const parts = String(val).split(';').map(s => String(s||'').trim());
-  return parts.some(p => p.startsWith(markerKey + '|'));
+function _reminderAlreadySent_(val, markerKey) {
+  return String(val || '').split(';').some(p => p.trim().startsWith(`${markerKey}|`));
 }
 
-function _extractFormIdFromUrl_(url){
-  if (!url) return '';
-  const m = String(url).match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
+function _extractFormIdFromUrl_(url) {
+  const m = String(url || '').match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
   return m ? m[1] : '';
 }
 
-/** Enkel regex for å validere e-postformat. */
 function _isValidEmail_(email) {
-  if (!email || typeof email !== 'string') return false;
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email.trim());
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
 }
 
-/** Hent e-poster fra Styret-fanen (filtrert til gyldige adresser). */
-function _getBoardEmails_(){
+function _getBoardEmails_() {
   const ss = SpreadsheetApp.getActive();
   const sh = ss.getSheetByName(SHEETS.BOARD);
   if (!sh || sh.getLastRow() < 2) return [];
-  const vals = sh.getRange(2,2, sh.getLastRow()-1, 1).getValues().flat();
-  return vals.map(v => String(v || '').trim()).filter(_isValidEmail_);
+  return sh.getRange(2, 2, sh.getLastRow() - 1, 1).getValues().flat().map(v => String(v || '').trim()).filter(_isValidEmail_);
 }
 
-/** Sett en enkelt celleverdi (1-basert), med logging ved feil. */
-function _setCell_(sh, row, col, v){
-  if (!row || !col) return;
-  try { sh.getRange(row, col).setValue(v); }
-  catch(e) { if (typeof _logEvent === 'function') _logEvent('FormsScheduler', `Skriving til celle (${row},${col}) feilet: ${e.message}`); }
+function _setCell_(sh, row, col, v) {
+  if (row && col) {
+    try {
+      sh.getRange(row, col).setValue(v);
+    } catch (e) {
+      _safeLog_('FormsScheduler', `Skriving til celle (${row},${col}) feilet: ${e.message}`);
+    }
+  }
 }
-
-/* -------------------- Datohjelpere -------------------- */
-function _midnight_(d){
-  if (!(d instanceof Date) || isNaN(d)) return null;
-  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
-  return new Date(y, m, day, 0,0,0,0);
-}
-function _daysDiff_(from, to){
-  if (!from || !to) return NaN;
-  const MS = 24*60*60*1000;
-  return Math.round((to.getTime() - from.getTime()) / MS);
-}
-function _fmtDate_(d, tz){
-  if (!d) return '';
-  try { return Utilities.formatDate(d, tz || 'Europe/Oslo', 'dd.MM.yyyy'); }
-  catch(_) { return d.toISOString().slice(0,10); }
-}
-
-/* -------------------- Router for onFormSubmit - DEPRECATED -------------------- */
-/*
- * MERK: routeFormSubmit() er fjernet fra denne filen for å unngå konflikter.
- * Funksjonen er nå definert og håndtert sentralt i FormsRouterPlus.js,
- * som bruker et register-ark for å dynamisk rute innsendinger.
- */

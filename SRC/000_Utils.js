@@ -110,3 +110,42 @@ function _normalizeDate_(value) {
 
   return null;
 }
+
+/**
+ * Returnerer et Date-objekt satt til midnatt.
+ * @param {Date} d - Datoen som skal nullstilles.
+ * @returns {Date|null}
+ */
+function _midnight_(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return null;
+  const newDate = new Date(d);
+  newDate.setHours(0, 0, 0, 0);
+  return newDate;
+}
+
+/**
+ * Beregner antall dager mellom to datoer.
+ * @param {Date} from - Startdato.
+ * @param {Date} to - Sluttdato.
+ * @returns {number} Antall dager.
+ */
+function _daysDiff_(from, to) {
+  if (!from || !to) return NaN;
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
+}
+
+/**
+ * Formaterer en dato til dd.MM.yyyy-format.
+ * @param {Date} d - Datoen som skal formateres.
+ * @param {string} [tz] - Tidssonen.
+ * @returns {string} Den formaterte datostrengen.
+ */
+function _fmtDate_(d, tz) {
+  if (!d) return '';
+  try {
+    return Utilities.formatDate(d, tz || _tz_(), 'dd.MM.yyyy');
+  } catch (e) {
+    return d.toISOString().slice(0, 10);
+  }
+}

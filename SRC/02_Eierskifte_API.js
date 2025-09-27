@@ -317,11 +317,7 @@ function _getSheetHeaders_(sheetName) {
   return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
 }
 
-// Små stubs – forventes allerede i 01_*.gs, men trygg å ha her
-function _logEvent(type, message) { try { Logger.log('['+type+'] ' + message); } catch(e){} }
-function _ui() { return SpreadsheetApp.getUi(); }
-function _tz_() { return Session.getScriptTimeZone() || 'Europe/Oslo'; }
-function _currentEmail_(){ return Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || ''; }
+// MERK: Hjelpefunksjoner (_logEvent, _ui, _tz_, _currentEmail_) er flyttet til 00b_Utils.js.
 
 // Robust dato-parser: yyyy-MM-dd, dd.MM.yyyy, eller Date
 function _normalizeDate_(value) {

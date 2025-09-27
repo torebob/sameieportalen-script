@@ -87,66 +87,11 @@
     return (typeof globalThis._ui === 'function') ? globalThis._ui() : SpreadsheetApp.getUi();
   }
 
-  /* ---------- User / auth ---------- */
-  function _getCurrentUserInfo_() {
-    const now = Date.now();
-    if (_dashboardCache.userInfo && (now - _dashboardCache.userTime) < DASHBOARD_CONFIG.CACHE_DURATION) {
-      return _dashboardCache.userInfo;
-    }
-    try {
-      const activeUser = Session.getActiveUser();
-      const effectiveUser = Session.getEffectiveUser();
-      const email = (activeUser && activeUser.getEmail() || effectiveUser && effectiveUser.getEmail() || '').toLowerCase();
-      const userInfo = { email, isValid: !!email, hasEditAccess: _checkEditAccess_(email), timestamp: now };
-      _dashboardCache.userInfo = userInfo; _dashboardCache.userTime = now;
-      return userInfo;
-    } catch (_) {
-      return { email:'', isValid:false, hasEditAccess:false, timestamp:now };
-    }
-  }
-  function _checkEditAccess_(email) {
-    if (!email) return false;
-    try {
-      return _withRetry_(() => {
-        const editors = SpreadsheetApp.getActive().getEditors().map(u => (u.getEmail()||'').toLowerCase());
-        return editors.includes(email);
-      });
-    } catch (_) { return false; }
-  }
-
-  /* ---------- Konfig ---------- */
-  function _loadAllConfig_() {
-    try {
-      _validateDependencies_();
-      const ss = SpreadsheetApp.getActive();
-      const sheet = ss.getSheetByName(globalThis.SHEETS.KONFIG);
-      if (!sheet) throw new Error(`Configuration sheet '${globalThis.SHEETS.KONFIG}' not found`);
-      const lastRow = sheet.getLastRow();
-      if (lastRow < 2) return {};
-      const values = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-      const config = {};
-      values.forEach(([key, value]) => {
-        if (key) config[String(key).trim().toUpperCase()] = String(value || '').trim();
-      });
-      return config;
-    } catch (_) { return {}; }
-  }
-  function _getCachedConfig_() {
-    const now = Date.now();
-    if (!_dashboardCache.config || (now - _dashboardCache.configTime) > DASHBOARD_CONFIG.CACHE_DURATION) {
-      _dashboardCache.config = _loadAllConfig_();
-      _dashboardCache.configTime = now;
-    }
-    return _dashboardCache.config;
-  }
-  function _getConfigValue_(key, fallback = '') {
-    const config = _getCachedConfig_();
-    return config[String(key||'').toUpperCase()] || fallback;
-  }
-  function _parseEmailList_(rawList) {
-    if (!rawList) return [];
-    return String(rawList).split(/[,;\n\r\t ]+/).map(s=>s.trim().toLowerCase()).filter(s=>s && s.includes('@'));
-  }
+  /*
+   * MERK: User/auth og Konfig-hjelpere er fjernet fra denne filen.
+   * De er nå definert og håndtert sentralt i Config_Service Dashbord.js,
+   * som eksponerer dem til det globale skopet.
+   */
   function _isAdminUser_(userInfo) {
     const whitelist = _parseEmailList_(_getConfigValue_('ADMIN_WHITELIST',''));
     return !!(userInfo && userInfo.email && whitelist.includes(userInfo.email));

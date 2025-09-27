@@ -227,21 +227,17 @@ function _getRoleForEmail_(email) {
   } catch(e){ return 'LESER'; }
 }
 
-function _byName_(header) {
-  var map = {};
-  for (var i=0;i<header.length;i++) { var h = String(header[i]||'').trim(); if (h) map[h] = i+1; }
-  return map;
-}
+/*
+ * MERK: _byName_() er fjernet fra denne filen for å unngå konflikter.
+ * Funksjonen er nå definert sentralt i 60_HMS_Vedlikeholdsplan.js.
+ */
 function _s(v){ return String(v==null?'':v).trim(); }
 function _startOfDay_(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function _chunk_(arr, n){ var out=[]; for (var i=0;i<arr.length;i+=n) out.push(arr.slice(i,i+n)); return out; }
-function _derivePriorityFromCriticality_(krit) {
-  var n = Number(krit||0);
-  if (n >= 5) return 'Kritisk';
-  if (n >= 4) return 'Høy';
-  if (n >= 3) return 'Normal';
-  return 'Lav';
-}
+/*
+ * MERK: _derivePriorityFromCriticality_() er fjernet fra denne filen.
+ * Funksjonen er nå definert sentralt i 60_HMS_Vedlikeholdsplan.js.
+ */
 function _ensureCalendar_(name) {
   var cals = CalendarApp.getCalendarsByName(name);
   return cals && cals.length ? cals[0] : CalendarApp.createCalendar(name);

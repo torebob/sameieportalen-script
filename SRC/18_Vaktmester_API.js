@@ -16,9 +16,10 @@
   var TZ = Session.getScriptTimeZone() || 'Europe/Oslo';
 
   /* ---------- Små hjelpere ---------- */
-  function _safeLog_(topic, msg, extra) {
-    try { if (typeof _logEvent === 'function') _logEvent(topic, msg, extra || {}); } catch (_) {}
-  }
+  /*
+   * MERK: Den lokale _safeLog_()-funksjonen er fjernet. Den globale
+   * versjonen fra 00b_Utils.js blir nå brukt i stedet.
+   */
   function _normalizeEmail_(s) {
     if (!s) return '';
     var str = String(s).trim();

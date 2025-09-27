@@ -56,24 +56,10 @@ globalThis.UI_FILES = Object.freeze({
   VAKTMESTER:                { file:'33_VaktmesterVisning.html',        title:'Vaktmester',                 w:1100, h:800 }
 });
 
-/* ---------- UI helpers ---------- */
-function _ui(){ try { return SpreadsheetApp.getUi(); } catch(_) { return null; } }
-function _safeLog_(topic, msg, extra){
-  try { if (typeof _logEvent === 'function') _logEvent(topic, msg, extra || {}); } catch(_) {}
-}
-function _alert_(msg, title){
-  try {
-    const ui = _ui();
-    if (ui) ui.alert(title || APP.NAME, String(msg), ui.ButtonSet.OK);
-    else Logger.log(`ALERT [${title||APP.NAME}]: ${msg}`);
-  } catch(e) {
-    Logger.log(`ALERT failed: ${e && e.message} | ${msg}`);
-  }
-}
-function _toast_(msg){
-  try { SpreadsheetApp.getActive().toast(String(msg)); }
-  catch(e){ Logger.log('Toast failed: ' + (e && e.message) + ' | Message: ' + msg); }
-}
+/*
+ * MERK: UI-hjelpere (_ui, _safeLog_, _alert_, _toast_) er flyttet til
+ * den sentrale verktøyfilen 00b_Utils.js for å unngå duplisering.
+ */
 
 /* ---------- Generisk, sikker UI-åpner ---------- */
 function _openHtmlFromMap_(key, target = 'modal', params){

@@ -149,3 +149,41 @@ function _fmtDate_(d, tz) {
     return d.toISOString().slice(0, 10);
   }
 }
+
+/**
+ * Creates a map of header names to their 1-based column index.
+ * @param {string[]} headerRow - The array of header strings.
+ * @returns {Object.<string, number>} A map of lowercase header names to column indices.
+ */
+function _headerMap_(headerRow) {
+  const map = {};
+  headerRow.forEach((header, i) => {
+    const key = String(header || '').trim().toLowerCase();
+    if (key) {
+      map[key] = i + 1; // 1-based index
+    }
+  });
+  return map;
+}
+
+/**
+ * Safely stringifies a JavaScript object, handling circular references.
+ * @param {*} obj - The object to stringify.
+ * @returns {string} The JSON string.
+ */
+function _stringifySafe_(obj) {
+  const seen = new WeakSet();
+  try {
+    return JSON.stringify(obj, (key, value) => {
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          return '[Circular]';
+        }
+        seen.add(value);
+      }
+      return value;
+    });
+  } catch (e) {
+    return `<<JSON Error: ${e.message}>>`;
+  }
+}

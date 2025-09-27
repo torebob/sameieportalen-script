@@ -544,20 +544,10 @@ function _first_(v) {
   return (v || '').toString().trim();
 }
 
-function _stringifySafe_(obj, space) {
-  try {
-    const seen = (typeof WeakSet !== 'undefined') ? new WeakSet() : [];
-    return JSON.stringify(obj, function (k, v) {
-      if (v && typeof v === 'object') {
-        if (seen.add) { if (seen.has(v)) return '[Circular]'; seen.add(v); }
-        else { if (seen.indexOf(v) !== -1) return '[Circular]'; seen.push(v); }
-      }
-      return v;
-    }, space || 0);
-  } catch (e) {
-    return `<<JSON Error: ${e && e.message}>>`;
-  }
-}
+/*
+ * MERK: _stringifySafe_() er fjernet fra denne filen. Den globale
+ * versjonen fra 000_Utils.js brukes i stedet.
+ */
 
 /** Best-effort admin mail (context may be string body or object) */
 function _notifyAdminSafe_(subject, error, context) {

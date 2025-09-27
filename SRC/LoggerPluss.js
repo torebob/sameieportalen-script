@@ -135,33 +135,10 @@ function getAppLogger_() {
     return out;
   }
 
-  function _stringifySafe_(obj) {
-    var json = '';
-    try {
-      var seen = (typeof WeakSet !== 'undefined') ? new WeakSet() : [];
-      json = JSON.stringify(obj, function (key, value) {
-        if (value && typeof value === 'object') {
-          if (seen.add) { // WeakSet
-            if (seen.has(value)) return '[Circular]';
-            seen.add(value);
-          } else { // Array fallback
-            for (var i = 0; i < seen.length; i++) {
-              if (seen[i] === value) return '[Circular]';
-            }
-            seen.push(value);
-          }
-        }
-        return value;
-      });
-    } catch (e1) {
-      try {
-        json = JSON.stringify({ stringified: String(obj) });
-      } catch (e2) {
-        json = '<<JSON Error: ' + (e1 && e1.message) + '>>';
-      }
-    }
-    return json;
-  }
+  /*
+   * MERK: _stringifySafe_() er fjernet fra denne filen. Den globale
+   * versjonen fra 000_Utils.js brukes i stedet.
+   */
 
   function _props_() {
     try { return PropertiesService.getScriptProperties(); } catch (_) {}

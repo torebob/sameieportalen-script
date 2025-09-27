@@ -6,22 +6,33 @@
 // NOTE: Viser HTML-fila 51_Budsjett_App.html som dashboard/webapp
 // =============================================================================
 
-function doGet(e) {
+function handleBudgetAppRequest(e) {
   return HtmlService.createTemplateFromFile('51_Budsjett_App')
     .evaluate()
     .setTitle('Budsjett')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL); // tillat innbygging i dashbord
 }
 
-// Valgfri meny i Sheets (åpner webapp-URL)
-function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('Økonomi')
-    .addItem('Åpne Budsjett (webapp)', 'openBudgetWebapp')
-    .addToUi();
-}
+// MERK: onOpen() er fjernet herfra. Menyen "Økonomi" er integrert i 00_App_Core.js.
 
 function openBudgetWebapp() {
-  const url = ScriptApp.getService().getUrl();
-  SpreadsheetApp.getUi().alert('Webapp-URL:\n' + url + '\n\nPubliser som webapp om du får 404.');
+  let url = ScriptApp.getService().getUrl();
+  if (!url) {
+    SpreadsheetApp.getUi().alert('Budsjett-appen er ikke publisert som en webapp ennå.');
+    return;
+  }
+
+  // Legg til page-parameter for routeren
+  url += '?page=budget';
+
+  // Viser en enkel HTML-side med en lenke som kan åpnes i ny fane.
+  const html = `
+    <p>Klikk på lenken for å åpne budsjett-appen:</p>
+    <a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>
+    <script>document.querySelector('a').click(); setTimeout(google.script.host.close, 500);</script>
+  `;
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(400).setHeight(100),
+    'Åpner Budsjett Webapp...'
+  );
 }

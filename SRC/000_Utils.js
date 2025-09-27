@@ -87,3 +87,26 @@ function _tz_() {
     return 'Europe/Oslo';
   }
 }
+
+/**
+ * Robust dato-parser som håndterer yyyy-MM-dd, dd.MM.yyyy, og Date-objekter.
+ * @param {*} value - Verdien som skal parses.
+ * @returns {Date|null} Et Date-objekt, eller null hvis ugyldig.
+ */
+function _normalizeDate_(value) {
+  if (value instanceof Date && !isNaN(value)) return value;
+
+  const s = String(value || '').trim();
+  if (!s) return null;
+
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return d;
+
+  return null;
+}

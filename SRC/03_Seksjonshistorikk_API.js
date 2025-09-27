@@ -1,7 +1,10 @@
 /* ====================== Seksjonshistorikk – Enhanced API & UI ======================
- * FILE: 03_Seksjonshistorikk_Enhanced.gs | VERSION: 2.1.0 | UPDATED: 2025-09-15
- * FORMÅL: Optimized and secure section history with caching, filtering, and improved performance
- * Avhenger av: SHEETS, _tz_(), _logEvent()
+ * FILE: 03_Seksjonshistorikk_Enhanced.gs | VERSION: 3.0.0 | UPDATED: 2025-09-26
+ * FORMÅL: Optimized and secure section history with caching, filtering, and improved performance.
+ * ENDRINGER v3.0.0:
+ *  - Modernisert til let/const og arrow functions.
+ *  - Bruker sentrale hjelpefunksjoner fra 000_Utils.js.
+ *  - Forbedret lesbarhet og kodestruktur.
  * ================================================================================ */
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -73,31 +76,20 @@ const EVENT_PROCESSORS = Object.freeze({
 // LOGGING HELPERS
 ////////////////////////////////////////////////////////////////////////////////
 
-function logInfo(msg) {
+const logInfo = (msg) => {
   Logger.log(`INFO: ${msg}`);
-  if (typeof _logEvent === 'function') _logEvent('History', msg);
-}
+  if (typeof _safeLog_ === 'function') _safeLog_('History', msg);
+};
 
-function logError(msg) {
+const logError = (msg) => {
   Logger.log(`ERROR: ${msg}`);
-  if (typeof _logEvent === 'function') _logEvent('HistoryError', msg);
-}
+  if (typeof _safeLog_ === 'function') _safeLog_('HistoryError', msg);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 // PUBLIC API FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-/*
- * MERK: openSectionHistory() er fjernet fra denne filen for å unngå konflikter.
- * Funksjonen kalles nå fra 00_App_Core.js, som bruker den sentrale UI_FILES-mappingen.
- */
-
-/**
- * Enhanced section history with filtering options
- * @param {string} seksjonsnr
- * @param {Object} options
- * @returns {{ok:boolean, seksjonsnr?:string, count?:number, events?:Array, error?:string, hasMore?:boolean}}
- */
 function getCompleteSectionHistory(seksjonsnr, options = {}) {
   const operationId = Utilities.getUuid().slice(0, 8);
   try {
@@ -116,7 +108,6 @@ function getCompleteSectionHistory(seksjonsnr, options = {}) {
   }
 }
 
-/** Eksporter seksjonshistorikk til nytt ark */
 function exportSectionHistoryToSheet(seksjonsnr, options = {}) {
   try {
     const result = getCompleteSectionHistory(seksjonsnr, { ...options, maxResults: 0 });
@@ -171,38 +162,40 @@ function _processEventsByType_(seksjonsnr, data, cfg, config) {
   if (!col.seksjonsnr) return events;
   for (const row of data.rows) {
     if (String(row[col.seksjonsnr - 1] || '').trim() !== seksjonsnr) continue;
-    const evs = _createEventsFromRow_(row, col, cfg, config);
+    const evs = _createEventsFromRow_(row, col, cfg);
     events.push(...evs.filter(e => _isEventInDateRange_(e, config)));
   }
   return events;
 }
 
-function _makeEvent({ ts, type, title = '', desc = '', source = '', link = '', attachments = [] }) {
-  return { ts, type, title, desc, source, link, attachments };
-}
+const _makeEvent = ({ ts, type, title = '', desc = '', source = '', link = '', attachments = [] }) => ({
+  ts, type, title, desc, source, link, attachments
+});
 
-function _createEventsFromRow_(row, col, cfg, config) {
-  const tz = _getTimezone_();
+function _createEventsFromRow_(row, col, cfg) {
+  const tz = _tz_();
   const evs = [];
   switch (cfg.type) {
-    case EVENT_TYPES.EIERSKAP:
-      const fraDato = col.fra ? _parseDate_(row[col.fra - 1]) : null;
-      const tilDato = col.til ? _parseDate_(row[col.til - 1]) : null;
+    case EVENT_TYPES.EIERSKAP: {
+      const fraDato = col.fra ? _normalizeDate_(row[col.fra - 1]) : null;
+      const tilDato = col.til ? _normalizeDate_(row[col.til - 1]) : null;
       const personId = col.personId ? String(row[col.personId - 1] || '').trim() : '';
-      if (fraDato) evs.push(_makeEvent({ ts: fraDato, type: 'Eierskap start', title: personId ? `Ny eier (${personId})` : 'Ny eier', desc: `Eierskap registrert fra ${_formatDate_(fraDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
-      if (tilDato) evs.push(_makeEvent({ ts: tilDato, type: 'Eierskap slutt', title: personId ? `Eier sluttet (${personId})` : 'Eier sluttet', desc: `Eierskap avsluttet ${_formatDate_(tilDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
+      if (fraDato) evs.push(_makeEvent({ ts: fraDato, type: 'Eierskap start', title: personId ? `Ny eier (${personId})` : 'Ny eier', desc: `Eierskap registrert fra ${_fmtDate_(fraDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
+      if (tilDato) evs.push(_makeEvent({ ts: tilDato, type: 'Eierskap slutt', title: personId ? `Eier sluttet (${personId})` : 'Eier sluttet', desc: `Eierskap avsluttet ${_fmtDate_(tilDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
       break;
-    case EVENT_TYPES.LEIE:
-      const leieFra = col.fra ? _parseDate_(row[col.fra - 1]) : null;
-      const leieTil = col.til ? _parseDate_(row[col.til - 1]) : null;
+    }
+    case EVENT_TYPES.LEIE: {
+      const leieFra = col.fra ? _normalizeDate_(row[col.fra - 1]) : null;
+      const leieTil = col.til ? _normalizeDate_(row[col.til - 1]) : null;
       const leietaker = col.personId ? String(row[col.personId - 1] || '').trim() : '';
       const kontrakt = col.kontrakt ? String(row[col.kontrakt - 1] || '') : '';
-      if (leieFra) evs.push(_makeEvent({ ts: leieFra, type: 'Leie start', title: leietaker ? `Leietaker (${leietaker})` : 'Leietaker', desc: `Leieforhold fra ${_formatDate_(leieFra, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
-      if (leieTil) evs.push(_makeEvent({ ts: leieTil, type: 'Leie slutt', title: leietaker ? `Leietaker sluttet (${leietaker})` : 'Leie avsluttet', desc: `Leieforhold avsluttet ${_formatDate_(leieTil, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
+      if (leieFra) evs.push(_makeEvent({ ts: leieFra, type: 'Leie start', title: leietaker ? `Leietaker (${leietaker})` : 'Leietaker', desc: `Leieforhold fra ${_fmtDate_(leieFra, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
+      if (leieTil) evs.push(_makeEvent({ ts: leieTil, type: 'Leie slutt', title: leietaker ? `Leietaker sluttet (${leietaker})` : 'Leie avsluttet', desc: `Leieforhold avsluttet ${_fmtDate_(leieTil, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
       break;
-    case EVENT_TYPES.OPPGAVE:
-      const opprettet = col.opprettet ? _parseDate_(row[col.opprettet - 1]) : null;
-      const frist = col.frist ? _parseDate_(row[col.frist - 1]) : null;
+    }
+    case EVENT_TYPES.OPPGAVE: {
+      const opprettet = col.opprettet ? _normalizeDate_(row[col.opprettet - 1]) : null;
+      const frist = col.frist ? _normalizeDate_(row[col.frist - 1]) : null;
       const kategori = col.kategori ? String(row[col.kategori - 1] || '') : '';
       const tittel = col.tittel ? String(row[col.tittel - 1] || '(uten tittel)') : '(uten tittel)';
       const status = col.status ? String(row[col.status - 1] || '') : '';
@@ -211,20 +204,22 @@ function _createEventsFromRow_(row, col, cfg, config) {
       if (when) {
         const descParts = [];
         if (kategori && kategori.toLowerCase() !== 'hms') descParts.push(`Kategori ${kategori}`);
-        if (frist) descParts.push(`Frist ${_formatDate_(frist, tz)}`);
+        if (frist) descParts.push(`Frist ${_fmtDate_(frist, tz)}`);
         if (ansvarlig) descParts.push(`Ansv. ${ansvarlig}`);
         if (status) descParts.push(status);
         const type = kategori.toLowerCase() === 'hms' ? 'HMS' : 'Oppgave';
         evs.push(_makeEvent({ ts: when, type, title: tittel, desc: descParts.join(' • '), source: EVENT_TYPES.OPPGAVE }));
       }
       break;
-    case EVENT_TYPES.INNSPILL:
-      const dato = col.opprettet ? _parseDate_(row[col.opprettet - 1]) : null;
+    }
+    case EVENT_TYPES.INNSPILL: {
+      const dato = col.opprettet ? _normalizeDate_(row[col.opprettet - 1]) : null;
       const innspillTittel = col.tittel ? String(row[col.tittel - 1] || '(uten tittel)') : '(uten tittel)';
       const innspillStatus = col.status ? String(row[col.status - 1] || '') : '';
       const innspillLink = col.link ? String(row[col.link - 1] || '') : '';
       evs.push(_makeEvent({ ts: dato, type: EVENT_TYPES.INNSPILL, title: innspillTittel, desc: innspillStatus, source: 'Support', link: innspillLink }));
       break;
+    }
   }
   return evs;
 }
@@ -236,10 +231,9 @@ function _createEventsFromRow_(row, col, cfg, config) {
 function _getCachedSheetData_(sheetName) {
   const cacheKey = `sheet_${sheetName}`;
   const now = Date.now();
-  // In-memory
   const cached = cache.get(cacheKey);
   if (cached && now - cached.timestamp < CACHE_DURATION) return cached.data;
-  // CacheService
+
   const scriptCache = CacheService.getScriptCache();
   const cachedStr = scriptCache.get(cacheKey);
   if (cachedStr) {
@@ -247,7 +241,7 @@ function _getCachedSheetData_(sheetName) {
     cache.set(cacheKey, { data, timestamp: now });
     return data;
   }
-  // Fallback lesing
+
   const data = _readSheetSafe_(sheetName);
   if (data) {
     scriptCache.put(cacheKey, JSON.stringify(data), CACHE_DURATION / 1000);
@@ -275,35 +269,10 @@ function _getColumnIndices_(header, columnDefs) {
   const headerLower = header.map(h => String(h || '').trim().toLowerCase());
   const indices = {};
   for (const [key, aliases] of Object.entries(columnDefs)) {
-    let index = 0;
-    for (const alias of aliases) {
-      const pos = headerLower.indexOf(String(alias || '').trim().toLowerCase());
-      if (pos >= 0) { index = pos + 1; break; }
-    }
-    indices[key] = index;
+    const pos = aliases.findIndex(alias => headerLower.includes(String(alias || '').trim().toLowerCase()));
+    indices[key] = (pos !== -1) ? headerLower.indexOf(aliases[pos]) + 1 : 0;
   }
   return indices;
-}
-
-function _parseDate_(value) {
-  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
-  const str = String(value || '').trim();
-  if (!str) return null;
-  const ddMmYyyy = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
-  if (ddMmYyyy) return new Date(Number(ddMmYyyy[3]), Number(ddMmYyyy[2]) - 1, Number(ddMmYyyy[1]));
-  const yyyyMmDd = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (yyyyMmDd) return new Date(Number(yyyyMmDd[1]), Number(yyyyMmDd[2]) - 1, Number(yyyyMmDd[3]));
-  const parsed = new Date(str);
-  return isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function _formatDate_(date, tz) {
-  try { return Utilities.formatDate(date, tz || 'Europe/Oslo', 'dd.MM.yyyy'); }
-  catch { return date instanceof Date ? date.toDateString() : String(date || ''); }
-}
-
-function _getTimezone_() {
-  return (typeof _tz_ === 'function') ? _tz_() : (Session.getScriptTimeZone() || 'Europe/Oslo');
 }
 
 function _validateSectionNumber_(seksjonsnr) {
@@ -314,18 +283,18 @@ function _validateSectionNumber_(seksjonsnr) {
 
 function _parseHistoryOptions_(options) {
   return {
-    startDate: options.startDate ? _parseDate_(options.startDate) : null,
-    endDate: options.endDate ? _parseDate_(options.endDate) : null,
+    startDate: options.startDate ? _normalizeDate_(options.startDate) : null,
+    endDate: options.endDate ? _normalizeDate_(options.endDate) : null,
     eventTypes: Array.isArray(options.eventTypes) ? options.eventTypes : null,
     includeAttachments: options.includeAttachments !== false,
     maxResults: Math.max(0, Number(options.maxResults) || MAX_RESULTS_DEFAULT)
   };
 }
 
-function _isEventInDateRange_(event, config) {
+const _isEventInDateRange_ = (event, config) => {
   if (!event.ts) return true;
   const eventDate = new Date(event.ts);
   if (config.startDate && eventDate < config.startDate) return false;
   if (config.endDate && eventDate > config.endDate) return false;
   return true;
-}
+};

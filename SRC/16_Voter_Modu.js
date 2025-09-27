@@ -53,16 +53,10 @@
       sh.getRange(1,1,1,wantHeader.length).setValues([wantHeader]);
     }
   }
-  function _headerMap_(sh){
-    const hdr = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-    const map = {};
-    for (let i=0;i<hdr.length;i++){
-      const key = String(hdr[i]||'').trim().toLowerCase();
-      if (!key) continue;
-      map[key] = i+1; // 1-basert
-    }
-    return map;
-  }
+  /*
+   * MERK: _headerMap_() er fjernet fra denne filen for å unngå konflikter.
+   * Den globale versjonen fra 000_Utils.js brukes i stedet.
+   */
   function _getRows_(sh){
     const last = sh.getLastRow();
     if (last < 2) return [];

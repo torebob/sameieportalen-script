@@ -1,19 +1,17 @@
 /* ====================== App Core & Constants ======================
- * FILE: 00_App_Core.gs | VERSION: 1.9.1 | UPDATED: 2025-09-14
+ * FILE: 00_App_Core.gs | VERSION: 2.0.0 | UPDATED: 2025-09-26
  * FORMÅL: App-oppstart, konstanter, meny, generiske UI-åpnere.
  *
- * NYTT v1.9.1:
- *  - Sikkert, generisk _openHtmlFromMap_() med param-støtte + robust feillogging
- *  - Full pakke med manglende "åpne"-funksjoner (defineres kun hvis de ikke finnes fra før)
- *  - validateUIFiles() + checkUIFilesExist() for å finne manglende HTML-filer under utvikling
- *  - Forbedret onOpen(): logger manglende callback-funksjoner i meny, kobler inn TESTING-submeny hvis tilgjengelig
- *  - openDashboardAuto(): permission-sjekk (VIEW_USER_DASHBOARD) og adaptive visning (modal for brukere / sidepanel for admin)
+ * ENDRINGER v2.0.0:
+ *  - Modernisert til `let`/`const` og arrow functions.
+ *  - Forbedret `validateUIFiles` med `for...of` og optional chaining.
+ *  - Tydeliggjort kommentarer og logikk i UI-åpner og menybygger.
  * ================================================================== */
 
 const APP = Object.freeze({
   NAME: 'Sameieportalen',
-  VERSION: '1.9.1',
-  BUILD: '2025-09-14'
+  VERSION: '2.0.0',
+  BUILD: '2025-09-26'
 });
 
 const SHEETS = Object.freeze({
@@ -28,7 +26,6 @@ const SHEETS = Object.freeze({
   VEDLEGG: 'Vedlegg',
   REPORT: 'Rapport',
   HMS: 'HMS_Egenkontroll',
-  // Møtemodul
   MOTER: 'Møter',
   MOTE_SAKER: 'MøteSaker',
   MOTE_KOMMENTARER: 'MøteSakKommentarer'
@@ -42,93 +39,111 @@ const PROP_KEYS = Object.freeze({
 
 /* ---------- Felles mapping til alle UI-filer (nummerert) ---------- */
 globalThis.UI_FILES = Object.freeze({
-  // Dashbord (stor modal for brukere)
-  DASHBOARD_HTML:            { file:'37_Dashboard.html',                title:'Sameieportal — Dashbord',   w:1280, h:840 },
-
-  // Styremodul / møter
-  MOTEOVERSIKT:              { file:'30_Moteoversikt.html',             title:'Møteoversikt & Protokoller', w:1100, h:760 },
-  MOTE_SAK_EDITOR:           { file:'31_MoteSakEditor.html',            title:'Møtesaker – Editor',         w:1100, h:760 },
-
-  // Skjema/visninger
-  EIERSKIFTE:                { file:'34_EierskifteSkjema.html',         title:'Eierskifteskjema',           w:980,  h:760 },
-  PROTOKOLL_GODKJENNING:     { file:'35_ProtokollGodkjenningSkjema.html', title:'Protokoll-godkjenning',   w:980,  h:760 },
-  SEKSJON_HISTORIKK:         { file:'32_SeksjonHistorikk.html',         title:'Seksjonshistorikk',          w:1100, h:760 },
-  VAKTMESTER:                { file:'33_VaktmesterVisning.html',        title:'Vaktmester',                 w:1100, h:800 }
+  DASHBOARD_HTML:        { file: '37_Dashboard.html',                title: 'Sameieportal — Dashbord',   w: 1280, h: 840 },
+  MOTEOVERSIKT:          { file: '30_Moteoversikt.html',             title: 'Møteoversikt & Protokoller', w: 1100, h: 760 },
+  MOTE_SAK_EDITOR:       { file: '31_MoteSakEditor.html',            title: 'Møtesaker – Editor',         w: 1100, h: 760 },
+  EIERSKIFTE:            { file: '34_EierskifteSkjema.html',         title: 'Eierskifteskjema',           w: 980,  h: 760 },
+  PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html', title: 'Protokoll-godkjenning',   w: 980,  h: 760 },
+  SEKSJON_HISTORIKK:     { file: '32_SeksjonHistorikk.html',         title: 'Seksjonshistorikk',          w: 1100, h: 760 },
+  VAKTMESTER:            { file: '33_VaktmesterVisning.html',        title: 'Vaktmester',                 w: 1100, h: 800 }
 });
 
-/* ---------- UI helpers ---------- */
-function _ui(){ try { return SpreadsheetApp.getUi(); } catch(_) { return null; } }
-function _safeLog_(topic, msg, extra){
-  try { if (typeof _logEvent === 'function') _logEvent(topic, msg, extra || {}); } catch(_) {}
-}
-function _alert_(msg, title){
-  try {
-    const ui = _ui();
-    if (ui) ui.alert(title || APP.NAME, String(msg), ui.ButtonSet.OK);
-    else Logger.log(`ALERT [${title||APP.NAME}]: ${msg}`);
-  } catch(e) {
-    Logger.log(`ALERT failed: ${e && e.message} | ${msg}`);
-  }
-}
-function _toast_(msg){
-  try { SpreadsheetApp.getActive().toast(String(msg)); }
-  catch(e){ Logger.log('Toast failed: ' + (e && e.message) + ' | Message: ' + msg); }
-}
-
-/* ---------- Generisk, sikker UI-åpner ---------- */
-function _openHtmlFromMap_(key, target = 'modal', params){
-  try {
-    const ui = _ui();
-    if (!ui) { Logger.log('UI not available for key: ' + key); return; }
-
-    const cfg = (globalThis.UI_FILES && globalThis.UI_FILES[key]) || null;
-    if (!cfg) throw new Error('Ukjent UI key: ' + key);
-
-    // Templatenavn uten .html
-    const base = String(cfg.file).replace(/\.html?$/i,'');
-    const tpl = HtmlService.createTemplateFromFile(base);
-
-    // Injektér standard meta + custom params til HTML
-    tpl.FILE    = cfg.file;
-    tpl.VERSION = APP.VERSION;
-    tpl.UPDATED = APP.BUILD;
-    tpl.PARAMS  = params || {};
-
-    const out = tpl.evaluate().setTitle(cfg.title || APP.NAME)
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-
-    if (target === 'sidebar') {
-      ui.showSidebar(out);
-    } else {
-      out.setWidth(cfg.w || 1000).setHeight(cfg.h || 720);
-      ui.showModalDialog(out, cfg.title || APP.NAME);
-    }
-    _safeLog_('UI_OPEN', `Åpnet ${key}`, { file: cfg.file, target });
-    return out;
-  } catch(e) {
-    Logger.log('Failed to open UI ('+key+'): ' + (e && e.message));
-    _safeLog_('UI_OPEN_FAIL', 'Feil ved åpning av '+key, { error: String(e && e.message || e) });
-    _alert_('Kunne ikke åpne ' + key + ': ' + (e && e.message ? e.message : e), 'Feil');
-  }
-}
-
 /*
- * MERK: Dashboard-åpnere (openDashboardModal, openDashboardSidebar, openDashboardAuto)
- * er fjernet fra denne filen. De er nå definert og håndtert sentralt i
- * 05_Dashboard_UI.js, som eksponerer dem til det globale skopet.
+ * MERK: UI-hjelpere (_ui, _safeLog_, _alert_, _toast_) er flyttet til
+ * den sentrale verktøyfilen 00b_Utils.js for å unngå duplisering.
  */
 
-/* ---------- Meny / oppstart ---------- */
-function onOpen(e){
-  const ui = _ui();
-  if (!ui){ Logger.log('onOpen: UI ikke tilgjengelig (headless).'); return; }
+/* ---------- Generisk, sikker UI-åpner ---------- */
+function _openHtmlFromMap_(key, target = 'modal', params = {}) {
+  try {
+    const ui = _ui();
+    if (!ui) {
+      Logger.log(`UI not available for key: ${key}`);
+      return;
+    }
 
-  const G = globalThis;
+    // Hent UI-konfigurasjon fra den globale mappingen
+    const cfg = globalThis.UI_FILES?.[key];
+    if (!cfg) {
+      throw new Error(`Ukjent UI key: ${key}`);
+    }
+
+    // Opprett mal fra fil, og fjern .html-endingen
+    const templateName = String(cfg.file).replace(/\.html?$/i, '');
+    const template = HtmlService.createTemplateFromFile(templateName);
+
+    // Injisér standard metadata og eventuelle egendefinerte parametere
+    template.FILE = cfg.file;
+    template.VERSION = APP.VERSION;
+    template.UPDATED = APP.BUILD;
+    template.PARAMS = params;
+
+    // Evaluer malen og konfigurer vinduet
+    const output = template.evaluate()
+      .setTitle(cfg.title || APP.NAME)
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+
+    // Vis som enten sidebar eller modal dialog
+    if (target === 'sidebar') {
+      ui.showSidebar(output);
+    } else {
+      output.setWidth(cfg.w || 1000).setHeight(cfg.h || 720);
+      ui.showModalDialog(output, cfg.title || APP.NAME);
+    }
+
+    _safeLog_('UI_OPEN', `Åpnet ${key}`, { file: cfg.file, target });
+    return output;
+  } catch (e) {
+    const errorMessage = e?.message || String(e);
+    Logger.log(`Failed to open UI (${key}): ${errorMessage}`);
+    _safeLog_('UI_OPEN_FAIL', `Feil ved åpning av ${key}`, { error: errorMessage });
+    _alert_(`Kunne ikke åpne ${key}: ${errorMessage}`, 'Feil');
+  }
+}
+
+/* ---------- Dashboard-åpnere ---------- */
+function openDashboardModal() {
+  return _openHtmlFromMap_('DASHBOARD_HTML', 'modal');
+}
+
+function openDashboardSidebar() {
+  // Delegrer til den avanserte implementasjonen i 05_Dashboard_UI.js hvis den finnes
+  if (typeof globalThis.openDashboard === 'function') {
+    return globalThis.openDashboard();
+  }
+  // Fallback for å sikre at noe vises hvis 05-filen mangler
+  return openDashboardModal();
+}
+
+/**
+ * Adaptiv dashbord-åpner som viser modal for vanlige brukere
+ * og et sidepanel for administratorer.
+ */
+function openDashboardAuto() {
+  if (typeof hasPermission === 'function' && !hasPermission('VIEW_USER_DASHBOARD')) {
+    return _alert_('Du har ikke tilgang til Dashbord.', 'Tilgang nektet');
+  }
+  const isAdmin = (typeof hasPermission === 'function' && hasPermission('VIEW_ADMIN_MENU'));
+  return isAdmin ? openDashboardSidebar() : openDashboardModal();
+}
+
+/* ---------- Meny / oppstart ---------- */
+function onOpen(e) {
+  const ui = _ui();
+  if (!ui) {
+    Logger.log('onOpen: UI ikke tilgjengelig (headless).');
+    return;
+  }
+
   const menu = ui.createMenu(APP.NAME);
 
+  // Hjelpefunksjon for å legge til menyelementer bare hvis funksjonen eksisterer globalt.
   const addIf = (label, fn) => {
-    if (typeof G[fn] === 'function') menu.addItem(label, fn);
-    else Logger.log('Mangler meny-funksjon: ' + fn + ' (skipper "' + label + '")');
+    if (typeof globalThis[fn] === 'function') {
+      menu.addItem(label, fn);
+    } else {
+      Logger.log(`Mangler meny-funksjon: ${fn} (skipper "${label}")`);
+    }
   };
 
   // Hovedmeny (alle)
@@ -170,23 +185,20 @@ function onOpen(e){
     admin.addSeparator();
     addIf('Synkroniser årshjul til kalender', 'syncYearWheelToCalendar');
     admin.addSeparator();
-    // Eksplisitt adminpanel i sidepanel (05_Dashboard_UI.gs)
     addIf('Åpne Adminpanel (sidepanel)', 'openDashboardSidebar');
     admin.addSeparator();
     addIf('Skru PÅ Utvikler-verktøy', 'adminEnableDevTools');
     addIf('Skru AV Utvikler-verktøy', 'adminDisableDevTools');
-    // Utviklerhjelp: sjekk at HTML-filer finnes
     admin.addSeparator();
     admin.addItem('Valider UI-filer', 'checkUIFilesExist');
 
-    // Analyse-verktøy (fra 95_Discovery_Report.js)
+    // Analyse-verktøy
     if (typeof generateDiscoveryReportInDoc === 'function') {
       const analyse = ui.createMenu('Analyse');
       analyse.addItem('Generer Discovery-rapport (Doc)', 'generateDiscoveryReportInDoc');
       analyse.addItem('Åpne Discovery-dokument', 'openDiscoveryDocQuick');
       analyse.addItem('Foreslå nye krav → «Krav»-arket', 'discoverySuggestToKravQuick');
 
-      // Fra CoreAnalysisPlus – Requirement Generator.js
       if (typeof rg_menu_openWizard === 'function') {
         analyse.addSeparator();
         analyse.addItem('Krav Generator (wizard)', 'rg_menu_openWizard');
@@ -194,7 +206,6 @@ function onOpen(e){
         analyse.addItem('Åpne Requirements-arket', 'rg_menu_openReqSheet');
       }
 
-      // Fra RSP – Requirements Synchronization Platform.js
       if (typeof rsp_menu_firstRunWizard === 'function') {
         analyse.addSeparator();
         analyse.addItem('Krav Sync (wizard)', 'rsp_menu_firstRunWizard');
@@ -202,12 +213,10 @@ function onOpen(e){
         analyse.addItem('Push Krav (Sheet → Doc)', 'rsp_menu_pushRun');
         analyse.addItem('Åpne Krav-dokument', 'rsp_menu_openDoc');
       }
-
       admin.addSeparator();
       admin.addSubMenu(analyse);
     }
 
-    // CoreAnalysisPlus-verktøy (fra CoreAnalysisPlus – Analysis Engine.js)
     if (typeof runCoreAnalysis_Smoke === 'function') {
       const coreAnalyse = ui.createMenu('Core Analysis');
       coreAnalyse.addItem('Run Analysis (log)', 'runCoreAnalysis_Smoke');
@@ -215,15 +224,13 @@ function onOpen(e){
       admin.addSeparator();
       admin.addSubMenu(coreAnalyse);
     }
-
     menu.addSubMenu(admin);
   }
 
-  // TESTING-submeny hvis testmodul finnes (00_Testing_AddOn.gs)
+  // TESTING-submeny
   if (typeof buildTestingSubmenu_ === 'function') {
     buildTestingSubmenu_(menu);
   } else {
-    // Enkel fallback for utvikling
     const test = ui.createMenu('TESTING');
     test.addItem('Valider UI-filer', 'checkUIFilesExist');
     test.addItem('Røyk-test menyfunksjoner', 'runSmokeCheck_');
@@ -232,70 +239,79 @@ function onOpen(e){
 
   menu.addToUi();
 }
-function onInstall(e){ onOpen(e); }
+
+function onInstall(e) {
+  onOpen(e);
+}
 
 /* ---------- Admin/Dev togglers ---------- */
-function adminEnableDevTools(){
-  PROPS.setProperty(PROP_KEYS.DEV_TOOLS,'true');
+function adminEnableDevTools() {
+  PROPS.setProperty(PROP_KEYS.DEV_TOOLS, 'true');
   _toast_('Utvikler-verktøy er PÅ. Last regnearket på nytt for å oppdatere menyen.');
 }
-function adminDisableDevTools(){
-  PROPS.setProperty(PROP_KEYS.DEV_TOOLS,'false');
+
+function adminDisableDevTools() {
+  PROPS.setProperty(PROP_KEYS.DEV_TOOLS, 'false');
   _toast_('Utvikler-verktøy er AV. Last regnearket på nytt for å oppdatere menyen.');
 }
 
 /* ---------- Manglende ÅPNERE (defineres kun hvis de ikke finnes) ---------- */
 if (typeof globalThis.openMeetingsUI !== 'function') {
-  globalThis.openMeetingsUI = function(){ _openHtmlFromMap_('MOTEOVERSIKT','modal'); };
+  globalThis.openMeetingsUI = () => _openHtmlFromMap_('MOTEOVERSIKT', 'modal');
 }
 if (typeof globalThis.openMoteSakEditor !== 'function') {
-  globalThis.openMoteSakEditor = function(){ _openHtmlFromMap_('MOTE_SAK_EDITOR','modal'); };
+  globalThis.openMoteSakEditor = () => _openHtmlFromMap_('MOTE_SAK_EDITOR', 'modal');
 }
 if (typeof globalThis.openOwnershipForm !== 'function') {
-  globalThis.openOwnershipForm = function(){ _openHtmlFromMap_('EIERSKIFTE','modal'); };
+  globalThis.openOwnershipForm = () => _openHtmlFromMap_('EIERSKIFTE', 'modal');
 }
 if (typeof globalThis.openSectionHistory !== 'function') {
-  globalThis.openSectionHistory = function(){ _openHtmlFromMap_('SEKSJON_HISTORIKK','modal'); };
+  globalThis.openSectionHistory = () => _openHtmlFromMap_('SEKSJON_HISTORIKK', 'modal');
 }
 if (typeof globalThis.openVaktmesterUI !== 'function') {
-  globalThis.openVaktmesterUI = function(){ _openHtmlFromMap_('VAKTMESTER','modal'); };
+  globalThis.openVaktmesterUI = () => _openHtmlFromMap_('VAKTMESTER', 'modal');
 }
 
 /* ---------- Utvikler-verktøy: valider at HTML-filer finnes ---------- */
-function validateUIFiles(){
+function validateUIFiles() {
   const missing = [];
-  const entries = Object.entries(UI_FILES || {});
-  for (let i=0;i<entries.length;i++){
-    const [key, cfg] = entries[i];
+  const entries = Object.entries(globalThis.UI_FILES || {});
+  for (const [key, cfg] of entries) {
     try {
-      const base = String(cfg.file).replace(/\.html?$/i,'');
-      HtmlService.createTemplateFromFile(base); // kaster hvis ikke finnes
-    } catch(e) {
-      missing.push({ key, file: cfg && cfg.file, error: String(e && e.message || e) });
+      const base = String(cfg.file).replace(/\.html?$/i, '');
+      HtmlService.createTemplateFromFile(base); // throws if not found
+    } catch (e) {
+      missing.push({ key, file: cfg?.file, error: String(e?.message || e) });
     }
   }
   return missing;
 }
-function checkUIFilesExist(){
-  const miss = validateUIFiles();
-  if (!miss.length) { _toast_('Alle UI-filer OK.'); return true; }
-  Logger.log('Mangler UI-filer: ' + JSON.stringify(miss));
+
+function checkUIFilesExist() {
+  const missingFiles = validateUIFiles();
+  if (missingFiles.length === 0) {
+    _toast_('Alle UI-filer er tilgjengelige.');
+    return true;
+  }
+
+  Logger.log('Mangler UI-filer: ' + JSON.stringify(missingFiles));
   const ui = _ui();
-  const htmlRows = miss.map(m => `<tr><td>${m.key}</td><td>${m.file||'(ukjent)'}</td><td>${m.error}</td></tr>`).join('');
-  const out = HtmlService.createHtmlOutput(`
+  const htmlRows = missingFiles.map(m => `<tr><td>${m.key}</td><td>${m.file || '(ukjent)'}</td><td>${m.error}</td></tr>`).join('');
+  const output = HtmlService.createHtmlOutput(`
     <style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;text-align:left}th{background:#f6f6f6}</style>
     <h3>Mangler UI-filer</h3>
     <table><thead><tr><th>Key</th><th>Fil</th><th>Feil</th></tr></thead><tbody>${htmlRows}</tbody></table>
   `).setWidth(700).setHeight(420);
-  ui && ui.showModalDialog(out, 'Validering av UI-filer');
+
+  ui?.showModalDialog(output, 'Validering av UI-filer');
   return false;
 }
 
 /* ---------- Enkel røyk-test for menyfunksjoner ---------- */
-function runSmokeCheck_(){
-  const fns = ['openDashboardAuto','openMeetingsUI','openMoteSakEditor','openOwnershipForm','openSectionHistory','openVaktmesterUI','checkUIFilesExist'];
-  const res = fns.map(fn => ({ fn, ok: (typeof globalThis[fn] === 'function') }));
-  const allOk = res.every(r=>r.ok);
+function runSmokeCheck_() {
+  const fns = ['openDashboardAuto', 'openMeetingsUI', 'openMoteSakEditor', 'openOwnershipForm', 'openSectionHistory', 'openVaktmesterUI', 'checkUIFilesExist'];
+  const res = fns.map(fn => ({ fn, ok: typeof globalThis[fn] === 'function' }));
+  const allOk = res.every(r => r.ok);
   Logger.log('Smoke check: ' + JSON.stringify(res));
   _toast_((allOk ? 'OK' : 'Feil i') + ' røyk-test – se Logg.');
   return res;

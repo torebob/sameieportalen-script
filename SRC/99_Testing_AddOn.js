@@ -17,7 +17,10 @@
 
 // ---------- Sikker referanse til UI ----------
 function _tui_(){ try { return SpreadsheetApp.getUi(); } catch(_) { return null; } }
-function _toast_(msg){ try{ SpreadsheetApp.getActive().toast(String(msg)); }catch(_){} }
+/*
+ * MERK: _toast_() er fjernet fra denne filen for å unngå konflikter.
+ * Den globale versjonen fra 000_Utils.js brukes i stedet.
+ */
 
 // ---------- Resultatark & hjelpefunksjoner ----------
 function ensureResultSheet_(){

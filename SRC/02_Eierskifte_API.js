@@ -1,21 +1,16 @@
 // =============================================================================
 // Eierskifte – UI & API (Profesjonell)
 // FILE: 02_Eierskifte_API.gs
-// VERSION: 2.0.1
-// UPDATED: 2025-09-15
+// VERSION: 3.0.0
+// UPDATED: 2025-09-26
 // FORMÅL: Vise og prosessere eierskifte via en robust, transaksjonell modell.
-// ENDRINGER v2.0.1:
-//  - Fjernet redeklarasjon av PROPS (idempotent global)
-//  - La til _readAllDataForOwnershipChange_()
-//  - Rettet bruk av Seksjonsnr vs Seksjon-ID i transaksjoner og e-post
-//  - Rettet dato-parsing (_normalizeDate_)
-//  - La til _getSheetHeaders_() og ryddet i _applyOwnershipChanges_()
-//  - Smårobuste forbedringer og logging
-// AVHENGIGHETER: SHEETS + getSheetData() fra 01_Setup_og_Vedlikehold.gs
+// ENDRINGER v3.0.0:
+//  - Modernisert til let/const og arrow functions.
+//  - Fjernet lokale hjelpefunksjoner, bruker nå 00b_Utils.js.
+//  - Forbedret lesbarhet og kodestruktur.
 // =============================================================================
 
 // ----------------------------- Standardisert modell --------------------------
-
 const COLUMN_MAPPINGS = Object.freeze({
   PERSONER: {
     ID: 'Person-ID', NAVN: 'Navn', EPOST: 'Epost', TELEFON: 'Telefon',
@@ -31,29 +26,18 @@ const COLUMN_MAPPINGS = Object.freeze({
 });
 
 // ----------------------------- UI (skjema) -----------------------------------
-
-/*
- * MERK: openOwnershipForm() er fjernet fra denne filen for å unngå konflikter.
- * Funksjonen kalles nå fra 00_App_Core.js, som bruker den sentrale UI_FILES-mappingen.
- */
-
 function getSeksjonerForForm() {
   const data = getSheetData(SHEETS.SEKSJONER);
   return data.map(s => ({
-    id: s[COLUMN_MAPPINGS.SEKSJONER.NUMMER],              // vis nummer i UI
-    beskrivelse: s[COLUMN_MAPPINGS.SEKSJONER.BESKRIVELSE] // valgfritt felt
+    id: s[COLUMN_MAPPINGS.SEKSJONER.NUMMER],
+    beskrivelse: s[COLUMN_MAPPINGS.SEKSJONER.BESKRIVELSE]
   }));
 }
 
 // ----------------------------- API (lagring) ---------------------------------
-
-/**
- * Prosesserer eierskifte fra skjema.
- * payload: { seksjonsnr, navn, epost, fraDato, vedlegg_url?, kommentar? }
- */
 function processOwnershipForm(payload) {
-  const tx = Utilities.getUuid().slice(0,8);
-  _logEvent('Transaksjon', `Start eierskifte [${tx}] for seksjon ${payload ? payload.seksjonsnr : 'UKJENT'}`);
+  const tx = Utilities.getUuid().slice(0, 8);
+  _safeLog_('Transaksjon', `Start eierskifte [${tx}] for seksjon ${payload?.seksjonsnr || 'UKJENT'}`);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -61,15 +45,18 @@ function processOwnershipForm(payload) {
   try {
     const ss = SpreadsheetApp.getActive();
     const allData = _readAllDataForOwnershipChange_(ss);
-
     const sanitized = _sanitizeAndValidatePayload_(payload, allData);
     _validateOwnershipConsistency_(sanitized, allData);
     const fraDato = _normalizeDate_(sanitized.fraDato);
 
+    if (!fraDato) {
+      throw new Error('VALIDERING: Ugyldig overtakelsesdato.');
+    }
+
     const operations = _prepareOwnershipChanges_(sanitized, fraDato, allData);
     _applyOwnershipChanges_(ss, operations, tx);
 
-    _logEvent('Transaksjon', `Fullført eierskifte [${tx}]`);
+    _safeLog_('Transaksjon', `Fullført eierskifte [${tx}]`);
     _sendConfirmationEmails_(sanitized, fraDato, allData);
 
     return { ok: true, message: `Eierskifte registrert for seksjon ${sanitized.seksjonsnr}` };
@@ -77,7 +64,7 @@ function processOwnershipForm(payload) {
   } catch (error) {
     const isValidationError = /^VALIDERING:/.test(error.message);
     const userMessage = isValidationError ? error.message : 'En uventet teknisk feil oppstod. Kontakt administrator.';
-    _logEvent('Transaksjon Feil', `Eierskifte feilet: ${error.message}`);
+    _safeLog_('Transaksjon Feil', `Eierskifte feilet: ${error.message}`);
     throw new Error(userMessage);
   } finally {
     lock.releaseLock();
@@ -85,7 +72,6 @@ function processOwnershipForm(payload) {
 }
 
 // ----------------------------- Validering ------------------------------------
-
 function _sanitizeAndValidatePayload_(payload, data) {
   if (!payload || typeof payload !== 'object') throw new Error('VALIDERING: Tomt eller ugyldig dataformat.');
   const seksjonsnr = String(payload.seksjonsnr || '').trim();
@@ -109,10 +95,11 @@ function _validateOwnershipConsistency_(payload, data) {
 
   const seksjon = data.seksjoner.find(s => String(s[M_S.NUMMER] || '').trim() === payload.seksjonsnr);
   if (!seksjon) throw new Error(`Teknisk feil: Fant ikke Seksjon-ID for nummer ${payload.seksjonsnr}`);
-  const seksjonId = seksjon[M_S.ID];
 
+  const seksjonId = seksjon[M_S.ID];
   const existingOwnerships = data.eierskap.filter(row => row[M_E.SEKSJON_ID] === seksjonId);
   const activeOwnerships = existingOwnerships.filter(row => !row[M_E.TIL_DATO]);
+
   if (activeOwnerships.length > 1) {
     throw new Error(`VALIDERING: Flere aktive eierskap funnet for seksjon ${payload.seksjonsnr}. Rydd i data før registrering.`);
   }
@@ -128,163 +115,147 @@ function _validateOwnershipConsistency_(payload, data) {
 }
 
 // ------------------------ Transaksjonshåndtering -----------------------------
-
 function _prepareOwnershipChanges_(payload, fraDato, data) {
   const ops = [];
-  const M_P = COLUMN_MAPPINGS.PERSONER;
-  const M_E = COLUMN_MAPPINGS.EIERSKAP;
-  const M_S = COLUMN_MAPPINGS.SEKSJONER;
+  const { PERSONER: M_P, EIERSKAP: M_E, SEKSJONER: M_S } = COLUMN_MAPPINGS;
 
-  // Finn Seksjon-ID fra seksjonsnummer
-  var seksjon = data.seksjoner.find(function(s){ return String(s[M_S.NUMMER] || '').trim() === payload.seksjonsnr; });
+  const seksjon = data.seksjoner.find(s => String(s[M_S.NUMMER] || '').trim() === payload.seksjonsnr);
   if (!seksjon) throw new Error(`Teknisk feil: Fant ikke Seksjon-ID for nummer ${payload.seksjonsnr}`);
-  var seksjonId = seksjon[M_S.ID];
+  const seksjonId = seksjon[M_S.ID];
 
-  // Finn/opprett person
-  var person = data.personer.find(function(p){ return String(p[M_P.EPOST] || '').toLowerCase() === String(payload.epost).toLowerCase(); });
-  var personId = person ? person[M_P.ID] : null;
+  let person = data.personer.find(p => String(p[M_P.EPOST] || '').toLowerCase() === String(payload.epost).toLowerCase());
+  let personId = person ? person[M_P.ID] : null;
+
   if (!personId) {
-    personId = 'PER-' + Utilities.getUuid().slice(0,4);
-    var newPersonData = {};
-    newPersonData[M_P.ID] = personId;
-    newPersonData[M_P.NAVN] = payload.navn;
-    newPersonData[M_P.EPOST] = payload.epost;
-    newPersonData[M_P.ROLLE] = 'Eier';
-    newPersonData[M_P.AKTIV] = 'Aktiv';
-    newPersonData[M_P.OPPRETTET_AV] = _currentEmail_();
-    newPersonData[M_P.OPPRETTET_DATO] = new Date();
+    personId = `PER-${Utilities.getUuid().slice(0, 4)}`;
+    const newPersonData = {
+      [M_P.ID]: personId,
+      [M_P.NAVN]: payload.navn,
+      [M_P.EPOST]: payload.epost,
+      [M_P.ROLLE]: 'Eier',
+      [M_P.AKTIV]: 'Aktiv',
+      [M_P.OPPRETTET_AV]: _currentEmail_(),
+      [M_P.OPPRETTET_DATO]: new Date(),
+    };
     ops.push({ type: 'INSERT', sheetName: SHEETS.PERSONER, data: newPersonData });
   }
 
-  // Lukk aktivt eierskap (om finnes) for denne Seksjon-ID
-  var aktivtEierskap = data.eierskap.find(function(e){ return e[M_E.SEKSJON_ID] === seksjonId && !e[M_E.TIL_DATO]; });
+  const aktivtEierskap = data.eierskap.find(e => e[M_E.SEKSJON_ID] === seksjonId && !e[M_E.TIL_DATO]);
   if (aktivtEierskap) {
-    var tilDato = new Date(fraDato); tilDato.setDate(tilDato.getDate() - 1);
-    var updates = {}; updates[M_E.TIL_DATO] = tilDato;
-    ops.push({
-      type: 'UPDATE',
-      sheetName: SHEETS.EIERSKAP,
-      rowId: aktivtEierskap[M_E.ID],
-      updates: updates
-    });
+    const tilDato = new Date(fraDato);
+    tilDato.setDate(tilDato.getDate() - 1);
+    const updates = { [M_E.TIL_DATO]: tilDato };
+    ops.push({ type: 'UPDATE', sheetName: SHEETS.EIERSKAP, rowId: aktivtEierskap[M_E.ID], updates });
   }
 
-  // Opprett nytt eierskap (bruk Seksjon-ID, ikke seksjonsnr)
-  var newOwnership = {};
-  newOwnership[M_E.ID] = 'EIE-' + Utilities.getUuid().slice(0,4);
-  newOwnership[M_E.SEKSJON_ID] = seksjonId;
-  newOwnership[M_E.PERSON_ID] = personId;
-  newOwnership[M_E.FRA_DATO] = fraDato;
-  newOwnership[M_E.STATUS] = 'Aktiv';
+  const newOwnership = {
+    [M_E.ID]: `EIE-${Utilities.getUuid().slice(0, 4)}`,
+    [M_E.SEKSJON_ID]: seksjonId,
+    [M_E.PERSON_ID]: personId,
+    [M_E.FRA_DATO]: fraDato,
+    [M_E.STATUS]: 'Aktiv',
+  };
   ops.push({ type: 'INSERT', sheetName: SHEETS.EIERSKAP, data: newOwnership });
 
   return ops;
 }
 
 function _applyOwnershipChanges_(ss, operations, tx) {
-  operations.forEach(function(op){
-    _logEvent('Transaksjon', `[${tx}] ${op.type} → ${op.sheetName}`);
-    var sheet = ss.getSheetByName(op.sheetName);
-    if (!sheet) throw new Error('Mangler ark: ' + op.sheetName);
+  operations.forEach(op => {
+    _safeLog_('Transaksjon', `[${tx}] ${op.type} → ${op.sheetName}`);
+    const sheet = ss.getSheetByName(op.sheetName);
+    if (!sheet) throw new Error(`Mangler ark: ${op.sheetName}`);
 
-    var headers = _getSheetHeaders_(op.sheetName);
-    if (!headers || !headers.length) throw new Error('Fant ikke headers for ' + op.sheetName);
+    const headers = _getSheetHeaders_(op.sheetName);
+    if (!headers || !headers.length) throw new Error(`Fant ikke headers for ${op.sheetName}`);
 
     if (op.type === 'INSERT') {
-      var row = headers.map(function(h){ return op.data.hasOwnProperty(h) ? op.data[h] : ''; });
+      const row = headers.map(h => op.data[h] ?? '');
       sheet.appendRow(row);
     } else if (op.type === 'UPDATE') {
-      var data = getSheetData(op.sheetName);        // array av objekter
-      var idColumn = headers[0];                    // antar ID i kolonne 1 (i tråd med skjemaet)
-      var idx = data.findIndex(function(r){ return String(r[idColumn]) === String(op.rowId); });
+      const data = getSheetData(op.sheetName);
+      const idColumn = headers[0];
+      const idx = data.findIndex(r => String(r[idColumn]) === String(op.rowId));
       if (idx >= 0) {
-        Object.keys(op.updates || {}).forEach(function(h){
-          var col = headers.indexOf(h);
-          if (col >= 0) sheet.getRange(idx + 2, col + 1).setValue(op.updates[h]);
+        Object.entries(op.updates || {}).forEach(([h, val]) => {
+          const col = headers.indexOf(h);
+          if (col >= 0) sheet.getRange(idx + 2, col + 1).setValue(val);
         });
       } else {
-        _logEvent('Transaksjon', `Advarsel: Fant ikke rad for oppdatering (ID=${op.rowId}) i ${op.sheetName}`);
+        _safeLog_('Transaksjon', `Advarsel: Fant ikke rad for oppdatering (ID=${op.rowId}) i ${op.sheetName}`);
       }
     } else {
-      _logEvent('Transaksjon', `Ukjent operasjonstype: ${op.type}`);
+      _safeLog_('Transaksjon', `Ukjent operasjonstype: ${op.type}`);
     }
   });
 }
 
 // ----------------------------- E-postbekreftelser ----------------------------
-
 function _sendConfirmationEmails_(payload, fraDato, allData) {
   try {
-    var config = _getEmailConfig_();
-    if (!config.enabled) { _logEvent('E-post', 'E-postvarsler er deaktivert.'); return; }
-
-    var M_P = COLUMN_MAPPINGS.PERSONER;
-    var M_E = COLUMN_MAPPINGS.EIERSKAP;
-    var M_S = COLUMN_MAPPINGS.SEKSJONER;
-
-    // Finn Seksjon-ID
-    var seksjon = allData.seksjoner.find(function(s){ return String(s[M_S.NUMMER] || '').trim() === payload.seksjonsnr; });
-    var seksjonId = seksjon ? seksjon[M_S.ID] : null;
-
-    var newOwner = { navn: payload.navn, epost: payload.epost };
-    var currentOwner = null;
-
-    if (seksjonId) {
-      var aktivt = allData.eierskap.find(function(e){ return e[M_E.SEKSJON_ID] === seksjonId && !e[M_E.TIL_DATO]; });
-      if (aktivt) {
-        currentOwner = allData.personer.find(function(p){ return p[M_P.ID] === aktivt[M_E.PERSON_ID]; }) || null;
-      }
-    }
-
-    var recipients = [newOwner.epost];
-    if (currentOwner && currentOwner[M_P.EPOST]) recipients.push(currentOwner[M_P.EPOST]);
-    recipients = recipients.filter(function(x){ return !!x; });
-    if (!recipients.length) {
-      _logEvent('E-post', `Ingen gyldige mottakere for seksjon ${payload.seksjonsnr}.`);
+    const config = _getEmailConfig_();
+    if (!config.enabled) {
+      _safeLog_('E-post', 'E-postvarsler er deaktivert.');
       return;
     }
 
-    var template = _buildOwnershipChangeEmailTemplate_(payload, fraDato, newOwner, currentOwner);
+    const { PERSONER: M_P, EIERSKAP: M_E, SEKSJONER: M_S } = COLUMN_MAPPINGS;
+    const seksjon = allData.seksjoner.find(s => String(s[M_S.NUMMER] || '').trim() === payload.seksjonsnr);
+    const seksjonId = seksjon?.[M_S.ID];
+    const newOwner = { navn: payload.navn, epost: payload.epost };
+    let currentOwner = null;
+
+    if (seksjonId) {
+      const aktivt = allData.eierskap.find(e => e[M_E.SEKSJON_ID] === seksjonId && !e[M_E.TIL_DATO]);
+      if (aktivt) {
+        currentOwner = allData.personer.find(p => p[M_P.ID] === aktivt[M_E.PERSON_ID]);
+      }
+    }
+
+    const recipients = [newOwner.epost, currentOwner?.[M_P.EPOST]].filter(Boolean);
+    if (recipients.length === 0) {
+      _safeLog_('E-post', `Ingen gyldige mottakere for seksjon ${payload.seksjonsnr}.`);
+      return;
+    }
+
+    const template = _buildOwnershipChangeEmailTemplate_(payload, fraDato, newOwner, currentOwner);
     _sendEmailWithRetry_(recipients, template, config);
 
   } catch (error) {
-    _logEvent('E-post Feil', `Klarte ikke sende e-post for seksjon ${payload.seksjonsnr}: ${error.message}`);
+    _safeLog_('E-post Feil', `Klarte ikke sende e-post for seksjon ${payload.seksjonsnr}: ${error.message}`);
   }
 }
 
 function _buildOwnershipChangeEmailTemplate_(payload, fraDato, newOwner, currentOwner) {
-  var subject = 'Bekreftelse på eierskifte for seksjon ' + payload.seksjonsnr;
-  var prevOwnerTxt = currentOwner ? ('<li><b>Forrige eier:</b> ' + currentOwner[COLUMN_MAPPINGS.PERSONER.NAVN] + '</li>') : '';
-  var body =
-    '<p>Hei,</p>' +
-    '<p>Dette er en bekreftelse på at eierskifte for <b>seksjon ' + payload.seksjonsnr + '</b> er registrert.</p>' +
-    '<ul>' +
-      '<li><b>Ny eier:</b> ' + newOwner.navn + ' (' + newOwner.epost + ')</li>' +
-      '<li><b>Overtakelsesdato:</b> ' + Utilities.formatDate(fraDato, _tz_(), 'dd.MM.yyyy') + '</li>' +
-      prevOwnerTxt +
-    '</ul>' +
-    '<p>Med vennlig hilsen<br>Styret</p>';
-  return { subject: subject, body: body };
+  const subject = `Bekreftelse på eierskifte for seksjon ${payload.seksjonsnr}`;
+  const prevOwnerTxt = currentOwner ? `<li><b>Forrige eier:</b> ${currentOwner[COLUMN_MAPPINGS.PERSONER.NAVN]}</li>` : '';
+  const body = `
+    <p>Hei,</p>
+    <p>Dette er en bekreftelse på at eierskifte for <b>seksjon ${payload.seksjonsnr}</b> er registrert.</p>
+    <ul>
+      <li><b>Ny eier:</b> ${newOwner.navn} (${newOwner.epost})</li>
+      <li><b>Overtakelsesdato:</b> ${Utilities.formatDate(fraDato, _tz_(), 'dd.MM.yyyy')}</li>
+      ${prevOwnerTxt}
+    </ul>
+    <p>Med vennlig hilsen<br>Styret</p>`;
+  return { subject, body };
 }
 
 // ----------------------------- Avhengigheter/stubs ---------------------------
-
-// PROPS: idempotent global (unngår "Identifier 'PROPS' has already been declared")
-(function (glob) {
+((glob) => {
   glob.PROPS = glob.PROPS || PropertiesService.getScriptProperties();
 })(globalThis);
 
 function _getEmailConfig_() {
   return {
-    enabled: true,                        // kan styres via PROPS/SHEETS.KONFIG
+    enabled: true,
     fromAddress: PROPS.getProperty('MAIL_FROM') || Session.getActiveUser().getEmail(),
     replyTo: PROPS.getProperty('MAIL_REPLYTO') || Session.getActiveUser().getEmail()
   };
 }
 
-function _sendEmailWithRetry_(recipients, template, config, maxRetries) {
-  maxRetries = Number(maxRetries || 3);
-  for (var attempt = 1; attempt <= maxRetries; attempt++) {
+function _sendEmailWithRetry_(recipients, template, config, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       MailApp.sendEmail({
         to: recipients.join(','),
@@ -293,10 +264,10 @@ function _sendEmailWithRetry_(recipients, template, config, maxRetries) {
         from: config.fromAddress,
         replyTo: config.replyTo
       });
-      _logEvent('E-post', 'E-post sendt til: ' + recipients.join(',') + ' (forsøk ' + attempt + ')');
+      _safeLog_('E-post', `E-post sendt til: ${recipients.join(',')} (forsøk ${attempt})`);
       return;
     } catch (error) {
-      _logEvent('E-post Feil', 'Forsøk ' + attempt + ' feilet: ' + error.message);
+      _safeLog_('E-post Feil', `Forsøk ${attempt} feilet: ${error.message}`);
       if (attempt < maxRetries) Utilities.sleep(1000 * attempt);
       else throw error;
     }
@@ -312,26 +283,9 @@ function _readAllDataForOwnershipChange_(ss) {
 }
 
 function _getSheetHeaders_(sheetName) {
-  var sh = SpreadsheetApp.getActive().getSheetByName(sheetName);
+  const sh = SpreadsheetApp.getActive().getSheetByName(sheetName);
   if (!sh || sh.getLastColumn() < 1) return [];
   return sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
 }
 
-// Små stubs – forventes allerede i 01_*.gs, men trygg å ha her
-function _logEvent(type, message) { try { Logger.log('['+type+'] ' + message); } catch(e){} }
-function _ui() { return SpreadsheetApp.getUi(); }
-function _tz_() { return Session.getScriptTimeZone() || 'Europe/Oslo'; }
-function _currentEmail_(){ return Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || ''; }
-
-// Robust dato-parser: yyyy-MM-dd, dd.MM.yyyy, eller Date
-function _normalizeDate_(value) {
-  if (value instanceof Date) return value;
-  var s = String(value || '').trim();
-  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-  var d = new Date(s);
-  if (!isNaN(d.getTime())) return d;
-  throw new Error('VALIDERING: Ugyldig datoformat');
-}
+// MERK: Hjelpefunksjoner er flyttet til 00b_Utils.js.

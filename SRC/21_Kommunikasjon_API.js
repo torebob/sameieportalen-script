@@ -74,7 +74,7 @@ function sendOppslag(payload) {
       const personEmail = recipient[cEpost];
 
       if (personId && personEmail && webAppUrl) {
-        const trackingUrl = `${webAppUrl}?oppslagId=${oppslagId}&personId=${personId}`;
+        const trackingUrl = `${webAppUrl}?page=tracking&oppslagId=${oppslagId}&personId=${personId}`;
         const htmlBody = `
           <html><body>
             <h2>${payload.tittel}</h2>
@@ -103,7 +103,7 @@ function sendOppslag(payload) {
  * Web App som fungerer som sporingspiksel. Kjøres når en mottaker åpner e-posten.
  * @param {object} e - Event-objektet fra web-forespørselen.
  */
-function doGet(e) {
+function handleTrackingPixelRequest(e) {
   try {
     const { oppslagId, personId } = e.parameter;
 

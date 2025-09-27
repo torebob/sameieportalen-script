@@ -338,35 +338,9 @@ function _fmtDate_(d, tz){
   catch(_) { return d.toISOString().slice(0,10); }
 }
 
-/* -------------------- Router for onFormSubmit -------------------- */
-/**
- * Kjør én trigger "onFormSubmit" og la denne funksjonen rute videre.
- * @param {GoogleAppsScript.Events.FormsOnFormSubmit} e
+/* -------------------- Router for onFormSubmit - DEPRECATED -------------------- */
+/*
+ * MERK: routeFormSubmit() er fjernet fra denne filen for å unngå konflikter.
+ * Funksjonen er nå definert og håndtert sentralt i FormsRouterPlus.js,
+ * som bruker et register-ark for å dynamisk rute innsendinger.
  */
-function routeFormSubmit(e) {
-  try {
-    const svar = (e && e.namedValues) ? e.namedValues : {};
-
-    // Eksempel: HMS-skjema (gjenkjent via unikt felt)
-    if (svar['Sjekkpunkt: Røykvarsler'] || svar['Seksjonsnummer']) {
-      if (typeof _logEvent === 'function') _logEvent('FormRouter', 'Ruter til handleHmsFormSubmit');
-      if (typeof handleHmsFormSubmit === 'function') return handleHmsFormSubmit(e);
-      if (typeof _logEvent === 'function') _logEvent('FormRouter_Mangler', 'handleHmsFormSubmit er ikke definert.');
-      return;
-    }
-
-    // Eksempel: Support-skjema
-    if (svar['Kategori for henvendelse']) {
-      if (typeof _logEvent === 'function') _logEvent('FormRouter', 'Ruter til handleSupportFormSubmit');
-      if (typeof handleSupportFormSubmit === 'function') return handleSupportFormSubmit(e);
-      if (typeof _logEvent === 'function') _logEvent('FormRouter_Mangler', 'handleSupportFormSubmit er ikke definert.');
-      return;
-    }
-
-    // Legg til flere matcher ved behov …
-
-    if (typeof _logEvent === 'function') _logEvent('FormRouter_Warning', 'Skjemainnsending matchet ingen kjent rute.');
-  } catch (err) {
-    if (typeof _logEvent === 'function') _logEvent('FormRouter_KRITISK_FEIL', `Router-funksjonen feilet: ${err.message}`);
-  }
-}

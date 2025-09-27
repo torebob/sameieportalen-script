@@ -87,18 +87,10 @@ function logError(msg) {
 // PUBLIC API FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-/** Opens sidebar for section history search */
-function openSectionHistory() {
-  const ui = (typeof _ui === 'function') ? _ui() : SpreadsheetApp.getUi();
-  if (!ui) {
-    logError('openSectionHistory: UI ikke tilgjengelig.');
-    return;
-  }
-  const html = HtmlService.createTemplateFromFile("SectionHistory").evaluate()
-    .setTitle('Seksjonshistorikk')
-    .setWidth(420);
-  ui.showSidebar(html);
-}
+/*
+ * MERK: openSectionHistory() er fjernet fra denne filen for å unngå konflikter.
+ * Funksjonen kalles nå fra 00_App_Core.js, som bruker den sentrale UI_FILES-mappingen.
+ */
 
 /**
  * Enhanced section history with filtering options

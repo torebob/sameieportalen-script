@@ -112,24 +112,11 @@ function _openHtmlFromMap_(key, target = 'modal', params){
   }
 }
 
-/* ---------- Dashboard-åpnere ---------- */
-function openDashboardModal(){ return _openHtmlFromMap_('DASHBOARD_HTML','modal'); }
-function openDashboardSidebar(){ 
-  // Adminpanel i sidepanel (krever 05_Dashboard_UI.gs med globalThis.openDashboard)
-  if (typeof globalThis.openDashboard === 'function') return globalThis.openDashboard();
-  // Fallback: vis dashbord-modal hvis sidepanel-koden ikke finnes
-  return openDashboardModal();
-}
-
-/** Adaptiv dashbord-åpner (bruker modal for brukere / sidepanel for admin). */
-function openDashboardAuto(){
-  if (typeof hasPermission === 'function' && !hasPermission('VIEW_USER_DASHBOARD')) {
-    _safeLog_('SECURITY', 'Dashbord nektet (mangler VIEW_USER_DASHBOARD).');
-    return _alert_('Du har ikke tilgang til Dashbord.', 'Tilgang nektet');
-  }
-  const isAdmin = (typeof hasPermission === 'function' && hasPermission('VIEW_ADMIN_MENU'));
-  return isAdmin ? openDashboardSidebar() : openDashboardModal();
-}
+/*
+ * MERK: Dashboard-åpnere (openDashboardModal, openDashboardSidebar, openDashboardAuto)
+ * er fjernet fra denne filen. De er nå definert og håndtert sentralt i
+ * 05_Dashboard_UI.js, som eksponerer dem til det globale skopet.
+ */
 
 /* ---------- Meny / oppstart ---------- */
 function onOpen(e){
@@ -166,6 +153,14 @@ function onOpen(e){
     menu.addSubMenu(reports);
   }
 
+  // Økonomi (styret)
+  if (typeof hasPermission === 'function' && hasPermission('VIEW_BUDGET_MENU')) {
+    menu.addSeparator();
+    const ekonomi = ui.createMenu('Økonomi');
+    ekonomi.addItem('Åpne Budsjett (webapp)', 'openBudgetWebapp');
+    menu.addSubMenu(ekonomi);
+  }
+
   // Admin
   if (typeof hasPermission === 'function' && hasPermission('VIEW_ADMIN_MENU')) {
     menu.addSeparator();
@@ -183,6 +178,44 @@ function onOpen(e){
     // Utviklerhjelp: sjekk at HTML-filer finnes
     admin.addSeparator();
     admin.addItem('Valider UI-filer', 'checkUIFilesExist');
+
+    // Analyse-verktøy (fra 95_Discovery_Report.js)
+    if (typeof generateDiscoveryReportInDoc === 'function') {
+      const analyse = ui.createMenu('Analyse');
+      analyse.addItem('Generer Discovery-rapport (Doc)', 'generateDiscoveryReportInDoc');
+      analyse.addItem('Åpne Discovery-dokument', 'openDiscoveryDocQuick');
+      analyse.addItem('Foreslå nye krav → «Krav»-arket', 'discoverySuggestToKravQuick');
+
+      // Fra CoreAnalysisPlus – Requirement Generator.js
+      if (typeof rg_menu_openWizard === 'function') {
+        analyse.addSeparator();
+        analyse.addItem('Krav Generator (wizard)', 'rg_menu_openWizard');
+        analyse.addItem('Kjør krav-generator (uten UI)', 'rg_menu_runAllQuick');
+        analyse.addItem('Åpne Requirements-arket', 'rg_menu_openReqSheet');
+      }
+
+      // Fra RSP – Requirements Synchronization Platform.js
+      if (typeof rsp_menu_firstRunWizard === 'function') {
+        analyse.addSeparator();
+        analyse.addItem('Krav Sync (wizard)', 'rsp_menu_firstRunWizard');
+        analyse.addItem('Valider Krav-system', 'rsp_menu_validateSystemState');
+        analyse.addItem('Push Krav (Sheet → Doc)', 'rsp_menu_pushRun');
+        analyse.addItem('Åpne Krav-dokument', 'rsp_menu_openDoc');
+      }
+
+      admin.addSeparator();
+      admin.addSubMenu(analyse);
+    }
+
+    // CoreAnalysisPlus-verktøy (fra CoreAnalysisPlus – Analysis Engine.js)
+    if (typeof runCoreAnalysis_Smoke === 'function') {
+      const coreAnalyse = ui.createMenu('Core Analysis');
+      coreAnalyse.addItem('Run Analysis (log)', 'runCoreAnalysis_Smoke');
+      coreAnalyse.addItem('Open Dashboard (Mermaid)', 'ae_showDashboard');
+      admin.addSeparator();
+      admin.addSubMenu(coreAnalyse);
+    }
+
     menu.addSubMenu(admin);
   }
 

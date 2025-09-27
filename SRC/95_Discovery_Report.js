@@ -81,38 +81,12 @@
 })(globalThis);
 
 
-/* -------------------------------- Meny (UI) -------------------------------- */
-function discoveryInstallMenuOnOpen() {
-  // Rydd gamle triggere for denne handleren
-  ScriptApp.getProjectTriggers().forEach(function (t) {
-    if (t.getHandlerFunction() === 'discoveryRegisterMenu_' &&
-        t.getTriggerSource() === ScriptApp.TriggerSource.SPREADSHEETS) {
-      ScriptApp.deleteTrigger(t);
-    }
-  });
-  ScriptApp.newTrigger('discoveryRegisterMenu_')
-    .forSpreadsheet(SpreadsheetApp.getActive())
-    .onOpen()
-    .create();
-  SpreadsheetApp.getActive().toast('Analyse-meny legges til ved åpning.');
-}
-
-function discoveryMenuBuildQuick() {
-  discoveryRegisterMenu_();
-  SpreadsheetApp.getActive().toast('Analyse-meny lagt til.');
-}
-
-function discoveryRegisterMenu_() {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu(DISCOVERY_REPORT.CONFIG.MENU_NAME)
-    .addItem('🔎 Generer Discovery-rapport (Doc)', 'generateDiscoveryReportInDoc')
-    .addItem('📄 Åpne Discovery-dokument', 'openDiscoveryDocQuick')
-    .addSeparator()
-    .addItem('💡 Foreslå nye krav → «Krav»-arket', 'discoverySuggestToKravQuick')
-    .addSeparator()
-    .addItem('🧰 Installer onOpen (Analyse-meny)', 'discoveryInstallMenuOnOpen')
-    .addToUi();
-}
+/* -------------------------------- Meny (UI) - DEPRECATED -------------------------------- */
+/*
+ * MERK: Menyopprettelse for Discovery-verktøyene er flyttet til 00_App_Core.js.
+ * Funksjonene discoveryInstallMenuOnOpen, discoveryMenuBuildQuick, og discoveryRegisterMenu_
+ * er fjernet for å unngå onOpen-konflikter. Menyen vises nå under Admin-menyen.
+ */
 
 
 /* ---------------------------- Hovedkommandoer ------------------------------ */

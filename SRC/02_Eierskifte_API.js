@@ -32,18 +32,10 @@ const COLUMN_MAPPINGS = Object.freeze({
 
 // ----------------------------- UI (skjema) -----------------------------------
 
-function openOwnershipForm() {
-  const ui = _ui();
-  try {
-    const html = HtmlService.createHtmlOutputFromFile('EierskifteSkjema').setWidth(560).setHeight(680);
-    ui.showModalDialog(html, 'Registrer eierskifte');
-  } catch (e) {
-    const fallback = HtmlService.createHtmlOutput(
-      '<html><body><h3>Eierskifte</h3><p>HTML-filen <code>EierskifteSkjema.html</code> mangler.</p></body></html>'
-    ).setWidth(420).setHeight(150);
-    ui.showModalDialog(fallback, 'Feil ved åpning av skjema');
-  }
-}
+/*
+ * MERK: openOwnershipForm() er fjernet fra denne filen for å unngå konflikter.
+ * Funksjonen kalles nå fra 00_App_Core.js, som bruker den sentrale UI_FILES-mappingen.
+ */
 
 function getSeksjonerForForm() {
   const data = getSheetData(SHEETS.SEKSJONER);

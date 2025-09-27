@@ -486,25 +486,10 @@
   globalThis.dashOpen    = dashOpen;
   globalThis.dashMetrics = dashMetrics;
 
-  // Admin-verktøy (enkle stubs med PROPS)
-  globalThis.adminEnableDevTools = function adminEnableDevTools(){
-    try {
-      const PROPS = PropertiesService.getScriptProperties();
-      PROPS.setProperty('DEV_TOOLS','true');
-      return 'Utvikler-verktøy er PÅ.';
-    } catch(e){
-      throw new Error('Klarte ikke aktivere utvikler-verktøy: ' + e.message);
-    }
-  };
-  globalThis.adminDisableDevTools = function adminDisableDevTools(){
-    try {
-      const PROPS = PropertiesService.getScriptProperties();
-      PROPS.setProperty('DEV_TOOLS','false');
-      return 'Utvikler-verktøy er AV.';
-    } catch(e){
-      throw new Error('Klarte ikke deaktivere utvikler-verktøy: ' + e.message);
-    }
-  };
+  /*
+   * MERK: adminEnableDevTools og adminDisableDevTools er fjernet herfra.
+   * De er nå definert sentralt i 00_App_Core.js og er tilgjengelige globalt.
+   */
   globalThis.adminLogDummyAction = function adminLogDummyAction() {
     const email = (Session.getActiveUser()?.getEmail() || Session.getEffectiveUser()?.getEmail() || '').toLowerCase();
     try {

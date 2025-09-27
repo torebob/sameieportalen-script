@@ -3,24 +3,13 @@
  * Åpner VaktmesterVisning.html + meny.
  * ===================================================================== */
 
-function openVaktmesterUI() {
-  var html = HtmlService.createHtmlOutputFromFile('VaktmesterVisning')
-    .setTitle('Vaktmester')
-    .setWidth(1100)
-    .setHeight(760);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Vaktmester');
-}
+/*
+ * MERK: openVaktmesterUI() er fjernet fra denne filen for å unngå konflikter.
+ * Funksjonen kalles nå fra 00_App_Core.js, som bruker den sentrale UI_FILES-mappingen.
+ */
 
-/** Legg til meny (slås sammen med eksisterende om du har en onOpen fra før) */
-function onOpen() {
-  try {
-    var ui = SpreadsheetApp.getUi();
-    var menu = ui.createMenu('Sameieportalen');
-    // legg gjerne til andre punkter her også (Møteoversikt osv.)
-    menu.addItem('Vaktmester', 'openVaktmesterUI');
-    if (typeof openMeetingsUI === 'function') {
-      menu.addItem('Møteoversikt & Protokoller', 'openMeetingsUI');
-    }
-    menu.addToUi();
-  } catch(_) {}
-}
+/**
+ * MERK: onOpen() er fjernet fra denne filen for å unngå konflikter.
+ * All menyopprettelse håndteres nå sentralt i 00_App_Core.js.
+ * Vaktmester-menyen legges til betinget basert på brukerens tillatelser.
+ */

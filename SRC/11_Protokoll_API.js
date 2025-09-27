@@ -144,8 +144,8 @@ function sendProtokollForGodkjenning(moteId, protokollUrl){
     for (var j=0;j<board.length;j++){
       var tokenCell = rows[j][H['Token']];
       var email = board[j].email;
-      var approveUrl = webAppUrl ? (webAppUrl + '?gid=' + encodeURIComponent(gid) + '&token=' + encodeURIComponent(tokenCell) + '&action=approve') : url;
-      var rejectUrl  = webAppUrl ? (webAppUrl + '?gid=' + encodeURIComponent(gid) + '&token=' + encodeURIComponent(tokenCell) + '&action=reject')  : url;
+      var approveUrl = webAppUrl ? (webAppUrl + '?page=protokoll&gid=' + encodeURIComponent(gid) + '&token=' + encodeURIComponent(tokenCell) + '&action=approve') : url;
+      var rejectUrl  = webAppUrl ? (webAppUrl + '?page=protokoll&gid=' + encodeURIComponent(gid) + '&token=' + encodeURIComponent(tokenCell) + '&action=reject')  : url;
 
       var subject = '[Sameieportalen] Til godkjenning: Protokoll ' + moteId;
       var body =
@@ -184,7 +184,7 @@ function sendProtokollForGodkjenning(moteId, protokollUrl){
  * WebApp-endepunkt for godkjenning/avvisning via lenke.
  * Parametre: gid, token, action(approve|reject), [comment]
  */
-function doGet(e){
+function handleProtokollApprovalRequest(e){
   var title = 'Protokoll';
   function page(msg){ return HtmlService.createHtmlOutput('<h3>'+title+'</h3><p>'+msg+'</p>'); }
 

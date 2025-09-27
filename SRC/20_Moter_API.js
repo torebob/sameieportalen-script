@@ -127,16 +127,10 @@
   }
 
   // -------------------- UI & API --------------------
-  function openMeetingsUI() {
-    const tpl = HtmlService.createTemplateFromFile('30_Moteoversikt.html');
-    tpl.FILE = '30_Moteoversikt.html';
-    tpl.APP_VERSION = APP.VERSION;
-    tpl.TITLE = 'Møteoversikt & Protokoller';
-    tpl.PURPOSE = 'UI for møter, agenda, innspill og vedtak.';
-    
-    const html = tpl.evaluate().setWidth(1100).setHeight(760);
-    SpreadsheetApp.getUi().showModalDialog(html, 'Møteoversikt & Protokoller');
-  }
+  /*
+   * MERK: openMeetingsUI() er fjernet fra denne filen for å unngå konflikter.
+   * Funksjonen kalles nå fra 00_App_Core.js, som bruker den sentrale UI_FILES-mappingen.
+   */
   
   function uiBootstrap(){
     const { email, name } = getCurrentUser_();

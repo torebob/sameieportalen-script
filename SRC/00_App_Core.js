@@ -55,7 +55,8 @@ globalThis.UI_FILES = Object.freeze({
   PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html', title: 'Protokoll-godkjenning',   w: 980,  h: 760 },
   SEKSJON_HISTORIKK:     { file: '32_SeksjonHistorikk.html',         title: 'Seksjonshistorikk',          w: 1100, h: 760 },
   VAKTMESTER:            { file: '33_VaktmesterVisning.html',        title: 'Vaktmester',                 w: 1100, h: 800 },
-  AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 }
+  AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 },
+  SHARE_DOCUMENT:        { file: '41_ShareDocument.html',            title: 'Del Dokument',               w: 800,  h: 600 }
 });
 
 /*
@@ -307,6 +308,9 @@ if (typeof globalThis.openSectionHistory !== 'function') {
 }
 if (typeof globalThis.openVaktmesterUI !== 'function') {
   globalThis.openVaktmesterUI = () => _openHtmlFromMap_('VAKTMESTER', 'modal');
+}
+if (typeof globalThis.openShareDocumentUI !== 'function') {
+  globalThis.openShareDocumentUI = () => _openHtmlFromMap_('SHARE_DOCUMENT', 'modal');
 }
 
 /* ---------- Utvikler-verktøy: valider at HTML-filer finnes ---------- */

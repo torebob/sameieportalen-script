@@ -9,6 +9,8 @@ const UI_FILES = {
   DASHBOARD_HTML:  { file: '37_Dashboard.html', title: 'Sameieportal — Dashbord', w: 1280, h: 840 },
   MOTEOVERSIKT:    { file: '30_Moteoversikt.html', title: 'Møteoversikt & Protokoller', w: 1100, h: 760 },
   MOTE_SAK_EDITOR: { file: '31_MoteSakerEditor.html', title: 'Møtesaker – Editor', w: 1100, h: 760 },
+  QNA_AGENT:       { file: '40_QnA_Agent.html', title: 'Spørsmål & Svar Agent', w: 900, h: 700 },
+  QNA_SETTINGS:    { file: '41_Settings.html', title: 'Q&A Innstillinger', w: 800, h: 500 },
   // ... add all your other UI files here
 };
 
@@ -49,7 +51,7 @@ function dashOpen(key) {
   Logger.info(functionName, `User opening module: ${key}`, { user: user.email });
 
   try {
-    const ADMIN_ONLY_MODULES = ['MOTE_SAK_EDITOR', 'EIERSKIFTE'];
+    const ADMIN_ONLY_MODULES = ['MOTE_SAK_EDITOR', 'EIERSKIFTE', 'QNA_SETTINGS'];
     if (ADMIN_ONLY_MODULES.includes(key) && !user.isAdmin) {
       throw new Error(`Du mangler ADMIN-rettigheter for å åpne "${key}".`);
     }

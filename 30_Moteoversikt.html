@@ -86,6 +86,15 @@
         <label>Sted</label>
         <input id="sted" placeholder="Fellesrom / Teams-lenke"/>
       </div>
+      <div id="video-actions" style="display:none; margin-top: 8px; gap: 8px; align-items: center;">
+        <button id="btnJoinVideo" class="btn success" style="padding-left: 12px; padding-right: 12px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: middle;"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path><circle cx="12" cy="13" r="3"></circle></svg>
+          Bli med i video
+        </button>
+        <button id="btnGoToChat" class="btn" title="Gå til chat/innspill" style="padding: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        </button>
+      </div>
       <div>
         <label>Tittel <span class="hint">(påkrevd)</span></label>
         <input id="tittel" placeholder="Styremøte september 2025" required />
@@ -184,6 +193,16 @@
   }
   const isLocked = st => !!st && LOCKED_STATUSES.includes(String(st).trim());
 
+  function isValidHttpUrl(string) {
+    let url;
+    try {
+      url = new URL(string);
+    } catch (_) {
+      return false;
+    }
+    return url.protocol === "http:" || url.protocol === "https:";
+  }
+
   function applyLockUI(locked){
     const rootA = $('#agendaCard'), rootM = $('#meetingCard');
     [rootA, rootM].forEach(root=>{
@@ -254,6 +273,14 @@
     applyLockUI(isLocked(state.meetingStatus));
     $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
 
+    // Show/hide video actions
+    const videoActions = $('#video-actions');
+    if (isValidHttpUrl(m.sted)) {
+      videoActions.style.display = 'flex';
+    } else {
+      videoActions.style.display = 'none';
+    }
+
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
       google.script.run.withSuccessHandler(can=>{
@@ -317,6 +344,29 @@
     $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
     $('#moveWrap').style.display='none';
   }
+
+  // Video/Chat Actions
+  $('#sted').addEventListener('input', function(e) {
+    const url = e.target.value.trim();
+    const actions = $('#video-actions');
+    if (isValidHttpUrl(url)) {
+      actions.style.display = 'flex';
+    } else {
+      actions.style.display = 'none';
+    }
+  });
+
+  $('#btnJoinVideo').onclick = function() {
+    const url = $('#sted').value.trim();
+    if (isValidHttpUrl(url)) {
+      window.open(url, '_blank');
+    }
+  };
+
+  $('#btnGoToChat').onclick = function() {
+    $('#innspillList').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('#innspillText').focus();
+  };
 
   // SAVE meeting
   $('#btnSaveMeeting').onclick = function(){

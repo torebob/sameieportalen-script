@@ -140,3 +140,80 @@ function doGet(e) {
   const gif = Utilities.base64Decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
   return ContentService.createImage(gif).setMimeType(ContentService.MimeType.GIF);
 }
+
+/**
+ * Sender innkalling til årsmøte eller annet møte basert på en mal.
+ * @param {string} moteId - ID-en til møtet det skal sendes innkalling for.
+ * @returns {object} Et suksess- eller feilobjekt.
+ */
+function sendInnkalling(moteId) {
+  try {
+    if (!moteId) throw new Error("Møte-ID er påkrevd.");
+
+    // 1. Hent møtedetaljer og saksliste
+    const meeting = global.listMeetings_({ scope: 'all' }).find(m => m.id === moteId);
+    if (!meeting) throw new Error(`Fant ikke møte med ID: ${moteId}`);
+
+    const agendaItems = global.listAgenda(moteId);
+
+    // 2. Hent mottakere (kun eiere)
+    const personerSheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.PERSONER);
+    if (!personerSheet || personerSheet.getLastRow() < 2) {
+      throw new Error("Finner ingen personer å sende til.");
+    }
+    const data = personerSheet.getDataRange().getValues();
+    const headers = data.shift();
+    const cEpost = headers.indexOf('epost');
+    const cRolle = headers.indexOf('rolle');
+
+    const recipients = data
+      .filter(row => String(row[cRolle] || '').toLowerCase() === 'eier' && row[cEpost])
+      .map(row => row[cEpost]);
+
+    if (recipients.length === 0) {
+      throw new Error("Fant ingen eiere med registrert e-post.");
+    }
+
+    // 3. Bygg HTML-innhold for e-posten
+    const meetingDate = Utilities.formatDate(new Date(meeting.dato), Session.getScriptTimeZone(), "dd. MMMM yyyy");
+    const subject = `Innkalling til ${meeting.type}: ${meeting.tittel}`;
+
+    let agendaHtml = "<ul>";
+    if (agendaItems.length > 0) {
+      agendaItems.forEach(item => {
+        agendaHtml += `<li><b>${item.saksnr}: ${item.tittel}</b><p>${item.forslag || 'Ingen forslag'}</p></li>`;
+      });
+    } else {
+      agendaHtml += "<li>Saksliste er ikke klar.</li>";
+    }
+    agendaHtml += "</ul>";
+
+    const htmlBody = `
+      <html><body>
+        <h2>Innkalling til ${meeting.type}</h2>
+        <p>Det kalles inn til ${meeting.type} <b>${meetingDate} kl. ${meeting.start || ''}</b>.</p>
+        <p><b>Sted:</b> ${meeting.sted || 'Ikke spesifisert'}</p>
+        <hr>
+        <h3>Saksliste</h3>
+        ${agendaHtml}
+        <hr>
+        <p>Med vennlig hilsen,<br>Styret</p>
+      </body></html>`;
+
+    // 4. Send e-post til alle eiere
+    GmailApp.sendEmail(recipients.join(','), subject, "", {
+      htmlBody: htmlBody,
+      name: APP.NAME
+    });
+
+    _logEvent('Kommunikasjon', `Sendte innkalling for møte "${moteId}" til ${recipients.length} eiere.`);
+    return { ok: true, message: `Innkalling sendt til ${recipients.length} eiere.` };
+
+  } catch (e) {
+    _logEvent('Kommunikasjon_Feil', `Feil ved sending av innkalling for ${moteId}: ${e.message}`);
+    return { ok: false, message: e.message };
+  }
+}
+
+// Eksporter funksjonen for å gjøre den tilgjengelig for UI
+global.sendInnkalling = sendInnkalling;

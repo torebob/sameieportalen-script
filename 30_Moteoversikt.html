@@ -98,6 +98,7 @@
       <div class="toolbar">
         <button class="btn primary" id="btnSaveMeeting">Lagre møte</button>
         <button class="btn" id="btnNewMeeting">Nytt møte</button>
+        <button class="btn" id="btnSendInnkalling" style="display: none;">Send innkalling</button>
         <button class="btn" id="btnViewProtocol" style="display:none">Vis protokoll</button>
         <span id="saveStatus" class="status"></span>
       </div>
@@ -253,6 +254,7 @@
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
     $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
+    $('#btnSendInnkalling').style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
 
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
@@ -310,6 +312,7 @@
     updateStatusBadge();
     applyLockUI(false);
     $('#btnViewProtocol').style.display = 'none';
+    $('#btnSendInnkalling').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
@@ -347,6 +350,25 @@
         })
         .withFailureHandler(err => setStatus(err?.message || 'En feil oppstod.'))
         .upsertMeeting(form);
+  };
+
+  $('#btnSendInnkalling').onclick = function() {
+    if (!state.moteId) {
+      setStatus('Velg et møte først.');
+      return;
+    }
+    if (!confirm('Er du sikker på at du vil sende innkalling til alle eiere?')) {
+      return;
+    }
+    setStatus('Sender innkalling...');
+    google.script.run
+      .withSuccessHandler(res => {
+        setStatus(res.message || (res.ok ? 'Innkalling sendt.' : 'En ukjent feil oppstod.'));
+      })
+      .withFailureHandler(err => {
+        setStatus(`Feil: ${err.message}`);
+      })
+      .sendInnkalling(state.moteI d);
   };
 
   // Øvrig

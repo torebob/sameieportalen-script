@@ -204,6 +204,9 @@ function onOpen(e) {
     admin.addSeparator();
     addIf('Synkroniser årshjul til kalender', 'syncYearWheelToCalendar');
     addIf("Oppdater 'Ansvarlig'-liste", 'adminUpdateTasksDropdown');
+    if (typeof globalThis.setupTaskNotifications === 'function') {
+      admin.addItem('Installer varsler for oppgaver', 'setupTaskNotifications');
+    }
     admin.addSeparator();
     addIf('Åpne Adminpanel (sidepanel)', 'openDashboardSidebar');
     admin.addSeparator();

@@ -38,6 +38,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Møteoversikt & Protokoller</title>
   <link rel="stylesheet" href="styles/moteoversikt.css">
+  <style>
+    .modal-background {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.5);
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 800px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .modal-header h2 {
+        margin: 0;
+    }
+    #minutesOutput {
+      width: 100%;
+      flex-grow: 1;
+      box-sizing: border-box;
+      resize: vertical;
+      font-family: monospace;
+      white-space: pre-wrap;
+      padding: 8px;
+    }
+    .modal-footer {
+        padding-top: 10px;
+        text-align: right;
+    }
+  </style>
 </head>
 <body>
 <div class="wrap">
@@ -98,6 +147,7 @@
       <div class="toolbar">
         <button class="btn primary" id="btnSaveMeeting">Lagre møte</button>
         <button class="btn" id="btnNewMeeting">Nytt møte</button>
+        <button class="btn" id="btnGenerateMinutes" style="display:none">Generer referat</button>
         <button class="btn" id="btnViewProtocol" style="display:none">Vis protokoll</button>
         <span id="saveStatus" class="status"></span>
       </div>
@@ -163,6 +213,19 @@
         <label>Vedtakstekst</label>
         <textarea id="vedtakText" placeholder="Endelig vedtakstekst …"></textarea>
       </div>
+    </div>
+  </div>
+</div>
+
+<div id="minutesModal" class="modal-background">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>Referat</h2>
+      <button id="btnCloseMinutes" class="btn">&times;</button>
+    </div>
+    <textarea id="minutesOutput" readonly></textarea>
+    <div class="modal-footer">
+        <button id="btnCopyMinutes" class="btn primary">Kopier til utklippstavle</button>
     </div>
   </div>
 </div>
@@ -253,6 +316,7 @@
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
     $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
+    $('#btnGenerateMinutes').style.display = 'inline-block';
 
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
@@ -310,6 +374,7 @@
     updateStatusBadge();
     applyLockUI(false);
     $('#btnViewProtocol').style.display = 'none';
+    $('#btnGenerateMinutes').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
@@ -566,6 +631,39 @@
     });
     box.scrollTop = box.scrollHeight;
   }
+
+  $('#btnGenerateMinutes').onclick = function(){
+    if (!state.moteId) {
+      setStatus('Velg et møte først.');
+      return;
+    }
+    setStatus('Genererer referat...');
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.ok) {
+          $('#minutesOutput').value = res.markdown;
+          $('#minutesModal').style.display = 'block';
+          setStatus('Referat generert.');
+        } else {
+          setStatus(res?.message || 'Kunne ikke generere referat.');
+        }
+      })
+      .withFailureHandler(err => {
+        setStatus(err?.message || 'En feil oppstod under generering.');
+      })
+      .generateMinutes(state.moteId);
+  };
+
+  $('#btnCloseMinutes').onclick = function() {
+      $('#minutesModal').style.display = 'none';
+  };
+
+  $('#btnCopyMinutes').onclick = function() {
+      const output = $('#minutesOutput');
+      output.select();
+      document.execCommand('copy');
+      setStatus('Referat kopiert til utklippstavlen.');
+  };
 
 </script>
 </body>

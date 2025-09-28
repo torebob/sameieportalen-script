@@ -455,17 +455,6 @@
     return { serverNow, meetingUpdated, updatedSaker, newInnspill };
   }
 
-  global.uiBootstrap = uiBootstrap;
-  global.upsertMeeting = upsertMeeting;
-  global.listMeetings_ = listMeetings_;
-  global.newAgendaItem = newAgendaItem;
-  global.saveAgenda = saveAgenda;
-  global.listAgenda = listAgenda;
-  global.deleteAgendaItem = deleteAgendaItem;
-  global.appendInnspill = appendInnspill;
-  global.listInnspill = listInnspill;
-  global.castVote = castVote;
-  global.getVoteSummary = getVoteSummary;
   function getAiAssistance(text, mode) {
     try {
       const API_KEY = PROPS.getProperty('AI_API_KEY');
@@ -512,6 +501,69 @@
     }
   }
 
+  function generateMinutes(moteId) {
+    if (!moteId) {
+      return { ok: false, message: 'MoteID er påkrevd.' };
+    }
+
+    try {
+      const meeting = listMeetings_({ scope: 'all' }).find(m => m.id === moteId);
+      if (!meeting) {
+        return { ok: false, message: `Fant ikke møte med ID: ${moteId}` };
+      }
+
+      const roster = typeof getMeetingRoster === 'function' ? getMeetingRoster(moteId) : [];
+      const attendees = roster.filter(p => p.present).map(p => p.name);
+
+      const agendaItems = listAgenda(moteId);
+
+      let markdown = `# Referat: ${meeting.tittel}\n\n`;
+      markdown += `**Dato:** ${Utilities.formatDate(new Date(meeting.dato), Session.getScriptTimeZone(), 'dd.MM.yyyy')}\n`;
+      markdown += `**Tid:** ${meeting.start || ''} - ${meeting.slutt || ''}\n`;
+      markdown += `**Sted:** ${meeting.sted}\n\n`;
+
+      markdown += `## Tilstede\n`;
+      if (attendees.length > 0) {
+        attendees.forEach(name => {
+          markdown += `- ${name}\n`;
+        });
+      } else {
+        markdown += `_Ingen deltakere registrert som tilstede._\n`;
+      }
+      markdown += `\n---\n\n`;
+
+      agendaItems.forEach(item => {
+        markdown += `## ${item.saksnr}: ${item.tittel}\n\n`;
+
+        if (item.forslag) {
+          markdown += `### Forslag til vedtak\n${item.forslag}\n\n`;
+        }
+
+        const notes = listInnspill(item.sakId);
+        if (notes && notes.length > 0) {
+          markdown += `### Diskusjon/Notater\n`;
+          notes.forEach(note => {
+            const person = roster.find(p => p.email === note.from);
+            const name = person ? person.name : note.from;
+            markdown += `- **${name}:** ${note.text}\n`;
+          });
+          markdown += `\n`;
+        }
+
+        if (item.vedtak) {
+          markdown += `### Vedtak\n${item.vedtak}\n\n`;
+        }
+        markdown += `---\n\n`;
+      });
+
+      return { ok: true, markdown };
+
+    } catch (e) {
+      _log_('generateMinutes_FEIL', e.message);
+      return { ok: false, message: `En feil oppstod under generering av referat: ${e.message}` };
+    }
+  }
+
   global.uiBootstrap = uiBootstrap;
   global.upsertMeeting = upsertMeeting;
   global.listMeetings_ = listMeetings_;
@@ -526,4 +578,5 @@
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
   global.getAiAssistance = getAiAssistance;
+  global.generateMinutes = generateMinutes;
 })(this);

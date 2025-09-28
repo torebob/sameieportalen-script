@@ -113,36 +113,116 @@
       google.script.run.withSuccessHandler(_=>{ toast('Stemme registrert'); loadList(); })
         .withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).castVote(sakId, val);
     }
-    function renderList(items){
+    function renderList(items) {
       el('#moteId').textContent = MOTE_ID;
-      const list = el('#list'); list.innerHTML='';
-      if (!items || !items.length){ list.innerHTML='<div class="muted">Ingen saker ennå – legg til i venstre panel.</div>'; return; }
-      items.forEach(it=>{
-        const wrap = document.createElement('div'); wrap.className='item';
-        wrap.innerHTML = `
-          <div class="title">${escapeHtml(it.saksnr || '')} – ${escapeHtml(it.tittel || '')} <span class="badge">${escapeHtml(it.status || 'Planlagt')}</span></div>
-          <div class="muted">Foreslått av: ${escapeHtml(it.forslagAv || '(ukjent)')} ${it.gdprNote ? ' • ' + escapeHtml(it.gdprNote) : ''}</div>
-          ${it.bakgrunn ? '<div class="comment"><strong>Bakgrunn</strong><br>'+escapeHtml(it.bakgrunn)+'</div>' : ''}
-          ${it.forslagVedtak ? '<div class="comment"><strong>Forslag til vedtak</strong><br>'+escapeHtml(it.forslagVedtak)+'</div>' : ''}
-          <div class="stack">
-            <button class="btn" onclick='window._edit(${JSON.stringify(it).replace(/'/g,"&#39;")})'>Rediger</button>
-          </div>
-          <div class="comment"><strong>Kommentar (før møtet)</strong>
-            <div class="col"><input id="c_PRE_${it.sakId}" placeholder="Skriv innspill…"><button class="btn" onclick="addComment('${it.sakId}','PRE')">Legg til</button></div>
-          </div>
-          <div class="comment"><strong>Kommentar (under møtet)</strong>
-            <div class="col"><input id="c_MOTE_${it.sakId}" placeholder="Notat i møte…"><button class="btn" onclick="addComment('${it.sakId}','MOTE')">Legg til</button></div>
-          </div>
-          <div class="vote"><span class="muted">Stemme:</span>
-            <button class="btn green" onclick="vote('${it.sakId}','JA')">JA</button>
-            <button class="btn red" onclick="vote('${it.sakId}','NEI')">NEI</button>
-            <button class="btn gray" onclick="vote('${it.sakId}','BLANK')">BLANK</button>
-          </div>
-        `;
-        list.appendChild(wrap);
+      const list = el('#list');
+      list.innerHTML = ''; // Clear previous content
+
+      if (!items || !items.length) {
+          const emptyMsg = document.createElement('div');
+          emptyMsg.className = 'muted';
+          emptyMsg.textContent = 'Ingen saker ennå – legg til i venstre panel.';
+          list.appendChild(emptyMsg);
+          return;
+      }
+
+      items.forEach(it => {
+          const wrap = document.createElement('div');
+          wrap.className = 'item';
+
+          const title = document.createElement('div');
+          title.className = 'title';
+          // Using innerHTML here is safe because all dynamic parts are escaped.
+          title.innerHTML = `${escapeHtml(it.saksnr || '')} – ${escapeHtml(it.tittel || '')} <span class="badge">${escapeHtml(it.status || 'Planlagt')}</span>`;
+          wrap.appendChild(title);
+
+          const muted = document.createElement('div');
+          muted.className = 'muted';
+          muted.textContent = `Foreslått av: ${escapeHtml(it.forslagAv || '(ukjent)')}`;
+          if (it.gdprNote) {
+              muted.textContent += ` • ${escapeHtml(it.gdprNote)}`;
+          }
+          wrap.appendChild(muted);
+
+          if (it.bakgrunn) {
+              const bakgrunn = document.createElement('div');
+              bakgrunn.className = 'comment';
+              // Using innerHTML is safe because content is escaped.
+              bakgrunn.innerHTML = `<strong>Bakgrunn</strong><br>${escapeHtml(it.bakgrunn)}`;
+              wrap.appendChild(bakgrunn);
+          }
+
+          if (it.forslagVedtak) {
+              const forslag = document.createElement('div');
+              forslag.className = 'comment';
+              // Using innerHTML is safe because content is escaped.
+              forslag.innerHTML = `<strong>Forslag til vedtak</strong><br>${escapeHtml(it.forslagVedtak)}`;
+              wrap.appendChild(forslag);
+          }
+
+          const stack = document.createElement('div');
+          stack.className = 'stack';
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn';
+          editBtn.textContent = 'Rediger';
+          editBtn.addEventListener('click', () => edit(it)); // The fix: Pass object directly
+          stack.appendChild(editBtn);
+          wrap.appendChild(stack);
+
+          // Helper to create comment boxes
+          const createCommentBox = (fase, titleText) => {
+              const commentDiv = document.createElement('div');
+              commentDiv.className = 'comment';
+
+              const strong = document.createElement('strong');
+              strong.textContent = titleText;
+              commentDiv.appendChild(strong);
+
+              const col = document.createElement('div');
+              col.className = 'col';
+
+              const input = document.createElement('input');
+              input.id = `c_${fase}_${it.sakId}`;
+              input.placeholder = 'Skriv innspill…';
+              col.appendChild(input);
+
+              const addBtn = document.createElement('button');
+              addBtn.className = 'btn';
+              addBtn.textContent = 'Legg til';
+              addBtn.addEventListener('click', () => addComment(it.sakId, fase));
+              col.appendChild(addBtn);
+
+              commentDiv.appendChild(col);
+              return commentDiv;
+          };
+
+          wrap.appendChild(createCommentBox('PRE', 'Kommentar (før møtet)'));
+          wrap.appendChild(createCommentBox('MOTE', 'Kommentar (under møtet)'));
+
+          const voteDiv = document.createElement('div');
+          voteDiv.className = 'vote';
+
+          const voteLabel = document.createElement('span');
+          voteLabel.className = 'muted';
+          voteLabel.textContent = 'Stemme:';
+          voteDiv.appendChild(voteLabel);
+
+          const createVoteBtn = (text, className, value) => {
+              const btn = document.createElement('button');
+              btn.className = `btn ${className}`;
+              btn.textContent = text;
+              btn.addEventListener('click', () => vote(it.sakId, value));
+              return btn;
+          };
+
+          voteDiv.appendChild(createVoteBtn('JA', 'green', 'JA'));
+          voteDiv.appendChild(createVoteBtn('NEI', 'red', 'NEI'));
+          voteDiv.appendChild(createVoteBtn('BLANK', 'gray', 'BLANK'));
+          wrap.appendChild(voteDiv);
+
+          list.appendChild(wrap);
       });
     }
-    window._edit = edit;
 
     document.addEventListener('DOMContentLoaded', ()=>{
       el('#btnSave').addEventListener('click', save);

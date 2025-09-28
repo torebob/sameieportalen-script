@@ -57,6 +57,15 @@
       <div class="stack">
         <button id="btnSave" class="btn primary">Lagre sak</button>
         <button id="btnNew" class="btn">Nullstill</button>
+        <button id="btnAi" class="btn gray">🤖 AI-assistent</button>
+      </div>
+
+      <div id="ai-container" style="display:none; margin-top: 16px;">
+        <div class="stack">
+          <button id="btnAiSummarize" class="btn">Oppsummer</button>
+          <button id="btnAiTasks" class="btn">Foreslå oppgaver</button>
+        </div>
+        <div id="ai-output" class="comment" style="margin-top: 12px; min-height: 80px;"></div>
       </div>
       <div style="margin-top:10px" class="muted">Møte: <span id="moteId"></span></div>
     </div>
@@ -224,12 +233,57 @@
       });
     }
 
+    function callAi(mode) {
+      const tittel = el('#tittel').value;
+      const bakgrunn = el('#bakgrunn').value;
+      const vedtak = el('#vedtak').value;
+      const output = el('#ai-output');
+
+      const text = `Tittel: ${tittel}\n\nBakgrunn: ${bakgrunn}\n\nForslag til vedtak: ${vedtak}`;
+
+      if (text.length < 50) {
+        output.textContent = 'Vennligst skriv mer innhold i saken før du bruker AI-assistenten.';
+        return;
+      }
+
+      output.textContent = 'Tenker...';
+
+      google.script.run
+        .withSuccessHandler(res => {
+          output.innerHTML = res.replace(/\n/g, '<br>');
+        })
+        .withFailureHandler(err => {
+          output.textContent = 'En feil oppstod: ' + err.message;
+        })
+        .getAiAssistance(text, mode);
+    }
+
     document.addEventListener('DOMContentLoaded', ()=>{
       el('#btnSave').addEventListener('click', save);
       el('#btnNew').addEventListener('click', clearForm);
       el('#btnReload').addEventListener('click', loadList);
+
+      el('#btnAi').addEventListener('click', () => {
+        const container = el('#ai-container');
+        container.style.display = container.style.display === 'none' ? 'block' : 'none';
+      });
+
+      el('#btnAiSummarize').addEventListener('click', () => callAi('summarize'));
+      el('#btnAiTasks').addEventListener('click', () => callAi('tasks'));
+
       loadList();
     });
+
+    // Helper function to escape HTML, in case it's not defined elsewhere
+    function escapeHtml(unsafe) {
+      if (typeof unsafe !== 'string') return '';
+      return unsafe
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+    }
   </script>
 </body>
 </html>

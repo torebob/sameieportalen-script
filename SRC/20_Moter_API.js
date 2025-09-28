@@ -462,6 +462,64 @@
   global.listInnspill = listInnspill;
   global.castVote = castVote;
   global.getVoteSummary = getVoteSummary;
+  function getAiAssistance(text, mode) {
+    try {
+      const API_KEY = PROPS.getProperty('AI_API_KEY');
+      if (!API_KEY) {
+        return 'AI API-nøkkel er ikke konfigurert. Vennligst kontakt en administrator.';
+      }
+
+      const API_URL = 'https://api.openai.com/v1/completions'; // Placeholder URL
+
+      let prompt = '';
+      if (mode === 'summarize') {
+        prompt = `Oppsummer følgende møtesak på en konsis måte (maks 3-4 setninger):\n\n${text}`;
+      } else if (mode === 'tasks') {
+        prompt = `Basert på følgende møtesak, lag en punktliste med konkrete oppgaver som må gjøres. Inkluder hvem som kan være ansvarlig hvis det er nevnt. Hvis ingen oppgaver virker nødvendige, svar "Ingen åpenbare oppgaver".\n\n${text}`;
+      } else {
+        return 'Ugyldig AI-modus.';
+      }
+
+      const payload = {
+        model: 'text-davinci-003', // Placeholder model
+        prompt: prompt,
+        max_tokens: 150,
+        temperature: 0.5,
+      };
+
+      const options = {
+        method: 'post',
+        contentType: 'application/json',
+        headers: {
+          'Authorization': 'Bearer ' + API_KEY,
+        },
+        payload: JSON.stringify(payload),
+      };
+
+      const response = UrlFetchApp.fetch(API_URL, options);
+      const jsonResponse = JSON.parse(response.getContentText());
+      const aiText = jsonResponse.choices && jsonResponse.choices[0] && jsonResponse.choices[0].text;
+
+      return aiText ? aiText.trim() : 'Fikk ikke noe svar fra AI-tjenesten.';
+
+    } catch (e) {
+      _log_('AI_FEIL', e.message);
+      return `En feil oppstod under kall til AI-tjenesten: ${e.message}`;
+    }
+  }
+
+  global.uiBootstrap = uiBootstrap;
+  global.upsertMeeting = upsertMeeting;
+  global.listMeetings_ = listMeetings_;
+  global.newAgendaItem = newAgendaItem;
+  global.saveAgenda = saveAgenda;
+  global.listAgenda = listAgenda;
+  global.deleteAgendaItem = deleteAgendaItem;
+  global.appendInnspill = appendInnspill;
+  global.listInnspill = listInnspill;
+  global.castVote = castVote;
+  global.getVoteSummary = getVoteSummary;
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
+  global.getAiAssistance = getAiAssistance;
 })(this);

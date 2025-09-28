@@ -38,6 +38,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Møteoversikt & Protokoller</title>
   <link rel="stylesheet" href="styles/moteoversikt.css">
+  <style>
+    .task-link-container {
+        margin-top: 12px;
+        padding: 10px;
+        background-color: #f0f8ff; /* AliceBlue */
+        border: 1px solid #d4e8ff;
+        border-radius: 6px;
+        display: none; /* Skjult som standard */
+    }
+    .task-link-container.visible {
+        display: block;
+    }
+    .task-link-container a {
+        text-decoration: none;
+        color: #0056b3;
+        font-weight: bold;
+    }
+    .task-link-container a:hover {
+        text-decoration: underline;
+    }
+  </style>
 </head>
 <body>
 <div class="wrap">
@@ -157,6 +178,11 @@
       </div>
     </div>
 
+    <!-- MM.4.6 Kobling til oppgave -->
+    <div id="linkedTask" class="task-link-container">
+      Koblet til oppgave: <a href="#" target="_blank" rel="noopener noreferrer"></a>
+    </div>
+
     <label style="margin-top:12px">Innspill</label>
     <div class="hint" id="innspillFrom">Fra: —</div>
     <textarea id="innspillText" placeholder="Skriv innspill for saken …"></textarea>
@@ -199,6 +225,10 @@
   const LOCKED_STATUSES = ['Protokoll under godkjenning','Protokoll godkjent','Arkivert'];
   let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false };
 
+  function escapeHtml(unsafe) {
+    if (typeof unsafe !== 'string') return '';
+    return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
   function setStatus(msg){ $('#saveStatus').textContent = msg||''; }
   function fmtDate(d){ try{ return new Date(d).toLocaleDateString('no-NO'); }catch(_){ return ''; } }
   function toIsoDate(val){
@@ -347,6 +377,18 @@
       $('#innspillText').value = '';
       $('#forslagText').value = s.forslag||'';
       $('#vedtakText').value = s.vedtak||'';
+
+      // MM.4.6: Vis koblet oppgave hvis den finnes
+      const taskDiv = $('#linkedTask');
+      if (s.kobletOppgave && s.kobletOppgave.id) {
+        const link = taskDiv.querySelector('a');
+        link.href = s.kobletOppgave.link || '#';
+        link.textContent = escapeHtml(s.kobletOppgave.tittel || `Oppgave #${s.kobletOppgave.id}`);
+        taskDiv.classList.add('visible');
+      } else {
+        taskDiv.classList.remove('visible');
+      }
+
       startPolling();
       if (state.sakId){
         if (google.script.run.listInnspill){
@@ -432,6 +474,7 @@
     state.sakId=null; $('#saksnr').value=''; $('#sakTittel').value='';
     $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
     $('#moveWrap').style.display='none';
+    $('#linkedTask').classList.remove('visible'); // MM.4.6: Skjul oppgavelenke
   }
 
   // Video/Chat Actions

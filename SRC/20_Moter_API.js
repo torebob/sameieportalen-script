@@ -7,10 +7,11 @@
 
 ((global) => {
   const PROPS = PropertiesService.getScriptProperties();
-  const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_STEMMER, BOARD } = SHEETS;
+  const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_SAKSPAPIRER, MOTE_STEMMER, BOARD } = SHEETS;
 
   const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts'];
   const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslag', 'vedtak', 'created_ts', 'updated_ts'];
+  const SAKSPAPIRER_HEADERS = ['id', 'mote_id', 'sak_id', 'dokumentnavn', 'drive_url', 'fil_id', 'opplastet_av', 'opplastet_ts'];
   const INNSPILL_HEADERS = ['sak_id', 'ts', 'from', 'text'];
   const STEMMER_HEADERS = ['vote_id', 'sak_id', 'mote_id', 'email', 'name', 'vote', 'ts'];
 
@@ -424,6 +425,118 @@
     }, { JA: 0, NEI: 0, BLANK: 0 });
   };
 
+  const getOrCreateMeetingFolder_ = (moteId) => {
+    // Helper to get or create a dedicated folder for meeting documents in Drive.
+    // NOTE: The root folder ID must be set as a script property.
+    const rootFolderId = PROPS.getProperty('MEETING_DOCS_ROOT_FOLDER_ID');
+    if (!rootFolderId) {
+      // For first-time setup, create a root folder. This ID should then be stored.
+      const rootFolder = DriveApp.createFolder('Sameieportalen Møtedokumenter');
+      PROPS.setProperty('MEETING_DOCS_ROOT_FOLDER_ID', rootFolder.getId());
+      Logger.log(`Created root folder for meeting documents. ID: ${rootFolder.getId()}`);
+      return rootFolder.createFolder(moteId);
+    }
+    const rootFolder = DriveApp.getFolderById(rootFolderId);
+    const subFolders = rootFolder.getFoldersByName(moteId);
+    return subFolders.hasNext() ? subFolders.next() : rootFolder.createFolder(moteId);
+  };
+
+  function addMeetingDocument(moteId, fileData, fileName) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(15000);
+    try {
+      requirePermission('MANAGE_MEETINGS', 'Administrere møter');
+      const { email } = _getCurrentUser_();
+
+      const folder = getOrCreateMeetingFolder_(moteId);
+      const contentType = fileData.substring(5, fileData.indexOf(';'));
+      const bytes = Utilities.base64Decode(fileData.substr(fileData.indexOf('base64,') + 7));
+      const blob = Utilities.newBlob(bytes, contentType, fileName);
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+      const sh = _ensureSheet_(MOTE_SAKSPAPIRER, SAKSPAPIRER_HEADERS);
+      const id = `DOK-${Utilities.getUuid().slice(0, 8)}`;
+      const now = new Date();
+
+      sh.appendRow([
+        id,
+        moteId,
+        null, // sak_id is not used for now, can be linked later
+        fileName,
+        file.getUrl(),
+        file.getId(),
+        email,
+        now
+      ]);
+
+      Indexer.set(MOTE_SAKSPAPIRER, 'id', id, sh.getLastRow());
+
+      _log_('Sakspapir', `Lastet opp ${fileName} for møte ${moteId}`);
+      return { ok: true, id, url: file.getUrl(), fileName, message: 'Dokument lastet opp.' };
+    } catch (e) {
+      _log_('Sakspapir_FEIL', e.message);
+      return { ok: false, message: `Opplasting feilet: ${e.message}` };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  const listMeetingDocuments = (moteId) => {
+    const sh = _ensureSheet_(MOTE_SAKSPAPIRER, SAKSPAPIRER_HEADERS);
+    const last = sh.getLastRow();
+    if (last < 2) return [];
+
+    const data = sh.getRange(2, 1, last - 1, sh.getLastColumn()).getValues();
+    const H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    const i = H.reduce((acc, h, i) => ({ ...acc, [h]: i }), {});
+
+    return data
+      .filter(r => r[i.mote_id] === moteId)
+      .map(r => ({
+        id: r[i.id],
+        moteId: r[i.mote_id],
+        dokumentnavn: r[i.dokumentnavn],
+        drive_url: r[i.drive_url],
+        opplastet_av: r[i.opplastet_av],
+        opplastet_ts: r[i.opplastet_ts]
+      }))
+      .sort((a, b) => (a.opplastet_ts?.getTime() || 0) - (b.opplastet_ts?.getTime() || 0));
+  };
+
+  function deleteMeetingDocument(documentId) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(15000);
+    try {
+      requirePermission('MANAGE_MEETINGS', 'Administrere møter');
+      const sh = _ensureSheet_(MOTE_SAKSPAPIRER, SAKSPAPIRER_HEADERS);
+      const index = Indexer.get(MOTE_SAKSPAPIRER, SAKSPAPIRER_HEADERS, 'id');
+      const rowNum = index[documentId];
+      if (!rowNum) return { ok: false, message: 'Dokument ikke funnet.' };
+
+      const fileId = sh.getRange(rowNum, SAKSPAPIRER_HEADERS.indexOf('fil_id') + 1).getValue();
+      if (fileId) {
+        try {
+          const file = DriveApp.getFileById(fileId);
+          file.setTrashed(true);
+        } catch (e) {
+          _log_('Sakspapir_Slett_FEIL', `Kunne ikke slette fil ${fileId}: ${e.message}`);
+        }
+      }
+
+      sh.deleteRow(rowNum);
+      // Rebuild index after deletion
+      Indexer.rebuild(MOTE_SAKSPAPIRER, SAKSPAPIRER_HEADERS, 'id');
+
+      _log_('Sakspapir', `Slettet dokument ${documentId}`);
+      return { ok: true, message: 'Dokument slettet.' };
+    } catch (e) {
+      _log_('Sakspapir_Slett_FEIL', e.message);
+      return { ok: false, message: e.message };
+    } finally {
+      lock.releaseLock();
+    }
+  }
   const rtServerNow = () => ({ now: new Date().toISOString() });
   
   function rtGetChanges(moteId, sinceISO) {
@@ -526,4 +639,9 @@
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
   global.getAiAssistance = getAiAssistance;
+
+  // Eksponer dokumentfunksjoner
+  global.addMeetingDocument = addMeetingDocument;
+  global.listMeetingDocuments = listMeetingDocuments;
+  global.deleteMeetingDocument = deleteMeetingDocument;
 })(this);

@@ -166,6 +166,18 @@
       </div>
     </div>
   </div>
+
+  <!-- SAKSPAPIRER / VEDLEGG -->
+  <div class="card" id="documentsCard">
+    <div class="toolbar" style="justify-content:space-between">
+      <h3 style="margin:0">Sakspapirer</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="file" id="fileUpload" style="display:none" />
+        <button class="btn success" id="btnUpload" title="Last opp dokument">Last opp fil</button>
+      </div>
+    </div>
+    <ul id="documentList" class="list"><li class="hint">Ingen dokumenter lastet opp.</li></ul>
+  </div>
 </div>
 
 <script>
@@ -186,8 +198,8 @@
   const isLocked = st => !!st && LOCKED_STATUSES.includes(String(st).trim());
 
   function applyLockUI(locked){
-    const rootA = $('#agendaCard'), rootM = $('#meetingCard');
-    [rootA, rootM].forEach(root=>{
+    const rootA = $('#agendaCard'), rootM = $('#meetingCard'), rootD = $('#documentsCard');
+    [rootA, rootM, rootD].forEach(root=>{
       if (!root) return;
       root.classList.toggle('locked', !!locked);
       root.querySelectorAll('input,textarea,select').forEach(el => {
@@ -282,6 +294,46 @@
         loadMoveTargets();
       }
     }).listAgenda(state.moteId);
+
+    // Load documents
+    if (google.script.run.listMeetingDocuments) {
+      google.script.run.withSuccessHandler(drawDocuments).listMeetingDocuments(state.moteId);
+    }
+  }
+
+  function drawDocuments(docs) {
+    const ul = $('#documentList');
+    ul.innerHTML = '';
+    if (!docs || !docs.length) {
+      ul.innerHTML = '<li class="hint">Ingen dokumenter lastet opp.</li>';
+      return;
+    }
+    const isMeetLocked = isLocked(state.meetingStatus);
+    docs.forEach(doc => {
+      const li = document.createElement('li');
+      li.innerHTML = `<a href="${doc.drive_url}" target="_blank">${escapeHtml(doc.dokumentnavn)}</a>
+                      <button class="btn danger small" ${isMeetLocked ? 'disabled' : ''} onclick="deleteDocument('${doc.id}')">Slett</button>`;
+      ul.appendChild(li);
+    });
+  }
+
+  function deleteDocument(docId) {
+    if (!docId) return;
+    if (!confirm('Er du sikker på at du vil slette dette dokumentet?')) return;
+    setStatus('Sletter dokument...');
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res.ok) {
+          setStatus('Dokument slettet.');
+          if (state.moteId) {
+            google.script.run.withSuccessHandler(drawDocuments).listMeetingDocuments(state.moteId);
+          }
+        } else {
+          setStatus(res.message || 'Kunne ikke slette dokument.');
+        }
+      })
+      .withFailureHandler(err => setStatus(err.message || 'En feil oppstod.'))
+      .deleteMeetingDocument(docId);
   }
 
   function drawInnspill(items){
@@ -500,6 +552,41 @@
     }).withFailureHandler(e=>{
       setStatus(e?.message || 'Feil ved flytting.');
     }).moveAgendaToMeeting(state.sakId, toId);
+  };
+
+  // File upload
+  $('#btnUpload').onclick = () => {
+    if (!state.moteId) {
+      setStatus('Lagre eller velg et møte først.');
+      return;
+    }
+    $('#fileUpload').click();
+  };
+
+  $('#fileUpload').onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setStatus('Laster opp fil...');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const fileData = event.target.result;
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.ok) {
+            setStatus('Dokument lastet opp.');
+            if (state.moteId) {
+              google.script.run.withSuccessHandler(drawDocuments).listMeetingDocuments(state.moteId);
+            }
+          } else {
+            setStatus(res.message || 'Kunne ikke laste opp fil.');
+          }
+        })
+        .withFailureHandler(err => setStatus(err.message || 'En feil oppstod.'))
+        .addMeetingDocument(state.moteId, fileData, file.name);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // Clear input
   };
 
   // ------- NESTEN-SANNTID POLLING -------

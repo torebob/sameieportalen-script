@@ -11,6 +11,7 @@ const UI_FILES = {
   MOTE_SAK_EDITOR: { file: '31_MoteSakerEditor.html', title: 'Møtesaker – Editor', w: 1100, h: 760 },
   QNA_AGENT:       { file: '40_QnA_Agent.html', title: 'Spørsmål & Svar Agent', w: 900, h: 700 },
   QNA_SETTINGS:    { file: '41_Settings.html', title: 'Q&A Innstillinger', w: 800, h: 500 },
+  DOKUMENT_VERSJONERING: { file: '42_Dokumentversjonering.html', title: 'Dokumentversjonering', w: 850, h: 700 },
   // ... add all your other UI files here
 };
 
@@ -51,7 +52,7 @@ function dashOpen(key) {
   Logger.info(functionName, `User opening module: ${key}`, { user: user.email });
 
   try {
-    const ADMIN_ONLY_MODULES = ['MOTE_SAK_EDITOR', 'EIERSKIFTE', 'QNA_SETTINGS'];
+    const ADMIN_ONLY_MODULES = ['MOTE_SAK_EDITOR', 'EIERSKIFTE', 'QNA_SETTINGS', 'DOKUMENT_VERSJONERING'];
     if (ADMIN_ONLY_MODULES.includes(key) && !user.isAdmin) {
       throw new Error(`Du mangler ADMIN-rettigheter for å åpne "${key}".`);
     }
@@ -73,4 +74,12 @@ function dashOpen(key) {
     Logger.error(functionName, `Failed to open module: ${key}`, { errorMessage: e.message });
     throw e; // Re-throw to be caught by the frontend's withFailureHandler
   }
+}
+
+/**
+ * Viser siden for dokumentversjonering.
+ * Kalles fra menyen.
+ */
+function showDocVersioning() {
+  dashOpen('DOKUMENT_VERSJONERING');
 }

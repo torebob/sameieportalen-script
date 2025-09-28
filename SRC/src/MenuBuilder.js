@@ -132,6 +132,7 @@ var MENU_CONFIG = {
   adminMenu: {
     name: 'Admin',
     items: [
+      { id: 'docVersioning', text: 'Dokumentversjonering',       function: 'showDocVersioning',         required: false, permission: 'admin', description: 'Versjonskontroll for styringsdokumenter', separator: 'after' },
       // RSP (skjules automatisk hvis ikke tilgjengelig)
       { id: 'rspWizard',   text: 'Krav Sync – Førstegangsoppsett', function: 'rsp_menu_firstRunWizard', required: false, permission: 'admin', description: 'Wizard for kravdokument og synk (auto-seed/struktur)' },
       { id: 'rspValidate', text: 'Krav Sync – Valider',            function: 'rsp_menu_validate',       required: false, permission: 'admin', description: 'Sjekk systemtilstand før synk' },

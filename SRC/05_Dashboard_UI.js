@@ -39,16 +39,6 @@
     if (missing.length > 0) throw new Error(`Missing required dependencies: ${missing.join(', ')}`);
   };
 
-  const _escape_ = (value) => {
-    if (value == null) return '';
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  };
-
   const _withRetry_ = (operation, maxRetries = DASHBOARD_CONFIG.MAX_RETRIES, delayMs = 100) => {
     let lastError;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -106,84 +96,37 @@
     return !!userInfo?.email && whitelist.includes(userInfo.email);
   };
 
-  const _generateCSS_ = () => `
-    <style>
-      :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--warning:#f59e0b;--danger:#ef4444}
-      *{box-sizing:border-box} body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,system-ui,sans-serif;background:var(--bg);color:#fff;line-height:1.5}
-      .btn{border:1px solid var(--border);background:var(--card);color:#e2e8f0;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s ease;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
-      .btn:hover:not(:disabled){background:var(--primary);border-color:var(--primary);transform:translateY(-1px)}
-      .btn:disabled{opacity:.5;cursor:not-allowed}
-    </style>`;
-
-  const _generateJavaScript_ = () => `
-    <script>
-      const Dashboard = {
-        init() { this.setupEventListeners(); },
-        setupEventListeners() {
-          document.querySelectorAll('.admin-btn').forEach(btn => {
-            btn.addEventListener('click', e => this.handleAdminAction(e.currentTarget.dataset.action, e.currentTarget));
-          });
-        },
-        handleAdminAction(action, button) {
-          if (!action || button.disabled) return;
-          const originalText = button.textContent;
-          button.disabled = true;
-          button.textContent = 'Arbeider...';
-          google.script.run
-            .withSuccessHandler(msg => {
-              button.disabled = false;
-              button.textContent = originalText;
-              this.showNotification(msg || 'Utført!', 'success');
-            })
-            .withFailureHandler(error => {
-              button.disabled = false;
-              button.textContent = originalText;
-              this.showNotification('Feil: ' + (error?.message || error), 'error');
-              console.error(error);
-            })[action]();
-        },
-        showNotification(message, type = 'info') {
-          const el = document.createElement('div');
-          el.textContent = message;
-          el.style.cssText = 'position:fixed;top:20px;right:20px;background:var(--' + (type === 'success' ? 'success' : type === 'error' ? 'danger' : 'primary') + ');color:#fff;padding:12px 16px;border-radius:8px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.3)';
-          document.body.appendChild(el);
-          setTimeout(() => el.remove(), 3000);
-        }
-      };
-      document.addEventListener('DOMContentLoaded', () => Dashboard.init());
-    </script>`;
-
-  const _generateAdminControls_ = (isAdmin) => {
-    if (!isAdmin) return '<span class="badge">Ingen admin-tilgang</span>';
-    const actions = [
-      { action: 'runAllChecks', label: 'Kjør systemsjekk', class: 'success' },
-      { action: 'adminEnableDevTools', label: 'Aktiver utviklerverktøy' },
-      { action: 'adminDisableDevTools', label: 'Deaktiver utviklerverktøy' },
-      { action: 'adminLogDummyAction', label: 'Demo: Logg admin-hendelse' }
-    ];
-    return `<div class="btn-group">${actions.map(a => `<button class="btn admin-btn ${a.class || ''}" data-action="${a.action}">${a.label}</button>`).join('')}</div>`;
-  };
-
   const _openDashboardImpl_ = () => {
     const userInfo = getCurrentUserInfo();
     const isAdmin = _isAdminUser_(userInfo);
     const appName = globalThis.APP?.NAME || 'Sameieportalen';
-    const appVersion = globalThis.APP?.VERSION || '3.0.0';
 
-    const html = `
-      <!DOCTYPE html><html lang="no"><head>
-        <meta charset="utf-8"><title>${_escape_(appName)} Dashboard</title>
-        ${_generateCSS_()}
-      </head><body>
-        <header><h1>Dashboard</h1></header>
-        <main>
-          <p>Innlogget som: ${_escape_(userInfo.email || 'Ukjent')}</p>
-          ${_generateAdminControls_(isAdmin)}
-        </main>
-        ${_generateJavaScript_()}
-      </body></html>`;
+    // Fetch and parse admin buttons from config, with a hardcoded fallback.
+    const adminButtonsConfig = _getConfigValue_(
+      'DASHBOARD_ADMIN_BUTTONS',
+      'Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools'
+    );
 
-    const output = HtmlService.createHtmlOutput(html).setTitle(`${appName} – Dashboard`).setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    const adminButtons = adminButtonsConfig.split(',').map(s => {
+        const parts = s.split('|');
+        if (parts.length < 2) return null;
+        return {
+            label: parts[0].trim(),
+            action: parts[1].trim(),
+            class: parts[2] ? parts[2].trim() : ''
+        };
+    }).filter(Boolean);
+
+    const template = HtmlService.createTemplateFromFile('SRC/37_Dashboard.html');
+    template.userInfo = userInfo;
+    template.isAdmin = isAdmin;
+    template.appName = appName;
+    template.adminButtons = adminButtons;
+
+    const output = template.evaluate()
+      .setTitle(`${appName} – Dashboard`)
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+
     _ui()?.showSidebar(output);
     return output;
   };

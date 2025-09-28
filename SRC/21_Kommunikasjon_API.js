@@ -76,11 +76,11 @@ function sendOppslag(payload) {
       }
     });
 
-    _safeLog_('Kommunikasjon', `Sendte oppslag "${oppslagId}" til ${recipients.length} mottakere.`);
+    safeLog('Kommunikasjon', `Sendte oppslag "${oppslagId}" til ${recipients.length} mottakere.`);
     return { ok: true, message: `Oppslag sendt til ${recipients.length} mottakere.` };
 
   } catch (e) {
-    _safeLog_('Kommunikasjon_Feil', e.message);
+    safeLog('Kommunikasjon_Feil', e.message);
     throw e;
   }
 }

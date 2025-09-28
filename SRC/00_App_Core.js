@@ -49,14 +49,14 @@ globalThis.UI_FILES = Object.freeze({
 });
 
 /*
- * MERK: UI-hjelpere (_ui, _safeLog_, _alert_, _toast_) er flyttet til
+ * MERK: UI-hjelpere (getUi, safeLog, showAlert, showToast) er flyttet til
  * den sentrale verktøyfilen 00b_Utils.js for å unngå duplisering.
  */
 
 /* ---------- Generisk, sikker UI-åpner ---------- */
 function _openHtmlFromMap_(key, target = 'modal', params = {}) {
   try {
-    const ui = _ui();
+    const ui = getUi();
     if (!ui) {
       Logger.log(`UI not available for key: ${key}`);
       return;
@@ -91,13 +91,13 @@ function _openHtmlFromMap_(key, target = 'modal', params = {}) {
       ui.showModalDialog(output, cfg.title || APP.NAME);
     }
 
-    _safeLog_('UI_OPEN', `Åpnet ${key}`, { file: cfg.file, target });
+    safeLog('UI_OPEN', `Åpnet ${key}`, { file: cfg.file, target });
     return output;
   } catch (e) {
     const errorMessage = e?.message || String(e);
     Logger.log(`Failed to open UI (${key}): ${errorMessage}`);
-    _safeLog_('UI_OPEN_FAIL', `Feil ved åpning av ${key}`, { error: errorMessage });
-    _alert_(`Kunne ikke åpne ${key}: ${errorMessage}`, 'Feil');
+    safeLog('UI_OPEN_FAIL', `Feil ved åpning av ${key}`, { error: errorMessage });
+    showAlert(`Kunne ikke åpne ${key}: ${errorMessage}`, 'Feil');
   }
 }
 
@@ -121,7 +121,7 @@ function openDashboardSidebar() {
  */
 function openDashboardAuto() {
   if (typeof hasPermission === 'function' && !hasPermission('VIEW_USER_DASHBOARD')) {
-    return _alert_('Du har ikke tilgang til Dashbord.', 'Tilgang nektet');
+    return showAlert('Du har ikke tilgang til Dashbord.', 'Tilgang nektet');
   }
   const isAdmin = (typeof hasPermission === 'function' && hasPermission('VIEW_ADMIN_MENU'));
   return isAdmin ? openDashboardSidebar() : openDashboardModal();
@@ -129,7 +129,7 @@ function openDashboardAuto() {
 
 /* ---------- Meny / oppstart ---------- */
 function onOpen(e) {
-  const ui = _ui();
+  const ui = getUi();
   if (!ui) {
     Logger.log('onOpen: UI ikke tilgjengelig (headless).');
     return;
@@ -247,12 +247,12 @@ function onInstall(e) {
 /* ---------- Admin/Dev togglers ---------- */
 function adminEnableDevTools() {
   PROPS.setProperty(PROP_KEYS.DEV_TOOLS, 'true');
-  _toast_('Utvikler-verktøy er PÅ. Last regnearket på nytt for å oppdatere menyen.');
+  showToast('Utvikler-verktøy er PÅ. Last regnearket på nytt for å oppdatere menyen.');
 }
 
 function adminDisableDevTools() {
   PROPS.setProperty(PROP_KEYS.DEV_TOOLS, 'false');
-  _toast_('Utvikler-verktøy er AV. Last regnearket på nytt for å oppdatere menyen.');
+  showToast('Utvikler-verktøy er AV. Last regnearket på nytt for å oppdatere menyen.');
 }
 
 /* ---------- Manglende ÅPNERE (defineres kun hvis de ikke finnes) ---------- */
@@ -290,12 +290,12 @@ function validateUIFiles() {
 function checkUIFilesExist() {
   const missingFiles = validateUIFiles();
   if (missingFiles.length === 0) {
-    _toast_('Alle UI-filer er tilgjengelige.');
+    showToast('Alle UI-filer er tilgjengelige.');
     return true;
   }
 
   Logger.log('Mangler UI-filer: ' + JSON.stringify(missingFiles));
-  const ui = _ui();
+  const ui = getUi();
   const htmlRows = missingFiles.map(m => `<tr><td>${m.key}</td><td>${m.file || '(ukjent)'}</td><td>${m.error}</td></tr>`).join('');
   const output = HtmlService.createHtmlOutput(`
     <style>table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px;text-align:left}th{background:#f6f6f6}</style>
@@ -313,6 +313,6 @@ function runSmokeCheck_() {
   const res = fns.map(fn => ({ fn, ok: typeof globalThis[fn] === 'function' }));
   const allOk = res.every(r => r.ok);
   Logger.log('Smoke check: ' + JSON.stringify(res));
-  _toast_((allOk ? 'OK' : 'Feil i') + ' røyk-test – se Logg.');
+  showToast((allOk ? 'OK' : 'Feil i') + ' røyk-test – se Logg.');
   return res;
 }

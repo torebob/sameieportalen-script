@@ -78,12 +78,12 @@ const EVENT_PROCESSORS = Object.freeze({
 
 const logInfo = (msg) => {
   Logger.log(`INFO: ${msg}`);
-  if (typeof _safeLog_ === 'function') _safeLog_('History', msg);
+  if (typeof safeLog === 'function') safeLog('History', msg);
 };
 
 const logError = (msg) => {
   Logger.log(`ERROR: ${msg}`);
-  if (typeof _safeLog_ === 'function') _safeLog_('HistoryError', msg);
+  if (typeof safeLog === 'function') safeLog('HistoryError', msg);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,29 +173,29 @@ const _makeEvent = ({ ts, type, title = '', desc = '', source = '', link = '', a
 });
 
 function _createEventsFromRow_(row, col, cfg) {
-  const tz = _tz_();
+  const tz = getScriptTimezone();
   const evs = [];
   switch (cfg.type) {
     case EVENT_TYPES.EIERSKAP: {
-      const fraDato = col.fra ? _normalizeDate_(row[col.fra - 1]) : null;
-      const tilDato = col.til ? _normalizeDate_(row[col.til - 1]) : null;
+      const fraDato = col.fra ? normalizeDate(row[col.fra - 1]) : null;
+      const tilDato = col.til ? normalizeDate(row[col.til - 1]) : null;
       const personId = col.personId ? String(row[col.personId - 1] || '').trim() : '';
-      if (fraDato) evs.push(_makeEvent({ ts: fraDato, type: 'Eierskap start', title: personId ? `Ny eier (${personId})` : 'Ny eier', desc: `Eierskap registrert fra ${_fmtDate_(fraDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
-      if (tilDato) evs.push(_makeEvent({ ts: tilDato, type: 'Eierskap slutt', title: personId ? `Eier sluttet (${personId})` : 'Eier sluttet', desc: `Eierskap avsluttet ${_fmtDate_(tilDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
+      if (fraDato) evs.push(_makeEvent({ ts: fraDato, type: 'Eierskap start', title: personId ? `Ny eier (${personId})` : 'Ny eier', desc: `Eierskap registrert fra ${formatDate(fraDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
+      if (tilDato) evs.push(_makeEvent({ ts: tilDato, type: 'Eierskap slutt', title: personId ? `Eier sluttet (${personId})` : 'Eier sluttet', desc: `Eierskap avsluttet ${formatDate(tilDato, tz)}`, source: EVENT_TYPES.EIERSKAP }));
       break;
     }
     case EVENT_TYPES.LEIE: {
-      const leieFra = col.fra ? _normalizeDate_(row[col.fra - 1]) : null;
-      const leieTil = col.til ? _normalizeDate_(row[col.til - 1]) : null;
+      const leieFra = col.fra ? normalizeDate(row[col.fra - 1]) : null;
+      const leieTil = col.til ? normalizeDate(row[col.til - 1]) : null;
       const leietaker = col.personId ? String(row[col.personId - 1] || '').trim() : '';
       const kontrakt = col.kontrakt ? String(row[col.kontrakt - 1] || '') : '';
-      if (leieFra) evs.push(_makeEvent({ ts: leieFra, type: 'Leie start', title: leietaker ? `Leietaker (${leietaker})` : 'Leietaker', desc: `Leieforhold fra ${_fmtDate_(leieFra, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
-      if (leieTil) evs.push(_makeEvent({ ts: leieTil, type: 'Leie slutt', title: leietaker ? `Leietaker sluttet (${leietaker})` : 'Leie avsluttet', desc: `Leieforhold avsluttet ${_fmtDate_(leieTil, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
+      if (leieFra) evs.push(_makeEvent({ ts: leieFra, type: 'Leie start', title: leietaker ? `Leietaker (${leietaker})` : 'Leietaker', desc: `Leieforhold fra ${formatDate(leieFra, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
+      if (leieTil) evs.push(_makeEvent({ ts: leieTil, type: 'Leie slutt', title: leietaker ? `Leietaker sluttet (${leietaker})` : 'Leie avsluttet', desc: `Leieforhold avsluttet ${formatDate(leieTil, tz)}`, source: EVENT_TYPES.LEIE, link: kontrakt }));
       break;
     }
     case EVENT_TYPES.OPPGAVE: {
-      const opprettet = col.opprettet ? _normalizeDate_(row[col.opprettet - 1]) : null;
-      const frist = col.frist ? _normalizeDate_(row[col.frist - 1]) : null;
+      const opprettet = col.opprettet ? normalizeDate(row[col.opprettet - 1]) : null;
+      const frist = col.frist ? normalizeDate(row[col.frist - 1]) : null;
       const kategori = col.kategori ? String(row[col.kategori - 1] || '') : '';
       const tittel = col.tittel ? String(row[col.tittel - 1] || '(uten tittel)') : '(uten tittel)';
       const status = col.status ? String(row[col.status - 1] || '') : '';
@@ -204,7 +204,7 @@ function _createEventsFromRow_(row, col, cfg) {
       if (when) {
         const descParts = [];
         if (kategori && kategori.toLowerCase() !== 'hms') descParts.push(`Kategori ${kategori}`);
-        if (frist) descParts.push(`Frist ${_fmtDate_(frist, tz)}`);
+        if (frist) descParts.push(`Frist ${formatDate(frist, tz)}`);
         if (ansvarlig) descParts.push(`Ansv. ${ansvarlig}`);
         if (status) descParts.push(status);
         const type = kategori.toLowerCase() === 'hms' ? 'HMS' : 'Oppgave';
@@ -213,7 +213,7 @@ function _createEventsFromRow_(row, col, cfg) {
       break;
     }
     case EVENT_TYPES.INNSPILL: {
-      const dato = col.opprettet ? _normalizeDate_(row[col.opprettet - 1]) : null;
+      const dato = col.opprettet ? normalizeDate(row[col.opprettet - 1]) : null;
       const innspillTittel = col.tittel ? String(row[col.tittel - 1] || '(uten tittel)') : '(uten tittel)';
       const innspillStatus = col.status ? String(row[col.status - 1] || '') : '';
       const innspillLink = col.link ? String(row[col.link - 1] || '') : '';
@@ -283,8 +283,8 @@ function _validateSectionNumber_(seksjonsnr) {
 
 function _parseHistoryOptions_(options) {
   return {
-    startDate: options.startDate ? _normalizeDate_(options.startDate) : null,
-    endDate: options.endDate ? _normalizeDate_(options.endDate) : null,
+    startDate: options.startDate ? normalizeDate(options.startDate) : null,
+    endDate: options.endDate ? normalizeDate(options.endDate) : null,
     eventTypes: Array.isArray(options.eventTypes) ? options.eventTypes : null,
     includeAttachments: options.includeAttachments !== false,
     maxResults: Math.max(0, Number(options.maxResults) || MAX_RESULTS_DEFAULT)

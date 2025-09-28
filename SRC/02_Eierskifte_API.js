@@ -37,7 +37,7 @@ function getSeksjonerForForm() {
 // ----------------------------- API (lagring) ---------------------------------
 function processOwnershipForm(payload) {
   const tx = Utilities.getUuid().slice(0, 8);
-  _safeLog_('Transaksjon', `Start eierskifte [${tx}] for seksjon ${payload?.seksjonsnr || 'UKJENT'}`);
+  safeLog('Transaksjon', `Start eierskifte [${tx}] for seksjon ${payload?.seksjonsnr || 'UKJENT'}`);
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -47,7 +47,7 @@ function processOwnershipForm(payload) {
     const allData = _readAllDataForOwnershipChange_(ss);
     const sanitized = _sanitizeAndValidatePayload_(payload, allData);
     _validateOwnershipConsistency_(sanitized, allData);
-    const fraDato = _normalizeDate_(sanitized.fraDato);
+    const fraDato = normalizeDate(sanitized.fraDato);
 
     if (!fraDato) {
       throw new Error('VALIDERING: Ugyldig overtakelsesdato.');
@@ -56,7 +56,7 @@ function processOwnershipForm(payload) {
     const operations = _prepareOwnershipChanges_(sanitized, fraDato, allData);
     _applyOwnershipChanges_(ss, operations, tx);
 
-    _safeLog_('Transaksjon', `Fullført eierskifte [${tx}]`);
+    safeLog('Transaksjon', `Fullført eierskifte [${tx}]`);
     _sendConfirmationEmails_(sanitized, fraDato, allData);
 
     return { ok: true, message: `Eierskifte registrert for seksjon ${sanitized.seksjonsnr}` };
@@ -64,7 +64,7 @@ function processOwnershipForm(payload) {
   } catch (error) {
     const isValidationError = /^VALIDERING:/.test(error.message);
     const userMessage = isValidationError ? error.message : 'En uventet teknisk feil oppstod. Kontakt administrator.';
-    _safeLog_('Transaksjon Feil', `Eierskifte feilet: ${error.message}`);
+    safeLog('Transaksjon Feil', `Eierskifte feilet: ${error.message}`);
     throw new Error(userMessage);
   } finally {
     lock.releaseLock();
@@ -104,7 +104,7 @@ function _validateOwnershipConsistency_(payload, data) {
     throw new Error(`VALIDERING: Flere aktive eierskap funnet for seksjon ${payload.seksjonsnr}. Rydd i data før registrering.`);
   }
 
-  const fraDato = _normalizeDate_(payload.fraDato);
+  const fraDato = normalizeDate(payload.fraDato);
   const latestOwnership = existingOwnerships
     .filter(row => row[M_E.TIL_DATO])
     .sort((a, b) => new Date(b[M_E.TIL_DATO]) - new Date(a[M_E.TIL_DATO]))[0];
@@ -134,7 +134,7 @@ function _prepareOwnershipChanges_(payload, fraDato, data) {
       [M_P.EPOST]: payload.epost,
       [M_P.ROLLE]: 'Eier',
       [M_P.AKTIV]: 'Aktiv',
-      [M_P.OPPRETTET_AV]: _currentEmail_(),
+      [M_P.OPPRETTET_AV]: getCurrentEmail(),
       [M_P.OPPRETTET_DATO]: new Date(),
     };
     ops.push({ type: 'INSERT', sheetName: SHEETS.PERSONER, data: newPersonData });
@@ -162,7 +162,7 @@ function _prepareOwnershipChanges_(payload, fraDato, data) {
 
 function _applyOwnershipChanges_(ss, operations, tx) {
   operations.forEach(op => {
-    _safeLog_('Transaksjon', `[${tx}] ${op.type} → ${op.sheetName}`);
+    safeLog('Transaksjon', `[${tx}] ${op.type} → ${op.sheetName}`);
     const sheet = ss.getSheetByName(op.sheetName);
     if (!sheet) throw new Error(`Mangler ark: ${op.sheetName}`);
 
@@ -182,10 +182,10 @@ function _applyOwnershipChanges_(ss, operations, tx) {
           if (col >= 0) sheet.getRange(idx + 2, col + 1).setValue(val);
         });
       } else {
-        _safeLog_('Transaksjon', `Advarsel: Fant ikke rad for oppdatering (ID=${op.rowId}) i ${op.sheetName}`);
+        safeLog('Transaksjon', `Advarsel: Fant ikke rad for oppdatering (ID=${op.rowId}) i ${op.sheetName}`);
       }
     } else {
-      _safeLog_('Transaksjon', `Ukjent operasjonstype: ${op.type}`);
+      safeLog('Transaksjon', `Ukjent operasjonstype: ${op.type}`);
     }
   });
 }
@@ -195,7 +195,7 @@ function _sendConfirmationEmails_(payload, fraDato, allData) {
   try {
     const config = _getEmailConfig_();
     if (!config.enabled) {
-      _safeLog_('E-post', 'E-postvarsler er deaktivert.');
+      safeLog('E-post', 'E-postvarsler er deaktivert.');
       return;
     }
 
@@ -214,7 +214,7 @@ function _sendConfirmationEmails_(payload, fraDato, allData) {
 
     const recipients = [newOwner.epost, currentOwner?.[M_P.EPOST]].filter(Boolean);
     if (recipients.length === 0) {
-      _safeLog_('E-post', `Ingen gyldige mottakere for seksjon ${payload.seksjonsnr}.`);
+      safeLog('E-post', `Ingen gyldige mottakere for seksjon ${payload.seksjonsnr}.`);
       return;
     }
 
@@ -222,7 +222,7 @@ function _sendConfirmationEmails_(payload, fraDato, allData) {
     _sendEmailWithRetry_(recipients, template, config);
 
   } catch (error) {
-    _safeLog_('E-post Feil', `Klarte ikke sende e-post for seksjon ${payload.seksjonsnr}: ${error.message}`);
+    safeLog('E-post Feil', `Klarte ikke sende e-post for seksjon ${payload.seksjonsnr}: ${error.message}`);
   }
 }
 
@@ -234,7 +234,7 @@ function _buildOwnershipChangeEmailTemplate_(payload, fraDato, newOwner, current
     <p>Dette er en bekreftelse på at eierskifte for <b>seksjon ${payload.seksjonsnr}</b> er registrert.</p>
     <ul>
       <li><b>Ny eier:</b> ${newOwner.navn} (${newOwner.epost})</li>
-      <li><b>Overtakelsesdato:</b> ${Utilities.formatDate(fraDato, _tz_(), 'dd.MM.yyyy')}</li>
+      <li><b>Overtakelsesdato:</b> ${Utilities.formatDate(fraDato, getScriptTimezone(), 'dd.MM.yyyy')}</li>
       ${prevOwnerTxt}
     </ul>
     <p>Med vennlig hilsen<br>Styret</p>`;
@@ -264,10 +264,10 @@ function _sendEmailWithRetry_(recipients, template, config, maxRetries = 3) {
         from: config.fromAddress,
         replyTo: config.replyTo
       });
-      _safeLog_('E-post', `E-post sendt til: ${recipients.join(',')} (forsøk ${attempt})`);
+      safeLog('E-post', `E-post sendt til: ${recipients.join(',')} (forsøk ${attempt})`);
       return;
     } catch (error) {
-      _safeLog_('E-post Feil', `Forsøk ${attempt} feilet: ${error.message}`);
+      safeLog('E-post Feil', `Forsøk ${attempt} feilet: ${error.message}`);
       if (attempt < maxRetries) Utilities.sleep(1000 * attempt);
       else throw error;
     }

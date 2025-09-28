@@ -250,3 +250,82 @@ function handleProtokollApprovalRequest(e) {
     return page(escapeHtml(err.message)).setTitle('En feil oppstod');
   }
 }
+
+
+function initiateBankIDSigning(moteId) {
+  try {
+    requirePermission('SIGN_PROTOCOLS', 'Signere protokoller med BankID');
+
+    if (!moteId) {
+      throw new Error('Mangler Møte-ID for signering.');
+    }
+
+    const mote = _findMoteRow_Protokoll_(moteId);
+    if (!mote) {
+      throw new Error(`Fant ikke møtet med ID "${moteId}" for signering.`);
+    }
+
+    // In a real implementation, this is where you would integrate with a BankID service.
+    // 1. Generate a signing order with the protocol document.
+    // 2. Redirect the user to the BankID signing URL or display a QR code.
+    // 3. Poll for the signing status.
+    // 4. When signed, retrieve the signed document (PAdES).
+    // 5. Store the signed document and update the protocol status.
+
+    const protokollUrlCol = mote.H['Protokoll-URL'];
+    if (protokollUrlCol === -1) {
+      throw new Error('Fant ikke kolonnen "Protokoll-URL" i møte-arket.');
+    }
+
+    const url = mote.sheet.getRange(mote.row, protokollUrlCol + 1).getValue();
+    if (!url) {
+      throw new Error('Protokoll-URL er ikke registrert for dette møtet.');
+    }
+
+    safeLog('BankID_Signering', `Starter BankID-signering for Møte-ID ${moteId} med protokoll ${url}.`);
+
+    return {
+      ok: true,
+      message: `BankID-signering for møte ${moteId} er initiert.`,
+      redirectUrl: `https://sign.bankid.no/some-mock-url-for-${moteId}` // Mock URL
+    };
+
+  } catch (e) {
+    safeLog('BankID_Signering_Feil', `initiateBankIDSigning: ${e.message}`);
+    throw new Error(`Kunne ikke starte BankID-signering: ${e.message}`);
+  }
+}
+
+function finalizeBankIDSigning(moteId) {
+  try {
+    // In a real scenario, we'd also require a token or session validation here.
+    requirePermission('SIGN_PROTOCOLS', 'Signere protokoller med BankID');
+
+    if (!moteId) {
+      throw new Error('Mangler Møte-ID for å fullføre signering.');
+    }
+
+    const mote = _findMoteRow_Protokoll_(moteId);
+    if (!mote) {
+      throw new Error(`Fant ikke møtet med ID "${moteId}" for å fullføre signering.`);
+    }
+
+    if (mote.H['Status'] === -1) {
+      throw new Error('Status-kolonnen er ikke funnet i Møter-arket.');
+    }
+
+    // Update the status to 'Signed'
+    mote.sheet.getRange(mote.row, mote.H['Status'] + 1).setValue('Signert');
+
+    safeLog('BankID_Signering', `Protokoll for Møte-ID ${moteId} er markert som 'Signert'.`);
+
+    return {
+      ok: true,
+      message: `Protokoll for møte ${moteId} er nå markert som signert.`
+    };
+
+  } catch (e) {
+    safeLog('BankID_Fullforing_Feil', `finalizeBankIDSigning: ${e.message}`);
+    throw new Error(`Kunne ikke fullføre signering: ${e.message}`);
+  }
+}

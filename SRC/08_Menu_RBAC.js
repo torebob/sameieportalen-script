@@ -39,7 +39,8 @@
     'MANAGE_MEETINGS': ['Styremedlem', 'Kjernebruker', 'Admin'],
     'SEND_PROTOCOLS': ['Styremedlem', 'Kjernebruker', 'Admin'],
     'GENERATE_REPORTS': ['Styremedlem', 'Kjernebruker', 'Admin'],
-    'VIEW_BUDGET_MENU': ['Styremedlem', 'Kjernebruker', 'Admin']
+    'VIEW_BUDGET_MENU': ['Styremedlem', 'Kjernebruker', 'Admin'],
+    'VIEW_DOCUMENT_ARCHIVE': ['Styremedlem', 'Kjernebruker', 'Admin']
   });
 
   let __RBAC_CACHE = {

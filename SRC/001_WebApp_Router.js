@@ -5,9 +5,9 @@
  * URL-parameteren 'page'. Dette løser konflikten med flere doGet-funksjoner.
  *
  * ENDRINGER v2.0.0:
- *  - Introdusert en handler-mapping for enklere vedlikehold.
- *  - Forbedret logging for ukjente sider og manglende handlere.
- *  - Returnerer en mer informativ feilmelding til brukeren.
+ * - Introdusert en handler-mapping for enklere vedlikehold.
+ * - Forbedret logging for ukjente sider og manglende handlere.
+ * - Returnerer en mer informativ feilmelding til brukeren.
  * ================================================================== */
 
 function doGet(e) {
@@ -25,6 +25,7 @@ function doGet(e) {
       leverandor: renderLeverandorProfilPage, // Rute for leverandørprofil
       leverandorliste: renderLeverandorListePage, // Rute for leverandørliste
       minside: renderMinSidePage, // Rute for Min Side
+      dokumentarkiv: handleDocumentArchiveRequest,
     };
 
     // Hvis ingen side er spesifisert, bruk 'budget' som standard.

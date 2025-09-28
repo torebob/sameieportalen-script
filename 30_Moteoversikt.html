@@ -100,6 +100,11 @@
         <input id="tittel" placeholder="Styremøte september 2025" required />
       </div>
 
+      <div>
+        <label>Deltakere</label>
+        <div id="participants-list" class="participants-list"></div>
+      </div>
+
       <div id="conflictBanner" class="banner" style="display:none">
         Endringer er gjort av en annen bruker. <button class="btn ghost" id="btnReload">Last siste</button>
       </div>
@@ -248,7 +253,26 @@
     state.user = res?.user || null;
     $('#innspillFrom').textContent = 'Fra: ' + (state.user?.email || '—');
     refreshMeetings();
+    // Load board members for participant selection
+    if (google.script.run.getBoardMembers) {
+      google.script.run.withSuccessHandler(drawParticipants).getBoardMembers();
+    }
   }).uiBootstrap();
+
+  function drawParticipants(members) {
+    const list = $('#participants-list');
+    list.innerHTML = '';
+    if (!members || !members.length) {
+      list.innerHTML = '<div class="hint">Ingen styremedlemmer funnet.</div>';
+      return;
+    }
+    members.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'participant-item';
+      item.innerHTML = `<label><input type="checkbox" name="participants" value="${escapeHtml(p.email)}"> ${escapeHtml(p.name)}</label>`;
+      list.appendChild(item);
+    });
+  }
 
   function refreshMeetings(){
     $('#planned').innerHTML = '<li class="hint">Laster…</li>';
@@ -278,6 +302,16 @@
     $('#slutt').value = m.slutt||'';
     $('#sted').value  = m.sted||'';
     $('#tittel').value= m.tittel||'';
+
+    // Clear and set participants
+    document.querySelectorAll('#participants-list input').forEach(box => box.checked = false);
+    if (m.participants && m.participants.length) {
+      m.participants.forEach(email => {
+        const cb = document.querySelector(`#participants-list input[value="${escapeHtml(email)}"]`);
+        if (cb) cb.checked = true;
+      });
+    }
+
     setStatus('Møte lastet.');
     $('#conflictBanner').style.display = 'none';
     $('#liveBadge').style.display = 'none';
@@ -425,6 +459,7 @@
 
   // SAVE meeting
   $('#btnSaveMeeting').onclick = function(){
+    const participants = Array.from(document.querySelectorAll('#participants-list input:checked')).map(cb => cb.value);
     const form = {
       moteId: $('#mote-id').value || state.moteId || '',
       type:   $('#type').value,
@@ -433,7 +468,8 @@
       slutt:  $('#slutt').value,
       sted:   $('#sted').value,
       tittel: $('#tittel').value,
-      agenda: ''
+      agenda: '',
+      participants: participants
     };
     if (!form.tittel.trim()){ setStatus('Møtetittel er påkrevd.'); return; }
     if (!form.datoISO){ setStatus('Velg dato.'); return; }

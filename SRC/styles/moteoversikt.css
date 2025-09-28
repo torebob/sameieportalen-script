@@ -113,6 +113,26 @@ textarea {
   cursor: not-allowed;
 }
 
+.participants-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  background-color: #fbfdff;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.participant-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.participant-item input {
+  width: auto;
+}
+
 .seg {
   display: inline-flex;
   gap: 6px;

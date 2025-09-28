@@ -22,7 +22,6 @@
 
   const UI_MAP_DEFAULT = {
     DASHBOARD_HTML: { file: '37_Dashboard.html', title: 'Sameieportal — Dashbord', w: 1280, h: 840 },
-    AI_ASSISTENT: { file: '40_AI_Assistent.html', title: 'AI Assistent', w: 800, h: 700 },
     MOTEOVERSIKT: { file: '30_Moteoversikt.html', title: 'Møteoversikt & Protokoller', w: 1100, h: 760 },
     MOTE_SAK_EDITOR: { file: '31_MoteSakEditor.html', title: 'Møtesaker – Editor', w: 1100, h: 760 },
     EIERSKIFTE: { file: '34_EierskifteSkjema.html', title: 'Eierskifteskjema', w: 980, h: 760 },
@@ -105,7 +104,7 @@
     // Fetch and parse admin buttons from config, with a hardcoded fallback.
     const adminButtonsConfig = _getConfigValue_(
       'DASHBOARD_ADMIN_BUTTONS',
-      'Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools,Sett AI Mappe-ID|setAiAssistantFolderId'
+      'Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools'
     );
 
     const adminButtons = adminButtonsConfig.split(',').map(s => {
@@ -172,50 +171,5 @@
   globalThis.clearDashboardCache = () => {
     _dashboardCache = { config: null, configTime: 0, userInfo: null, userTime: 0 };
     return 'Dashboard-cache tømt.';
-  };
-
-  globalThis.setAiAssistantFolderId = () => {
-    const userInfo = getCurrentUserInfo();
-    if (!_isAdminUser_(userInfo)) {
-      throw new Error("Tilgang nektet. Kun administratorer kan utføre denne handlingen.");
-    }
-
-    const ui = SpreadsheetApp.getUi();
-    const response = ui.prompt(
-      'Konfigurer AI-assistent',
-      'Vennligst skriv inn ID-en til Google Drive-mappen som inneholder dokumentene for AI-assistenten:',
-      ui.ButtonSet.OK_CANCEL
-    );
-
-    if (response.getSelectedButton() == ui.Button.OK) {
-      const folderId = response.getResponseText().trim();
-      if (folderId) {
-        PropertiesService.getScriptProperties().setProperty('AI_ASSISTANT_FOLDER_ID', folderId);
-        return `Mappe-ID er satt til: ${folderId}`;
-      } else {
-        return "Ingen ID ble angitt. Handlingen ble avbrutt.";
-      }
-    }
-    return "Handlingen ble avbrutt av brukeren.";
-  };
-
-  globalThis.handleAiAssistantRequest = (e) => {
-    try {
-      const uiInfo = UI_FILES.AI_ASSISTENT;
-      if (!uiInfo) throw new Error("AI Assistant UI configuration not found.");
-
-      const template = HtmlService.createTemplateFromFile(`SRC/${uiInfo.file}`);
-      // The AI assistant page doesn't need any template variables for now.
-
-      const output = template.evaluate()
-        .setTitle(uiInfo.title)
-        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-
-      return output;
-
-    } catch (error) {
-      Logger.log(`handleAiAssistantRequest Error: ${error.message}`);
-      return HtmlService.createHtmlOutput(`<h2>Feil ved lasting av AI Assistent</h2><p>Kunne ikke laste siden. Feil: ${error.message}</p>`);
-    }
   };
 })();

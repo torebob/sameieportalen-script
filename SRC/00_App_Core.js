@@ -45,7 +45,8 @@ globalThis.UI_FILES = Object.freeze({
   EIERSKIFTE:            { file: '34_EierskifteSkjema.html',         title: 'Eierskifteskjema',           w: 980,  h: 760 },
   PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html', title: 'Protokoll-godkjenning',   w: 980,  h: 760 },
   SEKSJON_HISTORIKK:     { file: '32_SeksjonHistorikk.html',         title: 'Seksjonshistorikk',          w: 1100, h: 760 },
-  VAKTMESTER:            { file: '33_VaktmesterVisning.html',        title: 'Vaktmester',                 w: 1100, h: 800 }
+  VAKTMESTER:            { file: '33_VaktmesterVisning.html',        title: 'Vaktmester',                 w: 1100, h: 800 },
+  AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 }
 });
 
 /*
@@ -153,6 +154,8 @@ function onOpen(e) {
   addIf('Møtesaker (editor)…', 'openMoteSakEditor');
   addIf('Registrer eierskifte…', 'openOwnershipForm');
   addIf('Søk i seksjonshistorikk…', 'openSectionHistory');
+  menu.addSeparator();
+  addIf('🤖 AI-assistent for e-post', 'openAiAssistant');
 
   // Vaktmester (rollebasert)
   if (typeof hasPermission === 'function' && hasPermission('VIEW_VAKTMESTER_UI')) {
@@ -334,4 +337,27 @@ function runSmokeCheck_() {
   Logger.log('Smoke check: ' + JSON.stringify(res));
   showToast((allOk ? 'OK' : 'Feil i') + ' røyk-test – se Logg.');
   return res;
+}
+
+/* ---------- AI Assistant-spesifikk konfigurasjon og åpner ---------- */
+
+/**
+ * Returnerer et sentralisert konfigurasjonsobjekt for appen.
+ * Bruker en funksjon for å sikre at `getConfigValue` er definert
+ * når konfigurasjonen leses, uavhengig av fil-lastingsrekkefølge.
+ * @returns {Object} Konfigurasjonsobjektet for appen.
+ */
+const getAppConfig = () => ({
+  AI_ASSISTANT: {
+    API_KEY: globalThis.getConfigValue ? globalThis.getConfigValue('AI_API_KEY', '') : '',
+    GMAIL_LABEL: globalThis.getConfigValue ? globalThis.getConfigValue('AI_GMAIL_LABEL', 'Styre-innboks') : 'Styre-innboks',
+  },
+});
+
+/**
+ * Åpner AI-assistenten.
+ * Legges til global scope for å kunne kalles fra menyen.
+ */
+if (typeof globalThis.openAiAssistant !== 'function') {
+  globalThis.openAiAssistant = () => _openHtmlFromMap_('AI_ASSISTENT', 'modal');
 }

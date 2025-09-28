@@ -1,0 +1,155 @@
+<? var FILE = '40_AI_Assistent.html'; var VERSION = '1.0.0'; var UPDATED = '2025-09-28'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportal — AI-assistent</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .title{font-size:22px;font-weight:700}
+    .muted{color:var(--muted);font-size:13px}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .email-list{display:flex;flex-direction:column;gap:10px}
+    .email-item{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;cursor:pointer}
+    .email-item:hover{background:#131c3a}
+    .email-item.active{border-color:var(--primary)}
+    .email-header{display:flex;justify-content:space-between;align-items:center}
+    .email-sender{font-weight:700}
+    .email-date{font-size:12px;color:var(--muted)}
+    .email-subject{margin:4px 0 0;color:#e2e8f0}
+    .ai-view{margin-top:20px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+    .ai-view h3{margin:0 0 10px;font-size:16px;border-bottom:1px solid var(--border);padding-bottom:10px}
+    .ai-section{margin-bottom:12px}
+    .ai-label{font-weight:700;font-size:14px;color:var(--muted);margin-bottom:4px}
+    .ai-content{background:#0b1b33;padding:10px;border-radius:8px;min-height:40px}
+    .skeleton{background-color:var(--border);color:transparent;border-radius:4px;animation:pulse 1.5s cubic-bezier(0.4,0,0.6,1) infinite}
+    @keyframes pulse{50%{opacity:.5}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <div class="title">AI-assistent for e-post</div>
+        <div class="muted">Klassifiser, oppsummer og få svarforslag.</div>
+      </div>
+      <button class="btn" id="btnRefreshEmails">Oppdater innboks</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:350px 1fr;gap:20px">
+      <div>
+        <div id="emailList" class="email-list">
+          <div class="muted">Laster e-poster...</div>
+        </div>
+      </div>
+      <div id="aiView" class="ai-view" style="display:none">
+        <h3>AI-analyse</h3>
+        <div class="ai-section">
+          <div class="ai-label">Klassifisering</div>
+          <div id="aiClassification" class="ai-content"></div>
+        </div>
+        <div class="ai-section">
+          <div class="ai-label">Oppsummering</div>
+          <div id="aiSummary" class="ai-content"></div>
+        </div>
+        <div class="ai-section">
+          <div class="ai-label">Forslag til svar</div>
+          <div id="aiReply" class="ai-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const emailListEl = document.getElementById('emailList');
+    const aiViewEl = document.getElementById('aiView');
+    const btnRefresh = document.getElementById('btnRefreshEmails');
+    let activeThreadId = null;
+
+    function setLoadingState(isLoading) {
+      btnRefresh.disabled = isLoading;
+      if(isLoading) {
+        emailListEl.innerHTML = '<div class="muted">Laster e-poster...</div>';
+        aiViewEl.style.display = 'none';
+      }
+    }
+
+    function renderEmailList(emails) {
+      emailListEl.innerHTML = '';
+      if (!emails || emails.length === 0) {
+        emailListEl.innerHTML = '<div class="muted">Ingen nye e-poster.</div>';
+        return;
+      }
+      emails.forEach(email => {
+        const item = document.createElement('div');
+        item.className = 'email-item';
+        item.dataset.threadId = email.threadId;
+        item.innerHTML = `
+          <div class="email-header">
+            <span class="email-sender">${escapeHtml(email.from)}</span>
+            <span class="email-date">${new Date(email.date).toLocaleString()}</span>
+          </div>
+          <div class="email-subject">${escapeHtml(email.subject)}</div>
+        `;
+        item.addEventListener('click', () => selectEmail(email.threadId));
+        emailListEl.appendChild(item);
+      });
+    }
+
+    function selectEmail(threadId) {
+      if (activeThreadId === threadId) return;
+      activeThreadId = threadId;
+
+      document.querySelectorAll('.email-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.threadId === threadId);
+      });
+
+      aiViewEl.style.display = 'block';
+      document.getElementById('aiClassification').innerHTML = '<div class="skeleton" style="height:20px"></div>';
+      document.getElementById('aiSummary').innerHTML = '<div class="skeleton" style="height:60px"></div>';
+      document.getElementById('aiReply').innerHTML = '<div class="skeleton" style="height:80px"></div>';
+
+      google.script.run
+        .withSuccessHandler(renderAiAnalysis)
+        .withFailureHandler(err => {
+          document.getElementById('aiSummary').textContent = 'Kunne ikke hente AI-analyse: ' + err.message;
+        })
+        .getAiAssistance(threadId);
+    }
+
+    function renderAiAnalysis(analysis) {
+      if (!analysis || !analysis.ok) {
+        document.getElementById('aiSummary').textContent = 'Analyse feilet: ' + (analysis.error || 'Ukjent feil');
+        return;
+      }
+      document.getElementById('aiClassification').textContent = analysis.classification;
+      document.getElementById('aiSummary').textContent = analysis.summary;
+      document.getElementById('aiReply').textContent = analysis.replySuggestion;
+    }
+
+    function fetchEmails() {
+      setLoadingState(true);
+      google.script.run
+        .withSuccessHandler(emails => {
+          setLoadingState(false);
+          renderEmailList(emails);
+        })
+        .withFailureHandler(err => {
+          setLoadingState(false);
+          emailListEl.innerHTML = `<div class="muted" style="color:var(--danger)">${err.message}</div>`;
+        })
+        .getEmailsForProcessing();
+    }
+
+    btnRefresh.addEventListener('click', fetchEmails);
+    fetchEmails();
+  </script>
+</body>
+</html>

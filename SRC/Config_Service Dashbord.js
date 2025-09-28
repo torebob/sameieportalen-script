@@ -81,3 +81,26 @@ function _parseEmailList_(rawList) {
   if (!rawList) return [];
   return String(rawList).split(/[,;\s]+/).map(s => s.trim().toLowerCase()).filter(s => s.includes('@'));
 }
+
+/**
+ * Parses a comma-separated string into an array of strings.
+ * @private
+ */
+function _parseCsvString_(rawList) {
+  if (!rawList) return [];
+  return String(rawList).split(',').map(s => s.trim()).filter(Boolean);
+}
+
+
+// --- Expose functions to global scope for other modules ---
+globalThis.getConfigValue = _getConfigValue_;
+globalThis.getCachedConfig = () => {
+  const now = Date.now();
+  if (!_configCache.config || (now - _configCache.configTime) > CONFIG_CACHE_DURATION_MS) {
+    _configCache.config = _loadAllConfig_();
+    _configCache.configTime = now;
+  }
+  return _configCache.config;
+};
+globalThis.getCurrentUserInfo = getCurrentUserInfo;
+globalThis.parseCsvString = _parseCsvString_;

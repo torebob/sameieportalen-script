@@ -12,31 +12,31 @@ const FORMS_REG_SHEET = globalThis.SHEETS?.SKJEMA_REG || 'SkjemaRegister';
 function setupFormsDailySchedulerTrigger() {
   _removeFormsDailySchedulerTrigger_();
   ScriptApp.newTrigger('runFormsDailyScheduler').timeBased().atHour(9).nearMinute(0).everyDays(1).create();
-  _safeLog_('FormsScheduler', 'Daglig trigger satt kl. 09:00.');
+  safeLog('FormsScheduler', 'Daglig trigger satt kl. 09:00.');
 }
 
 function clearFormsDailySchedulerTrigger() {
   _removeFormsDailySchedulerTrigger_();
-  _safeLog_('FormsScheduler', 'Daglig trigger fjernet.');
+  safeLog('FormsScheduler', 'Daglig trigger fjernet.');
 }
 
 function runFormsDailyScheduler() {
-  const today = _midnight_(new Date());
+  const today = getMidnight(new Date());
   const sh = _ensureFormsRegisterSheet_();
   if (!sh) {
-    _safeLog_('FormsScheduler', 'Klarte ikke å opprette/finne registerark.');
+    safeLog('FormsScheduler', 'Klarte ikke å opprette/finne registerark.');
     return;
   }
 
-  const map = _headerMap_(sh);
+  const map = _createHeaderMap_(sh);
   if (!map.skjemaNavn || !(map.formId || map.formURL) || !map.status) {
-    _safeLog_('FormsScheduler', 'Mangler minimumskolonner (SkjemaNavn, FormId/URL, Status).');
+    safeLog('FormsScheduler', 'Mangler minimumskolonner (SkjemaNavn, FormId/URL, Status).');
     return;
   }
 
   const lastRow = sh.getLastRow();
   if (lastRow < 2) {
-    _safeLog_('FormsScheduler', 'Ingen rader i Skjema-register.');
+    safeLog('FormsScheduler', 'Ingen rader i Skjema-register.');
     return;
   }
 
@@ -50,15 +50,15 @@ function runFormsDailyScheduler() {
     const status = String(rObj.Status || '').trim().toUpperCase();
     const isActive = ['ACTIVE', 'TRUE', 'ON', 'ÅPEN', ''].includes(status);
 
-    if (!isActive || (rObj.StartDato && today < _midnight_(rObj.StartDato))) {
+    if (!isActive || (rObj.StartDato && today < getMidnight(rObj.StartDato))) {
       continue;
     }
 
     processed++;
     const dueHasDate = !!rObj.FristDato;
-    const daysLeft = dueHasDate ? _daysDiff_(today, _midnight_(rObj.FristDato)) : NaN;
+    const daysLeft = dueHasDate ? getDaysDiff(today, getMidnight(rObj.FristDato)) : NaN;
     const isReminderDay = dueHasDate && rObj.PaaminnelseDager?.includes(daysLeft);
-    const isAutoCloseDay = rObj.AutoSteng && dueHasDate && today > _midnight_(rObj.FristDato);
+    const isAutoCloseDay = rObj.AutoSteng && dueHasDate && today > getMidnight(rObj.FristDato);
 
     if (!isReminderDay && !isAutoCloseDay && !isActive) continue;
 
@@ -67,7 +67,7 @@ function runFormsDailyScheduler() {
       const formId = rObj.FormId || _extractFormIdFromUrl_(rObj.FormURL);
       if (formId) form = FormApp.openById(formId);
     } catch (e) {
-      _safeLog_('FormsScheduler', `Åpning av form "${rObj.SkjemaNavn}" feilet: ${e.message}`);
+      safeLog('FormsScheduler', `Åpning av form "${rObj.SkjemaNavn}" feilet: ${e.message}`);
     }
     if (!form) continue;
 
@@ -84,18 +84,18 @@ function runFormsDailyScheduler() {
       try {
         if (form.isAcceptingResponses()) {
           form.setAcceptingResponses(false);
-          if (map.status) _setCell_(sh, i + 2, map.status, 'CLOSED');
-          _safeLog_('FormsScheduler', `Auto-stengte "${rObj.SkjemaNavn}" (frist utløpt).`);
+          if (map.status) setCell(sh, i + 2, map.status, 'CLOSED');
+          safeLog('FormsScheduler', `Auto-stengte "${rObj.SkjemaNavn}" (frist utløpt).`);
           closed++;
         }
       } catch (e) {
-        _safeLog_('FormsScheduler', `Auto-stenging feilet for "${rObj.SkjemaNavn}": ${e.message}`);
+        safeLog('FormsScheduler', `Auto-stenging feilet for "${rObj.SkjemaNavn}": ${e.message}`);
       }
     }
   }
 
-  if (map.sistOppdatert) _setCell_(sh, 1, map.sistOppdatert, new Date());
-  _safeLog_('FormsScheduler', `Kjøring ferdig. Aktive: ${processed}. Påminnelser: ${reminders}. Auto-stengt: ${closed}. Stats oppdatert: ${statsUpdated}.`);
+  if (map.sistOppdatert) setCell(sh, 1, map.sistOppdatert, new Date());
+  safeLog('FormsScheduler', `Kjøring ferdig. Aktive: ${processed}. Påminnelser: ${reminders}. Auto-stengt: ${closed}. Stats oppdatert: ${statsUpdated}.`);
 }
 
 function _sendReminderForForm_(sh, rowIndex, rObj, daysLeft, map) {
@@ -103,23 +103,23 @@ function _sendReminderForForm_(sh, rowIndex, rObj, daysLeft, map) {
   if (_reminderAlreadySent_(rObj.RemindersSent, markerKey)) return 0;
 
   const seg = (String(rObj.Segment || '').trim().toUpperCase() || 'STYRET');
-  const to = (seg === 'STYRET') ? _getBoardEmails_() : [];
+  const to = (seg === 'STYRET') ? getBoardEmails() : [];
   if (to.length === 0) {
-    _safeLog_('FormsScheduler', `Påminnelse (ikke sendt – segment=${seg}, ingen mottakere) for "${rObj.SkjemaNavn}".`);
+    safeLog('FormsScheduler', `Påminnelse (ikke sendt – segment=${seg}, ingen mottakere) for "${rObj.SkjemaNavn}".`);
     return 0;
   }
 
-  const subject = `[${APP.NAME}] Påminnelse: ${rObj.SkjemaNavn} (frist ${_fmtDate_(rObj.FristDato)})`;
-  const body = `Hei,\n\nDette er en påminnelse om skjemaet "${rObj.SkjemaNavn}".\n${rObj.FormURL ? `Skjema: ${rObj.FormURL}\n` : ''}${rObj.FristDato ? `Frist: ${_fmtDate_(rObj.FristDato)}\n` : ''}\nMvh\n${APP.NAME}`;
+  const subject = `[${APP.NAME}] Påminnelse: ${rObj.SkjemaNavn} (frist ${formatDate(rObj.FristDato)})`;
+  const body = `Hei,\n\nDette er en påminnelse om skjemaet "${rObj.SkjemaNavn}".\n${rObj.FormURL ? `Skjema: ${rObj.FormURL}\n` : ''}${rObj.FristDato ? `Frist: ${formatDate(rObj.FristDato)}\n` : ''}\nMvh\n${APP.NAME}`;
 
   try {
     MailApp.sendEmail({ to: to.join(','), subject, body });
-    _safeLog_('FormsScheduler', `Påminnelse D${daysLeft >= 0 ? '-' : ''}${daysLeft} sendt til STYRET (${to.length}) for "${rObj.SkjemaNavn}".`);
+    safeLog('FormsScheduler', `Påminnelse D${daysLeft >= 0 ? '-' : ''}${daysLeft} sendt til STYRET (${to.length}) for "${rObj.SkjemaNavn}".`);
     _appendReminderMarker_(sh, rowIndex, map.remindersSent, markerKey);
-    _setCell_(sh, rowIndex, map.sisteUts, new Date());
+    setCell(sh, rowIndex, map.sisteUts, new Date());
     return 1;
   } catch (e) {
-    _safeLog_('FormsScheduler', `E-post feilet for "${rObj.SkjemaNavn}": ${e.message}`);
+    safeLog('FormsScheduler', `E-post feilet for "${rObj.SkjemaNavn}": ${e.message}`);
     return 0;
   }
 }
@@ -139,7 +139,7 @@ function _ensureFormsRegisterSheet_() {
     }
     return sh;
   } catch (e) {
-    _safeLog_('FormsScheduler', `Klarte ikke sikre registerark: ${e.message}`);
+    safeLog('FormsScheduler', `Klarte ikke sikre registerark: ${e.message}`);
     return null;
   }
 }
@@ -152,7 +152,7 @@ function _removeFormsDailySchedulerTrigger_() {
   });
 }
 
-function _headerMap_(sh) {
+function _createHeaderMap_(sh) {
   const hdr = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   const norm = s => String(s || '').toLowerCase().replace(/[\s_]+/g, '').trim();
   const want = {
@@ -206,7 +206,7 @@ function _calcFormStats_(form) {
     const res = form.getResponses();
     return { count: res.length, last: res.length ? res[res.length - 1].getTimestamp() : null };
   } catch (e) {
-    _safeLog_('FormsScheduler', `getResponses() feilet: ${e.message}`);
+    safeLog('FormsScheduler', `getResponses() feilet: ${e.message}`);
     return { count: null, last: null };
   }
 }
@@ -214,15 +214,15 @@ function _calcFormStats_(form) {
 function _writeBackStats_(sh, rowIndex, map, newStats, oldRowObj) {
   let changed = false;
   if (map.svarTeller && newStats.count != null && String(newStats.count) !== String(oldRowObj.SvarTeller)) {
-    _setCell_(sh, rowIndex, map.svarTeller, newStats.count);
+    setCell(sh, rowIndex, map.svarTeller, newStats.count);
     changed = true;
   }
   if (map.sistSvarTs && newStats.last && newStats.last.getTime() !== oldRowObj.SistSvarTs?.getTime()) {
-    _setCell_(sh, rowIndex, map.sistSvarTs, newStats.last);
+    setCell(sh, rowIndex, map.sistSvarTs, newStats.last);
     changed = true;
   }
   if (changed && map.sistOppdatert) {
-    _setCell_(sh, rowIndex, map.sistOppdatert, new Date());
+    setCell(sh, rowIndex, map.sistOppdatert, new Date());
   }
   return changed;
 }
@@ -230,7 +230,7 @@ function _writeBackStats_(sh, rowIndex, map, newStats, oldRowObj) {
 function _appendReminderMarker_(sh, rowIndex, colIndex, markerKey) {
   if (!colIndex) return;
   const cur = String(sh.getRange(rowIndex, colIndex).getValue() || '').trim();
-  const stamp = _fmtDate_(new Date());
+  const stamp = formatDate(new Date());
   const add = `${markerKey}|${stamp}`;
   const nextVal = cur ? `${cur};${add}` : add;
   sh.getRange(rowIndex, colIndex).setValue(nextVal);

@@ -1,5 +1,5 @@
 /* ====================== Vaktmester API (Backend) ======================
- * FILE: 18_Vaktmester_API.gs | VERSION: 2.0.0 | UPDATED: 2025-09-26
+ * FILE: 18_Vaktmester_API.gs | VERSION: 2.1.0 | UPDATED: 2025-09-28
  * FORMÅL: Komplett og sikker backend for Vaktmester-UI.
  * - Modernisert med let/const, arrow functions, og forbedret lesbarhet.
  * - Henter aktive oppgaver og historikk
@@ -7,6 +7,8 @@
  * - Vaktmester kan opprette egne saker
  * - Sikkerhet: kun ansvarlig kan endre
  * - Ytelse: rad-indeks i PropertiesService for O(1) oppslag
+ * ENDRINGER v2.1.0:
+ *  - Byttet til standardiserte navn på hjelpefunksjoner (safeLog).
  * ====================================================================== */
 
 (() => {
@@ -85,7 +87,7 @@
         }
       }
       PROPS.setProperty(this.key(), JSON.stringify(map));
-      _safeLog_('VaktmesterIndex', `Rebuild OK (${Object.keys(map).length} nøkler)`);
+      safeLog('VaktmesterIndex', `Rebuild OK (${Object.keys(map).length} nøkler)`);
       return map;
     },
   };
@@ -149,7 +151,7 @@
 
       return { ok: true, items };
     } catch (e) {
-      _safeLog_('VaktmesterAPI_Feil', `getTasksForVaktmester: ${e.message}`);
+      safeLog('VaktmesterAPI_Feil', `getTasksForVaktmester: ${e.message}`);
       return { ok: false, error: 'Kunne ikke hente oppgavelisten.' };
     }
   }
@@ -198,10 +200,10 @@
 
       row.setValues([rowVals]);
 
-      _safeLog_('Oppgave_Status', `Vaktmester ${userEmail} oppdaterte ${taskId}`);
+      safeLog('Oppgave_Status', `Vaktmester ${userEmail} oppdaterte ${taskId}`);
       return { ok: true, message: `Oppgave ${taskId} er oppdatert.` };
     } catch (e) {
-      _safeLog_('VaktmesterAPI_Feil', `updateTaskStatus: ${e.message}`);
+      safeLog('VaktmesterAPI_Feil', `updateTaskStatus: ${e.message}`);
       throw e;
     } finally {
       lock.releaseLock();
@@ -244,10 +246,10 @@
       sh.appendRow(row);
       VM_IDX.put(newId, sh.getLastRow());
 
-      _safeLog_('Oppgave_Opprettet', `Vaktmester ${user.email} opprettet ${newId}`);
+      safeLog('Oppgave_Opprettet', `Vaktmester ${user.email} opprettet ${newId}`);
       return { ok: true, id: newId };
     } catch (e) {
-      _safeLog_('VaktmesterAPI_Feil', `createVaktmesterTask: ${e.message}`);
+      safeLog('VaktmesterAPI_Feil', `createVaktmesterTask: ${e.message}`);
       throw e;
     } finally {
       lock.releaseLock();

@@ -7,10 +7,25 @@
  *  - Forbedret kodestruktur og lesbarhet.
  * ========================================================================== */
 
-const _PG_HEADERS_ = globalThis.SHEET_HEADERS?.['Protokollgodkjenning'] ||
-  ['Godkjenning-ID', 'Møte-ID', 'Navn', 'E-post', 'Token', 'Utsendt-Dato', 'Status', 'Svar-Dato', 'Kommentar', 'Protokoll-URL'];
+const _getHeadersFromConfig_ = (key, fallback) => {
+  if (typeof globalThis.getConfigValue !== 'function' || typeof globalThis.parseCsvString !== 'function') {
+    return fallback;
+  }
+  const fromConfig = globalThis.getConfigValue(key);
+  if (fromConfig) {
+    const parsed = globalThis.parseCsvString(fromConfig);
+    if (parsed.length > 0) return parsed;
+  }
+  return fallback;
+};
 
-const _MOTE_HEADERS_FALLBACK_ = ['Møte-ID', 'Type', 'Dato', 'Starttid', 'Sluttid', 'Sted', 'Tittel', 'Agenda', 'Protokoll-URL', 'Deltakere', 'Kalender-ID', 'Status'];
+const _PG_HEADERS_ = _getHeadersFromConfig_('HEADERS_PROTOKOLL_GODKJENNING',
+  ['Godkjenning-ID', 'Møte-ID', 'Navn', 'E-post', 'Token', 'Utsendt-Dato', 'Status', 'Svar-Dato', 'Kommentar', 'Protokoll-URL']
+);
+
+const _MOTE_HEADERS_FALLBACK_ = _getHeadersFromConfig_('HEADERS_MOTER',
+  ['Møte-ID', 'Type', 'Dato', 'Starttid', 'Sluttid', 'Sted', 'Tittel', 'Agenda', 'Protokoll-URL', 'Deltakere', 'Kalender-ID', 'Status']
+);
 
 // Private helper functions, prefixed with _ to indicate local scope.
 const _hdrIdxMap_Protokoll_ = (headers, names) => names.reduce((acc, name) => {
@@ -129,14 +144,14 @@ function sendProtokollForGodkjenning(moteId, protokollUrl) {
       try {
         MailApp.sendEmail({ to: email, subject, htmlBody: body });
       } catch (mailErr) {
-        _safeLog_('Protokoll_MailFeil', `E-post til ${email} feilet: ${mailErr.message}`);
+        safeLog('Protokoll_MailFeil', `E-post til ${email} feilet: ${mailErr.message}`);
       }
     });
 
-    _safeLog_('Protokoll', `Sendte godkjenning ${gid} for Møte-ID ${moteId} til ${board.length} mottakere.`);
+    safeLog('Protokoll', `Sendte godkjenning ${gid} for Møte-ID ${moteId} til ${board.length} mottakere.`);
     return { ok: true, message: `Protokoll sendt til ${board.length} styremedlemmer.`, gid, count: board.length };
   } catch (e) {
-    _safeLog_('Protokoll_Feil', `sendProtokollForGodkjenning: ${e.message}`);
+    safeLog('Protokoll_Feil', `sendProtokollForGodkjenning: ${e.message}`);
     throw e;
   }
 }
@@ -202,14 +217,14 @@ function handleProtokollApprovalRequest(e) {
       mote.sheet.getRange(mote.row, mote.H.Status + 1).setValue(moteStatus);
     }
 
-    _safeLog_('Protokoll', `Mottok ${newStatus} for ${gid} (Møte ${moteId || '?'}).`);
+    safeLog('Protokoll', `Mottok ${newStatus} for ${gid} (Møte ${moteId || '?'}).`);
 
     const finalTitle = (newStatus === 'Godkjent') ? 'Takk for godkjenningen!' : 'Avvisning registrert';
     const msg = (newStatus === 'Godkjent') ? 'Din godkjenning er registrert.' : 'Din avvisning er registrert. Referent/styret blir varslet ved behov.';
     return page(msg).setTitle(finalTitle);
 
   } catch (err) {
-    _safeLog_('Protokoll_WebApp_Feil', err.message);
+    safeLog('Protokoll_WebApp_Feil', err.message);
     return page(err.message).setTitle('En feil oppstod');
   }
 }

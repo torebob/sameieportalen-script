@@ -114,31 +114,65 @@
       kpiElements[3].textContent = r.counts.pendingApprovals;
     }
 
-    function refresh(forceFresh){
-      const btn = document.getElementById('btnRefresh');
-      const statusEl = document.getElementById('status');
-      
-      btn.disabled = true; 
-      statusEl.textContent = 'Oppdaterer…';
-      toggleSkeletons(true);
+    // --- BEST PRACTICES REFACTORED CODE ---
+
+    /**
+     * Helper to control the UI loading state.
+     * Reduces code duplication and prevents inconsistent UI states.
+     * @param {boolean} isLoading - Whether the app is entering a loading state.
+     * @param {string} [message] - An optional status message to display.
+     */
+    function setLoadingState(isLoading, message) {
+      document.getElementById('btnRefresh').disabled = isLoading;
+      document.getElementById('status').textContent = message || (isLoading ? 'Oppdaterer…' : '');
+      toggleSkeletons(isLoading);
+    }
+
+    /**
+     * Fetches dashboard metrics with improved error handling.
+     * This function demonstrates two best practices:
+     * 1. Centralized UI state management to prevent inconsistent states.
+     * 2. A client-side timeout to handle unresponsive network requests gracefully.
+     * @param {boolean} forceFresh - If true, bypasses server cache.
+     */
+    function refresh(forceFresh) {
+      let operationCompleted = false;
+      setLoadingState(true);
+
+      // BEST PRACTICE: Implement a client-side timeout.
+      // If the request takes too long, we abort and inform the user.
+      const timeoutId = setTimeout(() => {
+        if (operationCompleted) return;
+        operationCompleted = true;
+        setLoadingState(false, 'Tidsavbrudd – forespørselen tok for lang tid');
+        kpiElements.forEach(el => el.textContent = '!');
+        toast('Forespørselen tok for lang tid. Sjekk internettforbindelsen.', 'err');
+      }, 8000); // 8-second timeout
 
       google.script.run
-        .withSuccessHandler(function(r){
-          btn.disabled = false; 
-          statusEl.textContent = `Sist oppdatert ${new Date().toLocaleTimeString()}`;
-          toggleSkeletons(false);
+        .withSuccessHandler(function(r) {
+          if (operationCompleted) return; // Timeout already handled this
+          operationCompleted = true;
+          clearTimeout(timeoutId);
+
+          if (!r || !r.ok) {
+            setLoadingState(false, 'Kunne ikke hente tall');
+            toast('En feil oppstod på serveren.', 'err');
+            return;
+          }
           
-          if (!r || !r.ok) { toast('Kunne ikke hente tall', 'err'); return; }
-          applyPermissions(r); 
+          setLoadingState(false, `Sist oppdatert ${new Date().toLocaleTimeString()}`);
+          applyPermissions(r);
           renderKpis(r);
           if (forceFresh) toast('Tall oppdatert', 'ok');
         })
-        .withFailureHandler(function(e){
-          btn.disabled = false; 
-          statusEl.textContent = 'Feil ved lasting';
-          toggleSkeletons(false);
-          kpiElements.forEach(el => el.textContent = '!'); // Show error indicator
-          
+        .withFailureHandler(function(e) {
+          if (operationCompleted) return; // Timeout already handled this
+          operationCompleted = true;
+          clearTimeout(timeoutId);
+
+          setLoadingState(false, 'Feil ved lasting');
+          kpiElements.forEach(el => el.textContent = '!');
           toast((e && e.message) ? e.message : 'Ukjent feil', 'err');
         })
         .dashMetrics(!!forceFresh);

@@ -184,6 +184,7 @@ function onOpen(e) {
     addIf('Kjør kvalitetssjekk', 'runAllChecks');
     admin.addSeparator();
     addIf('Synkroniser årshjul til kalender', 'syncYearWheelToCalendar');
+    addIf("Oppdater 'Ansvarlig'-liste", 'adminUpdateTasksDropdown');
     admin.addSeparator();
     addIf('Åpne Adminpanel (sidepanel)', 'openDashboardSidebar');
     admin.addSeparator();
@@ -256,6 +257,24 @@ function adminDisableDevTools() {
 }
 
 /* ---------- Manglende ÅPNERE (defineres kun hvis de ikke finnes) ---------- */
+
+/**
+ * Kjører den manuelle oppdateringen av "Ansvarlig" dropdown i Oppgaver-arket.
+ * Dette er en wrapper for å gi tilbakemelding til brukeren.
+ */
+function adminUpdateTasksDropdown() {
+  try {
+    if (typeof _updateTasksDropdown_ === 'function') {
+      _updateTasksDropdown_();
+      showToast("Oppgavelisten 'Ansvarlig' er oppdatert.");
+    } else {
+      showAlert("Funksjonen for å oppdatere 'Ansvarlig'-listen ble ikke funnet.");
+    }
+  } catch (e) {
+    showAlert(`En feil oppstod under oppdatering: ${e.message}`);
+  }
+}
+
 if (typeof globalThis.openMeetingsUI !== 'function') {
   globalThis.openMeetingsUI = () => _openHtmlFromMap_('MOTEOVERSIKT', 'modal');
 }

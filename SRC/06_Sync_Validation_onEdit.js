@@ -37,12 +37,6 @@ function onEdit(e){
         _ensureTaskIdOnRow_(sh, e.range);
         break;
 
-      case SHEETS.BOARD:
-        if (typeof _updateTasksDropdown_ === 'function') {
-          try { _updateTasksDropdown_(); } catch(err) { Logger.log('Feil i _updateTasksDropdown_: ' + err.message); }
-        }
-        break;
-
       default:
         // no-op
         break;

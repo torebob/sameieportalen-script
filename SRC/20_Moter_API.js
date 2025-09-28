@@ -9,7 +9,7 @@
   const PROPS = PropertiesService.getScriptProperties();
   const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_STEMMER, BOARD } = SHEETS;
 
-  const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts'];
+  const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts', 'participants'];
   const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslag', 'vedtak', 'created_ts', 'updated_ts'];
   const INNSPILL_HEADERS = ['sak_id', 'ts', 'from', 'text'];
   const STEMMER_HEADERS = ['vote_id', 'sak_id', 'mote_id', 'email', 'name', 'vote', 'ts'];
@@ -47,6 +47,21 @@
       }
     } catch (e) { /* ignore */ }
     return { email, name };
+  };
+
+  const getBoardMembers = () => {
+    try {
+      const boardSheet = SpreadsheetApp.getActive().getSheetByName(BOARD);
+      if (!boardSheet) return [];
+      const lastRow = boardSheet.getLastRow();
+      if (lastRow < 2) return [];
+      // Assumes Name in col 1, Email in col 2
+      const data = boardSheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      return data.map(row => ({ name: row[0], email: row[1] })).filter(p => p.email);
+    } catch (e) {
+      _log_('Styremedlemmer_FEIL', e.message);
+      return [];
+    }
   };
 
   const getMoteIdForSak_ = (sakId) => {
@@ -164,6 +179,7 @@
         newRow[idx.status] = 'Planlagt';
         newRow[idx.created_ts] = now;
         newRow[idx.updated_ts] = now;
+        newRow[idx.participants] = Array.isArray(payload.participants) ? payload.participants.join(',') : '';
         sh.appendRow(newRow);
         Indexer.set(MOTER, 'id', id, sh.getLastRow());
       } else {
@@ -177,6 +193,9 @@
         cur[idx.tittel] = payload.tittel.trim();
         cur[idx.agenda] = payload.agenda ?? cur[idx.agenda];
         cur[idx.updated_ts] = now;
+        if (payload.participants !== undefined) {
+          cur[idx.participants] = Array.isArray(payload.participants) ? payload.participants.join(',') : '';
+        }
         range.setValues([cur]);
         id = cur[idx.id];
       }
@@ -207,7 +226,8 @@
       .map(r => ({
         id: r[i.id], type: r[i.type] || 'Styremøte', dato: r[i.dato], start: r[i.start] || '',
         slutt: r[i.slutt] || '', sted: r[i.sted] || '', tittel: r[i.tittel] || '',
-        agenda: r[i.agenda] || '', status: r[i.status] || 'Planlagt'
+        agenda: r[i.agenda] || '', status: r[i.status] || 'Planlagt',
+        participants: r[i.participants] ? String(r[i.participants]).split(',') : []
       }))
       .filter(m => m.status !== 'Slettet' && m.status !== 'Arkivert')
       .filter(m => {
@@ -455,17 +475,6 @@
     return { serverNow, meetingUpdated, updatedSaker, newInnspill };
   }
 
-  global.uiBootstrap = uiBootstrap;
-  global.upsertMeeting = upsertMeeting;
-  global.listMeetings_ = listMeetings_;
-  global.newAgendaItem = newAgendaItem;
-  global.saveAgenda = saveAgenda;
-  global.listAgenda = listAgenda;
-  global.deleteAgendaItem = deleteAgendaItem;
-  global.appendInnspill = appendInnspill;
-  global.listInnspill = listInnspill;
-  global.castVote = castVote;
-  global.getVoteSummary = getVoteSummary;
   function getAiAssistance(text, mode) {
     try {
       const API_KEY = PROPS.getProperty('AI_API_KEY');
@@ -512,6 +521,7 @@
     }
   }
 
+  global.getBoardMembers = getBoardMembers;
   global.uiBootstrap = uiBootstrap;
   global.upsertMeeting = upsertMeeting;
   global.listMeetings_ = listMeetings_;

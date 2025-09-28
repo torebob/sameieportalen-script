@@ -24,6 +24,7 @@ function repair96_RunAll() {
   logs.push(repair96_MergeVoteSheets());
   logs.push(repair96_MigrateArk9ToStyringsdokLogg());
   logs.push(repair96_MigrateArk10ToDiagChecks());
+  logs.push(repair96_addCategoryValidation());
   logs.push(repair96_DiagQuickFix());
   try { if (typeof projectOverview === 'function') projectOverview(); } catch (e) {}
   return logs.join(' | ');
@@ -41,6 +42,7 @@ function repair96_ShowMenu() {
       .addItem('Migrer Ark 9 → Logg', 'repair96_MigrateArk9ToStyringsdokLogg')
       .addItem('Migrer Ark 10 → Checks', 'repair96_MigrateArk10ToDiagChecks')
       .addSeparator()
+      .addItem('Legg til kategorivalidering', 'repair96_addCategoryValidation')
       .addItem('Diag quick fix', 'repair96_DiagQuickFix')
       .addToUi();
   } catch (e) {
@@ -262,6 +264,32 @@ function repair96_DiagQuickFix() {
   try { if (typeof projectOverview === 'function') { projectOverview(); fixed.push('Oppdatert DIAG_PROJECT'); } } catch (_) {}
 
   return fixed.length ? fixed.join(' / ') : 'Quick fix: ingenting å endre';
+}
+
+/** Legg til datavalidering for "Kategori" i Styringsdokumenter_Logg */
+function repair96_addCategoryValidation() {
+  var ss = SpreadsheetApp.getActive();
+  var sheetName = 'Styringsdokumenter_Logg';
+  var sheet = ss.getSheetByName(sheetName);
+
+  if (!sheet) {
+    return 'Ark ' + sheetName + ' finnes ikke. Hoppet over validering.';
+  }
+
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var categoryIndex = header.indexOf('Kategori');
+
+  if (categoryIndex === -1) {
+    return 'Fant ikke kolonnen "Kategori" i ' + sheetName + '.';
+  }
+
+  var categories = ["Vedtekter", "Protokoller", "Regnskap", "Kontrakter", "Tegninger", "Annet"];
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(categories).build();
+
+  var range = sheet.getRange(2, categoryIndex + 1, sheet.getMaxRows() - 1);
+  range.setDataValidation(rule);
+
+  return 'La til kategorivalidering i ' + sheetName + '.';
 }
 
 /* ============================== Små helpers =============================== */

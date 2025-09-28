@@ -18,6 +18,7 @@ function doGet(e) {
     // Definerer en mapping fra 'page'-parameter til en handler-funksjon.
     const pageHandlers = {
       protokoll: handleProtokollApprovalRequest,
+      'protokoll-signering': renderProtokollSigneringPage,
       tracking: handleTrackingPixelRequest,
       budget: handleBudgetAppRequest,
       faq: handleFaqRequest, // Ny rute for FAQ-siden
@@ -47,4 +48,16 @@ function doGet(e) {
     Logger.log(`doGet Router Error: ${errorMessage}`);
     return HtmlService.createHtmlOutput(`<h1>En feil oppstod</h1><p>${escapeHtml(errorMessage)}</p>`);
   }
+}
+
+function renderProtokollSigneringPage(e) {
+  const moteId = e?.parameter?.moteId;
+  if (!moteId) {
+    return HtmlService.createHtmlOutput('<h1>Feil</h1><p>Møte-ID mangler.</p>').setTitle('Feil');
+  }
+
+  const template = HtmlService.createTemplateFromFile('35_ProtokollGodkjenningSkjema');
+  template.moteId = moteId;
+
+  return template.evaluate().setTitle('Signer Protokoll');
 }

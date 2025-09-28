@@ -123,7 +123,44 @@ function getTestingTests_() {
       var folder = folderId ? DriveApp.getFolderById(folderId) : DriveApp.createFolder('Test_Rapporter');
       var file = folder.createFile('backup_test_'+Date.now()+'.csv','ark,rad\nOppgaver,10\n','text/csv');
       if (!file || !file.getId()) throw new Error('Klarte ikke å lage test-backupfil.');
-    }}
+    }},
+    {
+      id: 'T40_01',
+      desc: 'K40-01: AI FAQ search logic ranks results correctly',
+      fn: function() {
+        if (typeof processFaqData !== 'function' || typeof searchFaqLogic !== 'function') {
+          throw new Error('Search logic functions (processFaqData, searchFaqLogic) are not defined.');
+        }
+
+        const mockDb = [
+          { question: "Hva med parkering?", answer: "Parkering er kun for beboere." },
+          { question: "Kan jeg lade elbil?", answer: "Ja, vi har ladeplasser for elbil." },
+          { question: "Hvor er ladeplassene for elbil?", answer: "Ladeplassene er i garasjen." }
+        ];
+
+        const processedDocs = processFaqData(mockDb);
+        const query = "lading av elbil";
+        const results = searchFaqLogic(query, processedDocs);
+
+        if (!Array.isArray(results)) {
+          throw new Error('Search results must be an array.');
+        }
+
+        if (results.length < 2) {
+          throw new Error('Search for "lading av elbil" should have returned at least 2 results.');
+        }
+
+        const topResult = results[0];
+        if (!topResult.answer.toLowerCase().includes('ladeplasser')) {
+            throw new Error(`Top result for "elbil" was not the most relevant. Got: ${topResult.question}`);
+        }
+
+        const secondResult = results[1];
+        if (!secondResult.answer.toLowerCase().includes('ladeplasser')) {
+          throw new Error(`Second result for "elbil" was not relevant. Got: ${secondResult.question}`);
+        }
+      }
+    }
   ];
 }
 

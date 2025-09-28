@@ -44,6 +44,8 @@
     <div class="card">
       <h2>Ny / Rediger sak</h2>
       <input id="sakId" type="hidden">
+      <label>Saksnummer (valgfritt, auto-generert hvis tomt)</label>
+      <input id="saksnr" placeholder="F.eks. S-0012025">
       <label>Tittel</label>
       <input id="tittel" placeholder="Kort sakstittel">
       <label>Foreslått av (GDPR: skriv kun rolle/navn ved behov)</label>
@@ -85,16 +87,24 @@
     const toast = (m)=>{ const t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.appendChild(t); setTimeout(()=>t.remove(),2400); };
 
     function clearForm(){
-      el('#sakId').value=''; el('#tittel').value=''; el('#foreslattAv').value=''; el('#gdpr').value='';
+      el('#sakId').value=''; el('#saksnr').value=''; el('#tittel').value=''; el('#foreslattAv').value=''; el('#gdpr').value='';
       el('#bakgrunn').value=''; el('#vedtak').value='';
     }
     function loadList(){
-      google.script.run.withSuccessHandler(renderList).withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).listAgendaItems(MOTE_ID);
+      google.script.run.withSuccessHandler(renderList).withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).listAgenda(MOTE_ID);
     }
     function save(){
-      const payload = { tittel:el('#tittel').value, foreslattAv:el('#foreslattAv').value, gdprNote:el('#gdpr').value, bakgrunn:el('#bakgrunn').value, forslagVedtak:el('#vedtak').value };
+      const payload = {
+        saksnr: el('#saksnr').value,
+        tittel: el('#tittel').value,
+        forslagAv: el('#foreslattAv').value,
+        gdprNote: el('#gdpr').value,
+        bakgrunn: el('#bakgrunn').value,
+        forslagVedtak: el('#vedtak').value
+      };
       const sakId = el('#sakId').value;
       if (!payload.tittel){ toast('Tittel mangler'); return; }
+
       if (!sakId){
         google.script.run.withSuccessHandler(r=>{ toast('Sak opprettet: '+r.saksnr); clearForm(); loadList(); })
           .withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).addAgendaItem(MOTE_ID, payload);
@@ -106,6 +116,7 @@
     }
     function edit(item){
       el('#sakId').value = item.sakId;
+      el('#saksnr').value = item.saksnr || '';
       el('#tittel').value = item.tittel || '';
       el('#foreslattAv').value = item.forslagAv || '';
       el('#gdpr').value = item.gdprNote || '';

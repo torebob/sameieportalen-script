@@ -10,7 +10,7 @@
   const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_STEMMER, BOARD } = SHEETS;
 
   const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts'];
-  const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslag', 'vedtak', 'created_ts', 'updated_ts'];
+  const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslag_av', 'gdpr_note', 'bakgrunn', 'forslag', 'vedtak', 'created_ts', 'updated_ts'];
   const INNSPILL_HEADERS = ['sak_id', 'ts', 'from', 'text'];
   const STEMMER_HEADERS = ['vote_id', 'sak_id', 'mote_id', 'email', 'name', 'vote', 'ts'];
 
@@ -233,7 +233,7 @@
     }
   };
 
-  function newAgendaItem(moteId) {
+  function addAgendaItem(moteId, payload) {
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
@@ -242,13 +242,18 @@
       const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
       const idx = H.reduce((acc, h, i) => ({ ...acc, [h]: i }), {});
       const sakId = `SAK-${Utilities.getUuid().slice(0, 8)}`;
-      const saksnr = nextSaksnr_(moteId);
+      const saksnr = payload.saksnr || nextSaksnr_(moteId);
       const now = new Date();
-      
+
       const newRow = Array(H.length).fill('');
       newRow[idx.mote_id] = moteId;
       newRow[idx.sak_id] = sakId;
       newRow[idx.saksnr] = saksnr;
+      newRow[idx.tittel] = payload.tittel || '';
+      newRow[idx.forslag_av] = payload.forslagAv || '';
+      newRow[idx.gdpr_note] = payload.gdprNote || '';
+      newRow[idx.bakgrunn] = payload.bakgrunn || '';
+      newRow[idx.forslag] = payload.forslagVedtak || '';
       newRow[idx.created_ts] = now;
       newRow[idx.updated_ts] = now;
 
@@ -257,19 +262,23 @@
 
       _log_('Sak', `Ny sak ${sakId} (${saksnr}) for møte ${moteId}`);
       return { ok: true, sakId, saksnr };
+    } catch (e) {
+      _log_('Sak_FEIL', e.message);
+      return { ok: false, message: e.message };
     } finally {
       lock.releaseLock();
     }
   }
 
-  function saveAgenda(payload) {
+
+  function updateAgendaItem(payload) {
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
       requirePermission('MANAGE_MEETINGS', 'Administrere møter');
       const sakerSheet = _ensureSheet_(MOTE_SAKER, SAKER_HEADERS);
       const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
-      const idx = { tittel: H.indexOf('tittel'), forslag: H.indexOf('forslag'), vedtak: H.indexOf('vedtak'), updated_ts: H.indexOf('updated_ts') };
+      const idx = H.reduce((acc, h, i) => ({ ...acc, [h]: i }), {});
 
       const index = Indexer.get(MOTE_SAKER, SAKER_HEADERS, 'sak_id');
       const rowNum = index[payload.sakId];
@@ -277,14 +286,21 @@
 
       const range = sakerSheet.getRange(rowNum, 1, 1, H.length);
       const cur = range.getValues()[0];
-      
+
+      cur[idx.saksnr] = payload.saksnr ?? cur[idx.saksnr];
       cur[idx.tittel] = payload.tittel ?? cur[idx.tittel];
-      cur[idx.forslag] = payload.forslag ?? cur[idx.forslag];
+      cur[idx.forslag_av] = payload.forslagAv ?? cur[idx.forslag_av];
+      cur[idx.gdpr_note] = payload.gdprNote ?? cur[idx.gdpr_note];
+      cur[idx.bakgrunn] = payload.bakgrunn ?? cur[idx.bakgrunn];
+      cur[idx.forslag] = payload.forslagVedtak ?? cur[idx.forslag];
       cur[idx.vedtak] = payload.vedtak ?? cur[idx.vedtak];
       cur[idx.updated_ts] = new Date();
-      
+
       range.setValues([cur]);
-      return { ok: true, message: 'Sak lagret' };
+      return { ok: true, message: 'Sak oppdatert' };
+    } catch (e) {
+      _log_('Sak_FEIL', e.message);
+      return { ok: false, message: e.message };
     } finally {
       lock.releaseLock();
     }
@@ -294,7 +310,7 @@
     const sakerSheet = _ensureSheet_(MOTE_SAKER, SAKER_HEADERS);
     const last = sakerSheet.getLastRow();
     if (last < 2) return [];
-    
+
     const data = sakerSheet.getRange(2, 1, last - 1, sakerSheet.getLastColumn()).getValues();
     const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
     const i = H.reduce((acc, h, i) => ({ ...acc, [h]: i }), {});
@@ -302,12 +318,17 @@
     return data.filter(r => r[i.mote_id] === moteId)
       .map(r => ({
         moteId: r[i.mote_id], sakId: r[i.sak_id], saksnr: r[i.saksnr],
-        tittel: r[i.tittel], forslag: r[i.forslag], vedtak: r[i.vedtak],
+        tittel: r[i.tittel],
+        forslagAv: r[i.forslag_av],
+        gdprNote: r[i.gdpr_note],
+        bakgrunn: r[i.bakgrunn],
+        forslagVedtak: r[i.forslag],
+        vedtak: r[i.vedtak],
         updated_ts: r[i.updated_ts]
       }))
       .sort((a, b) => String(a.saksnr).localeCompare(String(b.saksnr)));
   };
-  
+
   function deleteAgendaItem(sakId, opts) {
     const cascade = opts?.cascade !== false;
     const lock = LockService.getScriptLock();
@@ -458,8 +479,8 @@
   global.uiBootstrap = uiBootstrap;
   global.upsertMeeting = upsertMeeting;
   global.listMeetings_ = listMeetings_;
-  global.newAgendaItem = newAgendaItem;
-  global.saveAgenda = saveAgenda;
+  global.addAgendaItem = addAgendaItem;
+  global.updateAgendaItem = updateAgendaItem;
   global.listAgenda = listAgenda;
   global.deleteAgendaItem = deleteAgendaItem;
   global.appendInnspill = appendInnspill;
@@ -512,17 +533,6 @@
     }
   }
 
-  global.uiBootstrap = uiBootstrap;
-  global.upsertMeeting = upsertMeeting;
-  global.listMeetings_ = listMeetings_;
-  global.newAgendaItem = newAgendaItem;
-  global.saveAgenda = saveAgenda;
-  global.listAgenda = listAgenda;
-  global.deleteAgendaItem = deleteAgendaItem;
-  global.appendInnspill = appendInnspill;
-  global.listInnspill = listInnspill;
-  global.castVote = castVote;
-  global.getVoteSummary = getVoteSummary;
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
   global.getAiAssistance = getAiAssistance;

@@ -408,7 +408,7 @@
       $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
       setStatus('Ny sak opprettet. Du kan nå skrive inn tittel og detaljer.');
       loadMoveTargets();
-    }).newAgendaItem(state.moteId);
+    }).addAgendaItem(state.moteId, {});
   };
 
   $('#btnLagreSak').onclick = function(){
@@ -417,13 +417,13 @@
     const payload = {
       sakId: state.sakId,
       tittel: $('#sakTittel').value,
-      forslag: $('#forslagText').value,
+      forslagVedtak: $('#forslagText').value,
       vedtak:  $('#vedtakText').value
     };
     google.script.run
         .withSuccessHandler(_=> setStatus('Sak lagret.'))
         .withFailureHandler(err => setStatus(err?.message || 'Feil ved lagring.'))
-        .saveAgenda(payload);
+        .updateAgendaItem(payload);
   };
 
   $('#btnNyttInnspill').onclick = function(){

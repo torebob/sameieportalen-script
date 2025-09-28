@@ -99,6 +99,7 @@
         <button class="btn primary" id="btnSaveMeeting">Lagre møte</button>
         <button class="btn" id="btnNewMeeting">Nytt møte</button>
         <button class="btn" id="btnViewProtocol" style="display:none">Vis protokoll</button>
+        <button class="btn success" id="btnGenerateProtocol" style="display:none">Generer protokoll</button>
         <span id="saveStatus" class="status"></span>
       </div>
     </div>
@@ -252,7 +253,12 @@
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
-    $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
+
+    const isPastMeeting = $('#scopePast').classList.contains('active');
+    const hasBeenGenerated = isLocked(state.meetingStatus); // Protokoll er generert hvis status er låst
+
+    $('#btnViewProtocol').style.display = hasBeenGenerated ? 'inline-block' : 'none';
+    $('#btnGenerateProtocol').style.display = isPastMeeting && !hasBeenGenerated ? 'inline-block' : 'none';
 
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
@@ -310,6 +316,7 @@
     updateStatusBadge();
     applyLockUI(false);
     $('#btnViewProtocol').style.display = 'none';
+    $('#btnGenerateProtocol').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
@@ -352,6 +359,31 @@
   // Øvrig
   $('#btnNewMeeting').onclick = clearMeeting;
   $('#btnRefresh').onclick = refreshMeetings;
+  $('#btnGenerateProtocol').onclick = function() {
+    if (!state.moteId) {
+      setStatus('Velg et møte først.');
+      return;
+    }
+    setStatus('Genererer protokoll, vennligst vent...');
+    this.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.ok) {
+          setStatus('Protokoll generert! Laster møte på nytt...');
+          // Refresh the meeting view to update status and buttons
+          refreshCurrentMeeting();
+        } else {
+          setStatus(res?.message || 'En ukjent feil oppstod under generering.');
+          this.disabled = false;
+        }
+      })
+      .withFailureHandler(err => {
+        setStatus(err.message || 'En alvorlig feil oppstod.');
+        this.disabled = false;
+      })
+      .generateProtocol(state.moteId);
+  };
   $('#btnViewProtocol').onclick = function(){
     if (!state.moteId) return;
     setStatus('Henter forhåndsvisning...');

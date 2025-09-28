@@ -62,6 +62,45 @@
     throw lastError;
   };
 
+  let _dashboardCache = { userInfo: null, userTime: 0 };
+
+  const getCurrentUserInfo = () => {
+    const now = Date.now();
+    if (_dashboardCache.userInfo && (now - _dashboardCache.userTime < DASHBOARD_CONFIG.CACHE_DURATION)) {
+      return _dashboardCache.userInfo;
+    }
+
+    const user = {
+      email: Session.getActiveUser().getEmail(),
+      isDev: false,
+      permissions: {},
+    };
+
+    try {
+      const devStatus = globalThis.getUserDevStatus?.();
+      if (devStatus) {
+        user.isDev = devStatus.isDev;
+        user.permissions = devStatus.permissions || {};
+      }
+    } catch(e) {
+      // Ignore if dev status is not available
+    }
+
+    _dashboardCache.userInfo = user;
+    _dashboardCache.userTime = now;
+    return user;
+  };
+
+  const _getConfigValue_ = (key, defaultValue = '') => {
+    const config = globalThis.getCachedConfig?.() || {};
+    return config[key] || defaultValue;
+  };
+
+  const _parseEmailList_ = (listString) => {
+    if (!listString || typeof listString !== 'string') return [];
+    return listString.split(',').map(e => e.trim().toLowerCase()).filter(e => e);
+  };
+
   const _isAdminUser_ = (userInfo) => {
     const whitelist = _parseEmailList_(_getConfigValue_('ADMIN_WHITELIST', ''));
     return !!userInfo?.email && whitelist.includes(userInfo.email);

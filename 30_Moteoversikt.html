@@ -98,6 +98,8 @@
       <div class="toolbar">
         <button class="btn primary" id="btnSaveMeeting">Lagre møte</button>
         <button class="btn" id="btnNewMeeting">Nytt møte</button>
+        <button class="btn" id="btnInvite" style="display:none">Send invitasjon</button>
+        <button class="btn" id="btnSendApproval" style="display:none">Send for godkjenning</button>
         <button class="btn" id="btnViewProtocol" style="display:none">Vis protokoll</button>
         <span id="saveStatus" class="status"></span>
       </div>
@@ -142,9 +144,9 @@
       </div>
     </div>
 
-    <label style="margin-top:12px">Innspill</label>
+    <label style="margin-top:12px">Referat / Innspill</label>
     <div class="hint" id="innspillFrom">Fra: —</div>
-    <textarea id="innspillText" placeholder="Skriv innspill for saken …"></textarea>
+    <textarea id="innspillText" placeholder="Skriv referat eller innspill for saken …"></textarea>
     <div class="toolbar">
       <button class="btn" id="btnNyttInnspill">Nytt innspill</button>
       <button class="btn primary" id="btnLagreSak">Lagre sak</button>
@@ -252,7 +254,11 @@
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
+    const isPastMeeting = new Date(m.dato) < new Date();
+    const canSendApproval = state.moteId && isPastMeeting && !['Protokoll under godkjenning', 'Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus);
+    $('#btnSendApproval').style.display = canSendApproval ? 'inline-block' : 'none';
     $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
+    $('#btnInvite').style.display = state.moteId ? 'inline-block' : 'none';
 
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
@@ -310,6 +316,8 @@
     updateStatusBadge();
     applyLockUI(false);
     $('#btnViewProtocol').style.display = 'none';
+    $('#btnInvite').style.display = 'none';
+    $('#btnSendApproval').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
@@ -352,6 +360,48 @@
   // Øvrig
   $('#btnNewMeeting').onclick = clearMeeting;
   $('#btnRefresh').onclick = refreshMeetings;
+
+  $('#btnInvite').onclick = function() {
+    if (!state.moteId) {
+      setStatus('Vennligst lagre eller velg et møte først.');
+      return;
+    }
+    setStatus('Sender invitasjoner...');
+    if (typeof google.script.run.sendMeetingInvitation !== 'function') {
+      return setStatus('Funksjonen sendMeetingInvitation er ikke tilgjengelig.');
+    }
+    google.script.run
+      .withSuccessHandler(res => {
+        setStatus(res.message || (res.ok ? 'Invitasjoner sendt.' : 'En ukjent feil oppstod.'));
+      })
+      .withFailureHandler(err => {
+        setStatus(`Feil: ${err.message}`);
+      })
+      .sendMeetingInvitation(state.moteId);
+  };
+
+  $('#btnSendApproval').onclick = function() {
+    if (!state.moteId) {
+      setStatus('Vennligst velg et møte først.');
+      return;
+    }
+    setStatus('Sender protokoll for godkjenning...');
+    if (typeof google.script.run.sendProtokollForGodkjenning !== 'function') {
+      return setStatus('Funksjonen sendProtokollForGodkjenning er ikke tilgjengelig.');
+    }
+    google.script.run
+      .withSuccessHandler(res => {
+        setStatus(res.message || (res.ok ? 'Protokoll sendt.' : 'En ukjent feil oppstod.'));
+        if (res.ok) {
+          refreshCurrentMeeting(); // Refresh to update status and hide button
+        }
+      })
+      .withFailureHandler(err => {
+        setStatus(`Feil: ${err.message}`);
+      })
+      .sendProtokollForGodkjenning(state.moteId, null); // Pass null for URL to let backend find it
+  };
+
   $('#btnViewProtocol').onclick = function(){
     if (!state.moteId) return;
     setStatus('Henter forhåndsvisning...');

@@ -250,3 +250,11 @@ function handleProtokollApprovalRequest(e) {
     return page(escapeHtml(err.message)).setTitle('En feil oppstod');
   }
 }
+
+/* ---------- Globale eksponeringer for UI-kall ---------- */
+if (typeof globalThis.sendProtokollForGodkjenning !== 'function') {
+  globalThis.sendProtokollForGodkjenning = sendProtokollForGodkjenning;
+}
+if (typeof globalThis.getProtocolPreviewUrl !== 'function') {
+  globalThis.getProtocolPreviewUrl = getProtocolPreviewUrl;
+}

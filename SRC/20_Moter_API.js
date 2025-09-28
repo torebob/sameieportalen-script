@@ -526,4 +526,129 @@
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
   global.getAiAssistance = getAiAssistance;
+
+  const _getBoardList_ = () => {
+    const ss = SpreadsheetApp.getActive();
+    const sh = ss.getSheetByName(SHEETS.BOARD);
+    if (!sh || sh.getLastRow() < 2) return [];
+    const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    return vals.map(([navn, mail]) => ({ navn: String(navn || '').trim(), email: String(mail || '').trim() })).filter(p => p.navn && p.email);
+  };
+
+  const _findMeetingRow_ = (moteId) => {
+    const sh = _ensureSheet_(MOTER, MEETINGS_HEADERS);
+    const index = Indexer.get(MOTER, MEETINGS_HEADERS, 'id');
+    const rowNum = index[moteId];
+    if (!rowNum) return null;
+
+    const H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    const values = sh.getRange(rowNum, 1, 1, H.length).getValues()[0];
+
+    const meetingData = H.reduce((obj, header, index) => {
+      obj[header] = values[index];
+      return obj;
+    }, {});
+
+    return meetingData;
+  };
+
+  function sendMeetingInvitation(moteId) {
+    try {
+      requirePermission('MANAGE_MEETINGS', 'Sende møteinnkallelser');
+
+      if (!moteId) {
+        return { ok: false, message: 'Møte-ID mangler.' };
+      }
+
+      const meeting = _findMeetingRow_(moteId);
+      if (!meeting) {
+        return { ok: false, message: `Fant ikke møte med ID: ${moteId}` };
+      }
+
+      const board = _getBoardList_();
+      if (board.length === 0) {
+        return { ok: false, message: 'Fant ingen styremedlemmer å invitere.' };
+      }
+
+      const { tittel, dato, start, slutt, sted } = meeting;
+
+      if (!dato || !start) {
+        return { ok: false, message: 'Møtet mangler dato eller starttidspunkt.' };
+      }
+
+      const startTime = new Date(dato);
+      const [startHour, startMinute] = start.split(':');
+      startTime.setHours(startHour, startMinute, 0, 0);
+
+      const endTime = new Date(dato);
+      if (slutt) {
+        const [endHour, endMinute] = slutt.split(':');
+        endTime.setHours(endHour, endMinute, 0, 0);
+      } else {
+        endTime.setHours(startTime.getHours() + 2);
+      }
+
+      const attendees = board.map(member => member.email);
+
+      const event = {
+        summary: tittel,
+        location: sted,
+        description: `Innkalling til møte: ${tittel}.\n\nSe agenda og saksdokumenter i Sameieportalen.`,
+        start: { dateTime: startTime.toISOString() },
+        end: { dateTime: endTime.toISOString() },
+        attendees: attendees.map(email => ({ email })),
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 24 * 60 },
+            { method: 'popup', minutes: 60 },
+          ],
+        },
+      };
+
+      try {
+        const calendarEvent = Calendar.Events.insert(event, 'primary', { sendUpdates: 'all' });
+        if (!calendarEvent) {
+            return { ok: false, message: 'Kunne ikke opprette kalenderhendelse.' };
+        }
+      } catch (e) {
+        if (e.message.includes("API call to calendar.events.insert failed with error: Forbidden")) {
+          return { ok: false, message: "Google Calendar API er ikke aktivert for dette prosjektet. Kontakt administrator." };
+        }
+        throw e; // Re-throw other errors
+      }
+
+      const subject = `Møteinnkalling: ${tittel}`;
+      const body = `
+        <p>Hei,</p>
+        <p>Du er invitert til møte: <b>${tittel}</b></p>
+        <p><b>Tid:</b> ${startTime.toLocaleString('no-NO', { timeZone: _tz_() })}</p>
+        <p><b>Sted:</b> ${sted || 'Ikke spesifisert'}</p>
+        <p>En kalenderinvitasjon er sendt til din e-post. Vennligst aksepter denne for å bekrefte din deltakelse.</p>
+        <p>Mvh,<br>Styret</p>
+      `;
+
+      board.forEach(member => {
+        try {
+          MailApp.sendEmail({
+            to: member.email,
+            subject: subject,
+            htmlBody: body,
+          });
+        } catch (e) {
+          _log_('Invitation_Mail_Error', `Failed to send email to ${member.email}: ${e.message}`);
+        }
+      });
+
+      _log_('Møte', `Sendte invitasjon for møte ${moteId} til ${board.length} personer.`);
+      return { ok: true, message: `Invitasjon sendt til ${board.length} styremedlemmer.` };
+
+    } catch (e) {
+      _log_('Møte_Invitasjon_Feil', e.message);
+      return { ok: false, message: `En feil oppstod: ${e.message}` };
+    }
+  }
+
+  global.sendMeetingInvitation = sendMeetingInvitation;
+
 })(this);

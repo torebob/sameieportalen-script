@@ -20,6 +20,7 @@ function doGet(e) {
       protokoll: handleProtokollApprovalRequest,
       tracking: handleTrackingPixelRequest,
       budget: handleBudgetAppRequest,
+      ai_assistent: globalThis.handleAiAssistantRequest,
     };
 
     // Hvis ingen side er spesifisert, bruk 'budget' som standard.

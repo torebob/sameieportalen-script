@@ -25,6 +25,10 @@
     <main>
         <p>Innlogget som: <b><?= userInfo.email || 'Ukjent' ?></b></p>
 
+        <div class="btn-group">
+            <a href="<?= appUrlBase ?>?page=ai_assistent" class="btn">AI Assistent</a>
+        </div>
+
         <? if (isAdmin && adminButtons && adminButtons.length > 0) { ?>
             <div class="btn-group">
                 <? adminButtons.forEach(button => { ?>
@@ -35,8 +39,6 @@
             </div>
         <? } else if (isAdmin) { ?>
             <span class="badge">Ingen admin-handlinger er konfigurert.</span>
-        <? } else { ?>
-            <span class="badge">Ingen admin-tilgang.</span>
         <? } ?>
 
     </main>

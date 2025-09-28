@@ -161,6 +161,8 @@ function _prepareOwnershipChanges_(payload, fraDato, data) {
 }
 
 function _applyOwnershipChanges_(ss, operations, tx) {
+  const allSheetData = {}; // Cache sheet data within the function scope
+
   operations.forEach(op => {
     safeLog('Transaksjon', `[${tx}] ${op.type} → ${op.sheetName}`);
     const sheet = ss.getSheetByName(op.sheetName);
@@ -173,14 +175,30 @@ function _applyOwnershipChanges_(ss, operations, tx) {
       const row = headers.map(h => op.data[h] ?? '');
       sheet.appendRow(row);
     } else if (op.type === 'UPDATE') {
-      const data = getSheetData(op.sheetName);
+      // Lazily read and cache sheet data to avoid re-reading the same sheet multiple times
+      if (!allSheetData[op.sheetName]) {
+        allSheetData[op.sheetName] = getSheetData(op.sheetName);
+      }
+      const data = allSheetData[op.sheetName];
+
       const idColumn = headers[0];
       const idx = data.findIndex(r => String(r[idColumn]) === String(op.rowId));
+
       if (idx >= 0) {
-        Object.entries(op.updates || {}).forEach(([h, val]) => {
-          const col = headers.indexOf(h);
-          if (col >= 0) sheet.getRange(idx + 2, col + 1).setValue(val);
+        const rowNum = idx + 2;
+        const range = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn());
+        const rowValues = range.getValues()[0];
+
+        // Modify the row data in memory
+        Object.entries(op.updates || {}).forEach(([header, value]) => {
+          const colIdx = headers.indexOf(header);
+          if (colIdx !== -1) {
+            rowValues[colIdx] = value;
+          }
         });
+
+        // Write the entire row back in a single batch operation
+        range.setValues([rowValues]);
       } else {
         safeLog('Transaksjon', `Advarsel: Fant ikke rad for oppdatering (ID=${op.rowId}) i ${op.sheetName}`);
       }

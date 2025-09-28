@@ -1,21 +1,151 @@
 <!--
  ==================================================================
-   FILE: 36_NyttOppslag.html
+   FILE: 35_ProtokollGodkjenningSkjema.html
    VERSION: 1.0.0
-   UPDATED: 2025-09-14
-   PURPOSE: Brukergrensesnitt for å sende nye oppslag
+   UPDATED: 2025-09-28
+   PURPOSE: Brukergrensesnitt for å godkjenne og signere protokoll.
  ==================================================================
 -->
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Send nytt oppslag</title>
-
 <!DOCTYPE html>
-<html>
-  <head>
-    <base target="_top">
-  </head>
-  <body>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protokoll Godkjenning</title>
+  <?!= (typeof include === 'function' && include('AppMetaPartial')) || '' ?>
+  <style>
+    body { font-family: sans-serif; margin: 20px; }
+    .container { max-width: 800px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; }
+    .protocol-content { border: 1px solid #eee; padding: 15px; margin-bottom: 20px; min-height: 300px; background: #f9f9f9; }
+    .signature-area { text-align: center; }
+    .btn { padding: 10px 20px; font-size: 16px; cursor: pointer; border-radius: 4px; border: 1px solid transparent; }
+    .btn.primary { background-color: #007bff; color: white; border-color: #007bff; }
+    .status { margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Godkjenning og signering av protokoll</h2>
+
+  <div id="protocol-viewer">
+    <label for="protocol-content">Protokoll for møte <span id="meeting-title"></span></label>
+    <div id="protocol-content" class="protocol-content">
+      <!-- Protokollinnhold lastes her -->
+      <p class="hint">Laster protokoll...</p>
+    </div>
+  </div>
+
+  <div class="signature-area">
+    <button id="btnSignProtocol" class="btn primary">Signer protokoll</button>
+    <div id="signature-status" class="status"></div>
+  </div>
+</div>
+
+<script>
+  const $ = s => document.querySelector(s);
+  let state = { moteId: null };
+
+  function getUrlParameter(name) {
+    name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+    var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+    var results = regex.exec(location.search);
+    return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+  }
+
+  function setStatus(msg, isError = false) {
+    const el = $('#signature-status');
+    el.textContent = msg || '';
+    el.style.color = isError ? 'red' : 'green';
+  }
+
+  // Initial load
+  window.addEventListener('load', () => {
+    state.moteId = getUrlParameter('moteId');
+    if (state.moteId) {
+      /**
+       * BACKEND-VEILEDNING:
+       * Funksjonen `getProtocolForSigning` må implementeres i Google Apps Script.
+       *
+       * @param {string} moteId - ID-en til møtet som skal signeres.
+       * @returns {object} Et objekt med protokollens detaljer.
+       *          På suksess: { ok: true, title: "Møtetittel", content: "<HTML-innhold>" }
+       *          På feil:    { ok: false, message: "Feilmelding" }
+       */
+      if (google && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(res => {
+            if (res && res.ok) {
+              $('#meeting-title').textContent = res.title || '';
+              $('#protocol-content').innerHTML = res.content || '<p class="hint">Ingen innhold i protokollen.</p>';
+            } else {
+              setStatus(res.message || 'Kunne ikke laste protokollen.', true);
+            }
+          })
+          .withFailureHandler(err => setStatus(err.message, true))
+          .getProtocolForSigning(state.moteId);
+      } else {
+          // Mock data for local testing
+          $('#meeting-title').textContent = 'Styremøte September 2025';
+          $('#protocol-content').innerHTML = `
+            <h3>Vedtak</h3>
+            <p><strong>Sak 1:</strong> Innkjøp av nye stoler. Vedtatt.</p>
+            <p><strong>Sak 2:</strong> Dugnad til våren. Vedtatt.</p>
+          `;
+      }
+    } else {
+      setStatus('Mangler møte-ID.', true);
+      $('#btnSignProtocol').disabled = true;
+    }
+  });
+
+  // Sign button click
+  $('#btnSignProtocol').addEventListener('click', () => {
+    if (!state.moteId) {
+      setStatus('Kan ikke signere uten møte-ID.', true);
+      return;
+    }
     
-  </body>
+    setStatus('Signerer...');
+    $('#btnSignProtocol').disabled = true;
+
+    /**
+     * BACKEND-VEILEDNING:
+     * Funksjonen `signProtocol` må implementeres i Google Apps Script.
+     * Den skal motta møte-ID, verifisere brukerens rettigheter (styreleder),
+     * og deretter oppdatere møtestatus til 'Protokoll godkjent'.
+     *
+     * @param {string} moteId - ID-en til møtet som protokollen tilhører.
+     * @returns {object} Et resultatobjekt.
+     *          På suksess: { ok: true, message: "Protokoll signert." }
+     *          På feil:    { ok: false, message: "Feilmelding, f.eks. ikke autorisert." }
+     */
+    if (google && google.script && google.script.run) {
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res && res.ok) {
+            setStatus('Protokollen er signert!');
+            $('#btnSignProtocol').style.display = 'none';
+          } else {
+            setStatus(res.message || 'Signering feilet.', true);
+            $('#btnSignProtocol').disabled = false;
+          }
+        })
+        .withFailureHandler(err => {
+          setStatus(err.message, true);
+          $('#btnSignProtocol').disabled = false;
+        })
+        .signProtocol(state.moteId);
+    } else {
+        // Mock success for local testing
+        setTimeout(() => {
+            setStatus('Protokollen er signert!');
+            $('#btnSignProtocol').style.display = 'none';
+        }, 1000);
+    }
+  });
+
+</script>
+
+</body>
 </html>

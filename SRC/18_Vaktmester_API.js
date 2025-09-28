@@ -1,5 +1,5 @@
 /* ====================== Vaktmester API (Backend) ======================
- * FILE: 18_Vaktmester_API.gs | VERSION: 2.1.0 | UPDATED: 2025-09-28
+ * FILE: 18_Vaktmester_API.gs | VERSION: 2.2.0 | UPDATED: 2025-09-28
  * FORMÅL: Komplett og sikker backend for Vaktmester-UI.
  * - Modernisert med let/const, arrow functions, og forbedret lesbarhet.
  * - Henter aktive oppgaver og historikk
@@ -7,6 +7,10 @@
  * - Vaktmester kan opprette egne saker
  * - Sikkerhet: kun ansvarlig kan endre
  * - Ytelse: rad-indeks i PropertiesService for O(1) oppslag
+ * ENDRINGER v2.2.0:
+ *  - Lagt til funksjonalitet for opplasting av vedlegg til oppgaver.
+ *  - Opprettet hjelpefunksjon for å hente/opprette vedleggsmappe i Drive.
+ *  - Utvidet `getTasksForVaktmester` til å returnere vedlegg.
  * ENDRINGER v2.1.0:
  *  - Byttet til standardiserte navn på hjelpefunksjoner (safeLog).
  * ====================================================================== */
@@ -15,6 +19,7 @@
   const SH = globalThis.SHEETS || { TASKS: 'Oppgaver', BOARD: 'Styret' };
   const PROPS = PropertiesService.getScriptProperties();
   const TZ = Session.getScriptTimeZone() || 'Europe/Oslo';
+  const ATTACHMENT_FOLDER_NAME = 'Vaktmester Vedlegg';
 
   /* ---------- Hjelpefunksjoner ---------- */
   const _normalizeEmail_ = (s) => {
@@ -36,11 +41,19 @@
     let sh = ss.getSheetByName(SH.TASKS);
     if (!sh) {
       sh = ss.insertSheet(SH.TASKS);
-      const HDR = ['OppgaveID', 'Tittel', 'Beskrivelse', 'Seksjonsnr', 'Frist', 'Opprettet', 'Status', 'Prioritet', 'Ansvarlig', 'Kommentarer', 'Kilde', 'Kategori'];
+      const HDR = ['OppgaveID', 'Tittel', 'Beskrivelse', 'Seksjonsnr', 'Frist', 'Opprettet', 'Status', 'Prioritet', 'Ansvarlig', 'Kommentarer', 'Vedlegg', 'Kilde', 'Kategori'];
       sh.getRange(1, 1, 1, HDR.length).setValues([HDR]).setFontWeight('bold');
       sh.setFrozenRows(1);
     }
     return sh;
+  };
+
+  const _getAttachmentFolder_ = () => {
+    const folders = DriveApp.getFoldersByName(ATTACHMENT_FOLDER_NAME);
+    if (folders.hasNext()) {
+      return folders.next();
+    }
+    return DriveApp.createFolder(ATTACHMENT_FOLDER_NAME);
   };
 
   const _headersMap_ = (H) => H.reduce((acc, header, i) => {
@@ -137,16 +150,26 @@
           const status = String(r[c.Status] || '').toLowerCase();
           return ansvarlig === userEmail && targetStatuses.has(status);
         })
-        .map(r => ({
-          id: r[c.OppgaveID],
-          tittel: r[c.Tittel],
-          beskrivelse: r[c.Beskrivelse],
-          status: r[c.Status],
-          opprettetISO: (r[c.Opprettet] instanceof Date) ? r[c.Opprettet].toISOString() : '',
-          fristISO: (r[c.Frist] instanceof Date) ? r[c.Frist].toISOString() : '',
-          seksjon: r[c.Seksjonsnr],
-          prioritet: r[c.Prioritet] || '—',
-        }))
+        .map(r => {
+          let attachments = [];
+          if (c.Vedlegg > -1 && r[c.Vedlegg]) {
+            try {
+              attachments = JSON.parse(r[c.Vedlegg]);
+              if (!Array.isArray(attachments)) attachments = [];
+            } catch (e) { /* ignore parse error */ }
+          }
+          return {
+            id: r[c.OppgaveID],
+            tittel: r[c.Tittel],
+            beskrivelse: r[c.Beskrivelse],
+            status: r[c.Status],
+            opprettetISO: (r[c.Opprettet] instanceof Date) ? r[c.Opprettet].toISOString() : '',
+            fristISO: (r[c.Frist] instanceof Date) ? r[c.Frist].toISOString() : '',
+            seksjon: r[c.Seksjonsnr],
+            prioritet: r[c.Prioritet] || '—',
+            attachments: attachments,
+          };
+        })
         .sort((a, b) => (new Date(b.opprettetISO).getTime() || 0) - (new Date(a.opprettetISO).getTime() || 0));
 
       return { ok: true, items };
@@ -214,6 +237,68 @@
     return updateTaskStatusByVaktmester(taskId, null, comment);
   }
 
+  function uploadAttachmentByVaktmester(taskId, fileObject) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      if (!_hasAccess_()) throw new Error('Ingen tilgang til vaktmester-modulen.');
+      if (!fileObject || !fileObject.fileName || !fileObject.data || !fileObject.mimeType) {
+        throw new Error('Ugyldig filobjekt.');
+      }
+      const userEmail = _normalizeEmail_(Session.getActiveUser()?.getEmail() || Session.getEffectiveUser()?.getEmail());
+
+      const sh = _ensureTaskSheet_();
+      let H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      let c = _headersMap_(H);
+
+      // Sjekk om bruker er ansvarlig
+      const idx = VM_IDX.get();
+      const rowNum = idx[taskId];
+      if (!rowNum) throw new Error(`Fant ikke oppgave-rad for ID ${taskId}`);
+      const ansvarligEmail = _normalizeEmail_(sh.getRange(rowNum, c.Ansvarlig + 1).getValue());
+      if (ansvarligEmail !== userEmail) {
+        throw new Error('Tilgang nektet. Du er ikke ansvarlig for denne oppgaven.');
+      }
+
+      // Håndter filopplasting
+      const folder = _getAttachmentFolder_();
+      const decodedData = Utilities.base64Decode(fileObject.data, Utilities.Charset.UTF_8);
+      const blob = Utilities.newBlob(decodedData, fileObject.mimeType, fileObject.fileName);
+      const file = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      const newAttachment = { name: file.getName(), url: file.getUrl() };
+
+      // Legg til 'Vedlegg' kolonne hvis den mangler
+      if (c.Vedlegg === undefined) {
+        sh.insertColumnAfter(c.Kommentarer + 1);
+        sh.getRange(1, c.Kommentarer + 2).setValue('Vedlegg').setFontWeight('bold');
+        H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+        c = _headersMap_(H);
+      }
+
+      const cell = sh.getRange(rowNum, c.Vedlegg + 1);
+      let attachments = [];
+      const existingVal = cell.getValue();
+      if (existingVal) {
+        try {
+          attachments = JSON.parse(existingVal);
+          if (!Array.isArray(attachments)) attachments = [];
+        } catch (e) { /* ignore */ }
+      }
+      attachments.push(newAttachment);
+      cell.setValue(JSON.stringify(attachments));
+
+      safeLog('Vedlegg_LastetOpp', `Vaktmester ${userEmail} lastet opp ${file.getName()} til ${taskId}`);
+      return { ok: true, attachment: newAttachment };
+
+    } catch (e) {
+      safeLog('VaktmesterAPI_Feil', `uploadAttachment: ${e.message}`);
+      throw e;
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
   function createVaktmesterTask(payload) {
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
@@ -260,5 +345,6 @@
   globalThis.getTasksForVaktmester = getTasksForVaktmester;
   globalThis.updateTaskStatusByVaktmester = updateTaskStatusByVaktmester;
   globalThis.addTaskCommentByVaktmester = addTaskCommentByVaktmester;
+  globalThis.uploadAttachmentByVaktmester = uploadAttachmentByVaktmester;
   globalThis.createVaktmesterTask = createVaktmesterTask;
 })();

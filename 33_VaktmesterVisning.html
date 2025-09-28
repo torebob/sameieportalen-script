@@ -40,6 +40,12 @@
   .status{min-height:20px;color:var(--muted)}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#1e40af;font-size:12px;font-weight:700}
+  .attachment-list{margin:12px 0;padding:0;list-style:none}
+  .attachment-list li{display:flex;align-items:center;gap:8px;padding:4px;border-radius:6px}
+  .attachment-list li:hover{background:#f4f4f5}
+  .attachment-list a{color:var(--brand);text-decoration:none;font-weight:500}
+  .attachment-list a:hover{text-decoration:underline}
+  input[type="file"]{padding:8px}
 </style>
 </head>
 <body>
@@ -112,6 +118,17 @@
           <span class="pill">Endre status:</span>
           <button class="btn success" id="btnComplete">Sett Fullført</button>
           <button class="btn danger" id="btnReject">Sett Avvist</button>
+        </div>
+
+        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)"/>
+
+        <label>Vedlegg</label>
+        <div id="d_attachments_list" class="hint">Ingen vedlegg.</div>
+
+        <label>Last opp vedlegg</label>
+        <input type="file" id="d_attachment_file"/>
+        <div class="toolbar">
+          <button class="btn" id="btnUploadAttachment">Last opp vedlegg</button>
         </div>
 
         <div class="status" id="detailStatus"></div>
@@ -217,7 +234,24 @@
     $('#d_section').value = t.seksjon || '';
     $('#d_priority').value = t.prioritet || '';
     $('#d_comment').value = '';
+    $('#d_attachment_file').value = '';
     $('#detailStatus').textContent = '';
+
+    // Render attachments
+    const attachmentBox = $('#d_attachments_list');
+    attachmentBox.innerHTML = '';
+    if (t.attachments && t.attachments.length > 0) {
+      const ul = document.createElement('ul');
+      ul.className = 'attachment-list';
+      t.attachments.forEach(att => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>📎</span> <a href="${escapeHtml(att.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(att.name)}</a>`;
+        ul.appendChild(li);
+      });
+      attachmentBox.appendChild(ul);
+    } else {
+      attachmentBox.innerHTML = '<div class="hint">Ingen vedlegg.</div>';
+    }
   }
 
   // Tabs
@@ -230,14 +264,74 @@
     const text = ($('#d_comment').value||'').trim();
     if (!text){ $('#detailStatus').textContent='Skriv en kommentar først.'; return; }
     $('#detailStatus').textContent='Lagrer kommentar …';
-    google.script.run.withSuccessHandler(_=>{
+    google.script.run.withSuccessHandler(res=>{
       $('#detailStatus').textContent='Kommentar lagret.';
       $('#d_comment').value='';
       // Frisk opp liste/utvalg (hent på nytt for å reflektere ev. status-oppdatering)
-      loadTasks();
-      selectTask(state.sel.id);
+      const currentId = state.sel.id;
+      loadTasks().then(() => {
+        // re-select the task if it still exists in the list
+        if (state.items.some(item => item.id === currentId)) {
+          selectTask(currentId);
+        }
+      });
     }).withFailureHandler(e=> $('#detailStatus').textContent = e?.message || 'Kunne ikke lagre kommentar.')
       .addTaskCommentByVaktmester(state.sel.id, text);
+  };
+
+  $('#btnUploadAttachment').onclick = ()=>{
+    if (!state.sel){ return; }
+    const fileInput = $('#d_attachment_file');
+    if (fileInput.files.length === 0) {
+      $('#detailStatus').textContent = 'Velg en fil først.';
+      return;
+    }
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const data = e.target.result.split(',');
+      const fileObject = {
+        fileName: file.name,
+        mimeType: file.type,
+        data: data[1] // base64 encoded data
+      };
+
+      $('#detailStatus').textContent = 'Laster opp vedlegg...';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (!res || !res.ok) {
+             $('#detailStatus').textContent = res?.error || 'En feil oppstod ved opplasting.';
+             return;
+          }
+          $('#detailStatus').textContent = 'Vedlegg lastet opp!';
+          fileInput.value = ''; // Clear file input
+
+          // Refresh task list and re-select to show new attachment
+          const currentId = state.sel.id;
+          loadTasks().then(() => {
+            if (state.items.some(item => item.id === currentId)) {
+               // Find the updated task item to append the new attachment to its data
+               const task = state.items.find(item => item.id === currentId);
+               if(task) {
+                 if (!task.attachments) task.attachments = [];
+                 task.attachments.push(res.attachment);
+               }
+               selectTask(currentId);
+            }
+          });
+        })
+        .withFailureHandler(err => {
+          $('#detailStatus').textContent = 'Opplasting feilet: ' + err.message;
+        })
+        .uploadAttachmentByVaktmester(state.sel.id, fileObject);
+    };
+
+    reader.onerror = (err) => {
+      $('#detailStatus').textContent = 'Kunne ikke lese filen.';
+    };
+
+    reader.readAsDataURL(file);
   };
 
   function setStatus(status){

@@ -29,12 +29,14 @@ const SHEETS = Object.freeze({
   MOTER: 'Møter',
   MOTE_SAKER: 'MøteSaker',
   MOTE_KOMMENTARER: 'MøteSakKommentarer',
+  MOTE_SAKSPAPIRER: 'MøteSakspapirer',
   OPPSLAG: 'Oppslag',
   OPPSLAG_SPORING: 'OppslagSporing',
   EPOST_LOGG: 'E-post-Logg'
 });
 
 const SHEET_HEADERS = Object.freeze({
+  [SHEETS.MOTE_SAKSPAPIRER]: ['id', 'mote_id', 'sak_id', 'dokumentnavn', 'drive_url', 'fil_id', 'opplastet_av', 'opplastet_ts'],
   [SHEETS.OPPSLAG]: ['Oppslag-ID', 'Tittel', 'Innhold', 'Forfatter', 'Dato-Sendt', 'Målgruppe', 'Antall-Sendt', 'Antall-Åpnet'],
   [SHEETS.OPPSLAG_SPORING]: ['Sporing-ID', 'Oppslag-ID', 'Person-ID', 'Dato-Åpnet'],
   [SHEETS.EPOST_LOGG]: ['Epost-ID', 'Mottatt-Dato', 'Avsender', 'Emne', 'Kategori', 'Status', 'Svar-Forslag', 'Original-Innhold', 'Tråd-ID']

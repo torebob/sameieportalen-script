@@ -7,12 +7,14 @@
 
 ((global) => {
   const PROPS = PropertiesService.getScriptProperties();
-  const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_STEMMER, BOARD } = SHEETS;
+  const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_STEMMER, BOARD, MOTE_FULLMAKTER } = SHEETS;
 
   const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts'];
   const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslag', 'vedtak', 'created_ts', 'updated_ts'];
   const INNSPILL_HEADERS = ['sak_id', 'ts', 'from', 'text'];
-  const STEMMER_HEADERS = ['vote_id', 'sak_id', 'mote_id', 'email', 'name', 'vote', 'ts'];
+  const STEMMER_HEADERS = ['vote_id', 'sak_id', 'mote_id', 'email', 'name', 'vote', 'ts', 'proxy_for'];
+  const FULLMAKTER_HEADERS = ['mote_id', 'from_email', 'to_email', 'created_ts'];
+  const BOARD_HEADERS = ['Navn', 'E-post', 'Rolle', 'Stemmerett', 'Kan motta fullmakt'];
 
   const _tz_ = () => Session.getScriptTimeZone() || 'Europe/Oslo';
   const _log_ = (topic, msg) => {
@@ -37,16 +39,24 @@
 
   const _getCurrentUser_ = () => {
     const email = (Session.getActiveUser()?.getEmail() || Session.getEffectiveUser()?.getEmail() || '').toLowerCase();
-    let name = '';
+    let user = { email, name: '', id: email, canVote: false, canBeProxyFor: [] };
     try {
-      const boardSheet = SpreadsheetApp.getActive().getSheetByName(BOARD);
-      if (boardSheet && boardSheet.getLastRow() > 1) {
-        const boardData = boardSheet.getRange(2, 1, boardSheet.getLastRow() - 1, 2).getValues();
-        const match = boardData.find(row => String(row[1] || '').toLowerCase() === email);
-        if (match) name = match[0];
+      const boardSheet = _ensureSheet_(BOARD, BOARD_HEADERS);
+      if (boardSheet.getLastRow() > 1) {
+        const data = boardSheet.getRange(2, 1, boardSheet.getLastRow() - 1, boardSheet.getLastColumn()).getValues();
+        const H = boardSheet.getRange(1, 1, 1, boardSheet.getLastColumn()).getValues()[0];
+        const iEmail = H.indexOf('E-post');
+        const iName = H.indexOf('Navn');
+        const iVote = H.indexOf('Stemmerett');
+
+        const match = data.find(row => String(row[iEmail] || '').toLowerCase() === email);
+        if (match) {
+          user.name = match[iName];
+          user.canVote = String(match[iVote] || '').toLowerCase() === 'true';
+        }
       }
-    } catch (e) { /* ignore */ }
-    return { email, name };
+    } catch (e) { _log_('UserError', e.message); }
+    return user;
   };
 
   const getMoteIdForSak_ = (sakId) => {
@@ -130,8 +140,7 @@
   };
 
   const uiBootstrap = () => {
-    const { email, name } = _getCurrentUser_();
-    return { user: { email, name } };
+    return { user: _getCurrentUser_() };
   };
 
   function upsertMeeting(payload) {
@@ -372,10 +381,78 @@
       .sort((a, b) => (a.ts?.getTime() || 0) - (b.ts?.getTime() || 0));
   };
 
-  function castVote(sakId, value) {
-    if (!sakId) throw new Error('Mangler sakId.');
-    const v = String(value || '').toUpperCase();
-    if (!['JA', 'NEI', 'BLANK'].includes(v)) throw new Error('Ugyldig stemme.');
+  function getEligibility(moteId) {
+    const boardSheet = _ensureSheet_(BOARD, BOARD_HEADERS);
+    const boardData = boardSheet.getRange(2, 1, boardSheet.getLastRow() - 1, boardSheet.getLastColumn()).getValues();
+    const H = boardSheet.getRange(1, 1, 1, boardSheet.getLastColumn()).getValues()[0];
+    const iName = H.indexOf('Navn'), iEmail = H.indexOf('E-post'), iVote = H.indexOf('Stemmerett'), iProxy = H.indexOf('Kan motta fullmakt');
+
+    const allVoters = boardData.map(r => ({
+      id: String(r[iEmail] || '').toLowerCase(),
+      name: r[iName] || '',
+      canVote: String(r[iVote] || '').toLowerCase() === 'true',
+      canReceiveProxy: String(r[iProxy] || '').toLowerCase() === 'true'
+    }));
+
+    const eligibleVoters = allVoters.filter(p => p.canVote);
+    const potentialProxies = allVoters.filter(p => p.canReceiveProxy);
+
+    const proxySheet = _ensureSheet_(MOTE_FULLMAKTER, FULLMAKTER_HEADERS);
+    const proxyData = proxySheet.getLastRow() > 1 ? proxySheet.getRange(2,1,proxySheet.getLastRow()-1, 3).getValues() : [];
+    const proxyMap = proxyData.filter(r => r[0] === moteId).reduce((acc, r) => {
+      acc[r[1].toLowerCase()] = r[2].toLowerCase();
+      return acc;
+    }, {});
+
+    const { email: currentUserEmail } = _getCurrentUser_();
+
+    const finalEligibility = eligibleVoters.map(voter => {
+      const proxyEmail = proxyMap[voter.id];
+      const proxyHolder = proxyEmail ? allVoters.find(p => p.id === proxyEmail) : null;
+      return {
+        id: voter.id,
+        name: voter.name,
+        hasVoted: false, // This needs to be implemented by checking MOTE_STEMMER
+        proxy: proxyHolder ? proxyHolder.name : null,
+        proxyFor: null // This needs to be implemented
+      };
+    });
+
+    return { eligible: finalEligibility, proxies: potentialProxies };
+  }
+
+  function assignProxy(moteId, toUserId) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(15000);
+    try {
+      const currentUser = _getCurrentUser_();
+      if (!currentUser.canVote) return { ok: false, message: 'Du har ikke stemmerett.' };
+      if (currentUser.id === toUserId) return { ok: false, message: 'Du kan ikke gi fullmakt til deg selv.' };
+
+      const proxySheet = _ensureSheet_(MOTE_FULLMAKTER, FULLMAKTER_HEADERS);
+      const data = proxySheet.getLastRow() > 1 ? proxySheet.getRange(2, 1, proxySheet.getLastRow() - 1, 3).getValues() : [];
+
+      // Check for existing proxy
+      const existingIdx = data.findIndex(r => r[0] === moteId && r[1].toLowerCase() === currentUser.id);
+      if (existingIdx > -1) {
+        proxySheet.getRange(existingIdx + 2, 3).setValue(toUserId);
+      } else {
+        proxySheet.appendRow([moteId, currentUser.id, toUserId, new Date()]);
+      }
+      return { ok: true, message: 'Fullmakt er registrert.' };
+    } catch (e) {
+      return { ok: false, message: e.message };
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  const VOTE_MAP = { 'FOR': 'JA', 'AGAINST': 'NEI', 'ABSTAIN': 'BLANK' };
+  const REV_VOTE_MAP = { 'JA': 'for', 'NEI': 'against', 'BLANK': 'abstain' };
+
+  function castVote(sakId, vote) {
+    const v = VOTE_MAP[String(vote || '').toUpperCase()];
+    if (!v) return { ok: false, message: 'Ugyldig stemme.' };
 
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
@@ -388,40 +465,58 @@
       const sh = _ensureSheet_(MOTE_STEMMER, STEMMER_HEADERS);
       const voteIdx = getVoteIndex_(sakId);
       const rowNum = voteIdx[email.toLowerCase()];
+      const now = new Date();
 
       if (rowNum) {
-        const cVote = STEMMER_HEADERS.indexOf('vote') + 1;
-        const cTs = STEMMER_HEADERS.indexOf('ts') + 1;
-        sh.getRange(rowNum, cVote).setValue(v);
-        sh.getRange(rowNum, cTs).setValue(new Date());
+        sh.getRange(rowNum, STEMMER_HEADERS.indexOf('vote') + 1).setValue(v);
+        sh.getRange(rowNum, STEMMER_HEADERS.indexOf('ts') + 1).setValue(now);
       } else {
         const voteId = `V-${Utilities.getUuid().slice(0, 8)}`;
-        sh.appendRow([voteId, sakId, moteId, email, name, v, new Date()]);
+        sh.appendRow([voteId, sakId, moteId, email, name, v, now, '']);
         setVoteIndexRow_(sakId, email, sh.getLastRow());
       }
       _log_('Stemme', `${email} -> ${sakId} = ${v}`);
-      return { ok: true };
+
+      const summary = getVoteSummary(sakId);
+      return { ok: true, myVote: REV_VOTE_MAP[v], results: summary };
     } finally {
       lock.releaseLock();
     }
   }
 
-  const getVoteSummary = (sakId) => {
-    if (!sakId) return { JA: 0, NEI: 0, BLANK: 0 };
+  function getVoteStatus(sakId) {
+    const { email } = _getCurrentUser_();
     const sh = _ensureSheet_(MOTE_STEMMER, STEMMER_HEADERS);
-    if (sh.getLastRow() < 2) return { JA: 0, NEI: 0, BLANK: 0 };
+    let myVote = null;
+    if (sh.getLastRow() > 1) {
+      const data = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+      const H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      const iSak = H.indexOf('sak_id'), iEmail = H.indexOf('email'), iVote = H.indexOf('vote');
+      const voteRow = data.find(r => r[iSak] === sakId && r[iEmail].toLowerCase() === email);
+      if (voteRow) myVote = REV_VOTE_MAP[voteRow[iVote]];
+    }
+    return { myVote, results: getVoteSummary(sakId) };
+  }
+
+  const getVoteSummary = (sakId) => {
+    if (!sakId) return { for: 0, against: 0, abstain: 0 };
+    const sh = _ensureSheet_(MOTE_STEMMER, STEMMER_HEADERS);
+    if (sh.getLastRow() < 2) return { for: 0, against: 0, abstain: 0 };
 
     const data = sh.getDataRange().getValues();
     const H = data.shift();
     const iSak = H.indexOf('sak_id'), iVote = H.indexOf('vote');
     
-    return data.reduce((summary, row) => {
+    const summary = data.reduce((acc, row) => {
       if (row[iSak] === sakId) {
         const vote = String(row[iVote] || '').toUpperCase();
-        if (summary[vote] !== undefined) summary[vote]++;
+        if (vote === 'JA') acc.for++;
+        else if (vote === 'NEI') acc.against++;
+        else if (vote === 'BLANK') acc.abstain++;
       }
-      return summary;
-    }, { JA: 0, NEI: 0, BLANK: 0 });
+      return acc;
+    }, { for: 0, against: 0, abstain: 0 });
+    return summary;
   };
 
   const rtServerNow = () => ({ now: new Date().toISOString() });
@@ -452,7 +547,27 @@
     if (sakIds.size > 0) {
       newInnspill = Array.from(sakIds).flatMap(sakId => listInnspill(sakId, sinceISO));
     }
-    return { serverNow, meetingUpdated, updatedSaker, newInnspill };
+
+    let votesUpdated = [];
+    if (since && sakIds.size > 0) {
+        const stemmerSheet = _ensureSheet_(MOTE_STEMMER, STEMMER_HEADERS);
+        if (stemmerSheet.getLastRow() > 1) {
+            const data = stemmerSheet.getRange(2, 1, stemmerSheet.getLastRow() - 1, stemmerSheet.getLastColumn()).getValues();
+            const H = stemmerSheet.getRange(1, 1, 1, stemmerSheet.getLastColumn()).getValues()[0];
+            const iMoteId = H.indexOf('mote_id'), iSakId = H.indexOf('sak_id'), iTs = H.indexOf('ts');
+
+            const updatedVoteSakIds = new Set();
+            data.forEach(row => {
+                const voteTs = row[iTs];
+                if (row[iMoteId] === moteId && voteTs instanceof Date && voteTs > since) {
+                    updatedVoteSakIds.add(row[iSakId]);
+                }
+            });
+            votesUpdated = Array.from(updatedVoteSakIds);
+        }
+    }
+
+    return { serverNow, meetingUpdated, updatedSaker, newInnspill, votesUpdated };
   }
 
   global.uiBootstrap = uiBootstrap;
@@ -523,6 +638,9 @@
   global.listInnspill = listInnspill;
   global.castVote = castVote;
   global.getVoteSummary = getVoteSummary;
+  global.getVoteStatus = getVoteStatus;
+  global.getEligibility = getEligibility;
+  global.assignProxy = assignProxy;
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
   global.getAiAssistance = getAiAssistance;

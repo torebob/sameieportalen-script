@@ -4,9 +4,9 @@
   <? 
     // ---------- Versjonskontroll (synkron med øvrige filer) ----------
     var FILE    = '30_Moteoversikt.html';
-    var VERSION = '1.6.1';
-    var UPDATED = '2025-09-14';
-    var PURPOSE = 'Planlegging av møter, agenda, lås/ulås og flytting av saker';
+    var VERSION = '1.7.0';
+    var UPDATED = '2025-09-28';
+    var PURPOSE = 'Planlegging av møter, agenda, lås/ulås, flytting av saker og digital avstemming.';
   ?>
   <?!= (typeof include === 'function' && include('AppMetaPartial')) || '' ?>
 
@@ -20,7 +20,7 @@
        LÅSE-REGLER:
          - UI låses når møte.status ∈ ['Protokoll under godkjenning','Protokoll godkjent','Arkivert']
        BACKEND (forventet):
-         - uiBootstrap() → { user: { email } }
+         - uiBootstrap() → { user: { email, name, canVote, canBeProxyFor:[] } }
          - listMeetings_({scope}) → [{id,type,dato,start,slutt,sted,tittel,status}]
          - upsertMeeting(form) → {ok,id,message}
          - newAgendaItem(moteId) → {ok,sakId,saksnr}
@@ -32,12 +32,36 @@
          - (ny) moveAgendaToMeeting(sakId, toMoteId) → {ok}
          - (ny) getProtocolPreviewUrl(moteId) -> {url}
          - (valgfritt sanntid) rtServerNow(), rtGetChanges(moteId, sinceIso)
+         - (ny) getEligibility(moteId) → { eligible: [{id,name,hasVoted,proxy,proxyFor}], proxies:[{id,name}] }
+         - (ny) assignProxy(moteId, toUserId) → {ok,message}
+         - (ny) castVote(sakId, vote) → {ok, myVote, results:{for,against,abstain}}
+         - (ny) getVoteStatus(sakId) → {myVote, results:{for,against,abstain}}
   ====================================================================================== -->
 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Møteoversikt & Protokoller</title>
   <link rel="stylesheet" href="styles/moteoversikt.css">
+  <style>
+    .vote-section { margin-top:15px; padding-top:10px; border-top:1px solid #eee; }
+    .vote-buttons { display:flex; gap:10px; margin-top:5px; }
+    .vote-status { margin-top:10px; font-size:14px; }
+    .vote-results { display:flex; gap:15px; margin-top:5px; font-size:12px; }
+    .result-bar { background-color:#f0f0f0; border-radius:3px; overflow:hidden; height:10px; width:100px; }
+    .result-fill { background-color:#4caf50; height:100%; }
+    .modal {
+      display: none; position: fixed; z-index: 1000; left: 0; top: 0;
+      width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5);
+      align-items: center; justify-content: center;
+    }
+    .modal-content {
+      background-color: #fefefe; margin: auto; padding: 20px; border: 1px solid #888;
+      width: 80%; max-width: 600px; border-radius: 5px;
+    }
+    .modal-close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    .eligibility-list { list-style-type:none; padding:0; max-height:300px; overflow-y:auto; }
+    .eligibility-list li { padding:8px; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center; }
+  </style>
 </head>
 <body>
 <div class="wrap">
@@ -122,6 +146,7 @@
     <div class="toolbar" style="justify-content:space-between">
       <h3 style="margin:0">Agenda</h3>
       <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn" id="btnEligibility" style="display:none;">Stemmeberettigelse</button>
         <button class="btn success" id="btnNewSak">Ny sak</button>
         <!-- Flytt sak til annet møte (viser når sak valgt) -->
         <div id="moveWrap" style="display:none;align-items:center;gap:6px">
@@ -164,15 +189,56 @@
         <textarea id="vedtakText" placeholder="Endelig vedtakstekst …"></textarea>
       </div>
     </div>
+
+    <!-- AVSTEMMING -->
+    <div id="voteSection" class="vote-section" style="display:none;">
+      <h4>Avstemming</h4>
+      <div id="voteStatus" class="vote-status">Du har ikke stemt.</div>
+      <div class="vote-buttons">
+        <button class="btn success" data-vote="for">For</button>
+        <button class="btn danger" data-vote="against">Mot</button>
+        <button class="btn" data-vote="abstain">Avstår</button>
+      </div>
+      <div id="voteResults" class="vote-results" style="margin-top:15px;">
+        <!-- Resultater lastes her -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FOR STEMMEBERETTIGELSE -->
+<div id="eligibilityModal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close" id="modalClose">&times;</span>
+    <h3>Stemmeberettigelse og fullmakter</h3>
+    <div id="proxySection">
+      <p>Du kan gi din stemme til en annen stemmeberettiget.</p>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <select id="proxyDelegate" style="flex-grow:1;"><option>Laster...</option></select>
+        <button id="btnAssignProxy" class="btn primary">Gi fullmakt</button>
+      </div>
+      <div id="proxyStatus" style="margin-top:10px;"></div>
+    </div>
+    <hr style="margin:20px 0;">
+    <h4>Oversikt</h4>
+    <ul id="eligibilityList" class="eligibility-list"><li class="hint">Laster...</li></ul>
   </div>
 </div>
 
 <script>
   const $ = s => document.querySelector(s);
+  const $$ = s => document.querySelectorAll(s);
   const LOCKED_STATUSES = ['Protokoll under godkjenning','Protokoll godkjent','Arkivert'];
-  let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false };
+  let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, meetingType: null };
 
-  function setStatus(msg){ $('#saveStatus').textContent = msg||''; }
+  function setStatus(msg, time=4000){
+    $('#saveStatus').textContent = msg||'';
+    if (msg) setTimeout(()=>setStatus(''), time);
+  }
+  function setProxyStatus(msg, time=4000){
+    $('#proxyStatus').textContent = msg||'';
+    if (msg) setTimeout(()=>setProxyStatus(''), time);
+  }
   function fmtDate(d){ try{ return new Date(d).toLocaleDateString('no-NO'); }catch(_){ return ''; } }
   function toIsoDate(val){
     const s = String(val||'').trim();
@@ -182,6 +248,7 @@
     if (m){ return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }
     return s;
   }
+  const escapeHtml = s => String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);
   const isLocked = st => !!st && LOCKED_STATUSES.includes(String(st).trim());
 
   function applyLockUI(locked){
@@ -195,7 +262,7 @@
       });
       root.querySelectorAll('button').forEach(btn=>{
         const id = btn.id || '';
-        const whitelist = ['btnUnlock','btnReload','btnRefresh'];
+        const whitelist = ['btnUnlock','btnReload','btnRefresh', 'btnEligibility', 'btnViewProtocol'];
         btn.disabled = !!locked && !whitelist.includes(id);
       });
     });
@@ -214,7 +281,7 @@
   // init
   google.script.run.withSuccessHandler(res => {
     state.user = res?.user || null;
-    $('#innspillFrom').textContent = 'Fra: ' + (state.user?.email || '—');
+    $('#innspillFrom').textContent = 'Fra: ' + (state.user?.name || state.user?.email || '—');
     refreshMeetings();
   }).uiBootstrap();
 
@@ -239,6 +306,7 @@
   function loadMeeting(m){
     state.moteId = m.id;
     state.meetingStatus = m.status || 'Planlagt';
+    state.meetingType = m.type || 'Styremøte';
     $('#mote-id').value = state.moteId;
     $('#type').value  = m.type||'Styremøte';
     $('#dato').value  = m.dato ? new Date(m.dato).toISOString().slice(0,10) : '';
@@ -253,6 +321,8 @@
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
     $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
+    const canVoteInMeeting = ['Generalforsamling', 'Ekstraordinært møte'].includes(state.meetingType);
+    $('#btnEligibility').style.display = canVoteInMeeting ? 'inline-flex' : 'none';
 
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
@@ -278,6 +348,8 @@
           google.script.run.withSuccessHandler(drawInnspill).listInnspill(state.sakId, null);
         }
         loadMoveTargets();
+        if (canVoteInMeeting) loadVoteStatus();
+        $('#voteSection').style.display = canVoteInMeeting ? 'block' : 'none';
       }
     }).listAgenda(state.moteId);
   }
@@ -301,7 +373,7 @@
 
   function clearMeeting(){
     stopPolling();
-    state.moteId=null; state.meetingStatus=null; state.canUnlock=false;
+    state.moteId=null; state.meetingStatus=null; state.canUnlock=false; state.meetingType=null;
     $('#mote-id').value='';
     $('#type').value='Styremøte'; $('#dato').value=''; $('#start').value='18:00'; $('#slutt').value='20:00';
     $('#sted').value=''; $('#tittel').value='';
@@ -310,12 +382,14 @@
     updateStatusBadge();
     applyLockUI(false);
     $('#btnViewProtocol').style.display = 'none';
+    $('#btnEligibility').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
     state.sakId=null; $('#saksnr').value=''; $('#sakTittel').value='';
     $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
     $('#moveWrap').style.display='none';
+    $('#voteSection').style.display='none';
   }
 
   // SAVE meeting
@@ -408,6 +482,9 @@
       $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
       setStatus('Ny sak opprettet. Du kan nå skrive inn tittel og detaljer.');
       loadMoveTargets();
+      const canVoteInMeeting = ['Generalforsamling', 'Ekstraordinært møte'].includes(state.meetingType);
+      $('#voteSection').style.display = canVoteInMeeting ? 'block' : 'none';
+      if (canVoteInMeeting) loadVoteStatus();
     }).newAgendaItem(state.moteId);
   };
 
@@ -480,6 +557,104 @@
     }).moveAgendaToMeeting(state.sakId, toId);
   };
 
+  // ------- AVSTEMMING -------
+  function castVote(vote){
+    if (!state.sakId || isLocked(state.meetingStatus)) return;
+    setStatus('Registrerer stemme...');
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.ok){
+          setStatus('Stemme registrert.');
+          updateVoteUI(res.myVote, res.results);
+        } else {
+          setStatus(res?.message || 'Kunne ikke stemme.');
+        }
+      })
+      .withFailureHandler(err => setStatus(err?.message || 'Feil ved stemming.'))
+      .castVote(state.sakId, vote);
+  }
+
+  function loadVoteStatus(){
+    if (!state.sakId) return;
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res) updateVoteUI(res.myVote, res.results);
+      })
+      .getVoteStatus(state.sakId);
+  }
+
+  function updateVoteUI(myVote, results){
+    const statusText = {for:'Du har stemt FOR', against:'Du har stemt MOT', abstain:'Din stemme er BLANK'}[myVote] || 'Du har ikke stemt.';
+    $('#voteStatus').textContent = statusText;
+    drawVoteResults(results);
+  }
+
+  function drawVoteResults(results){
+    const container = $('#voteResults');
+    if (!results){ container.innerHTML = ''; return; }
+    const total = (results.for || 0) + (results.against || 0) + (results.abstain || 0);
+    const pct = val => total > 0 ? (val/total*100).toFixed(1) : 0;
+
+    container.innerHTML = `
+      <div>For: ${results.for||0} (${pct(results.for)}%)</div>
+      <div>Mot: ${results.against||0} (${pct(results.against)}%)</div>
+      <div>Blank: ${results.abstain||0} (${pct(results.abstain)}%)</div>
+    `;
+  }
+
+  $$('.vote-buttons button').forEach(btn => btn.onclick = () => castVote(btn.dataset.vote));
+
+  // ------- STEMMEBERETTIGELSE MODAL -------
+  const modal = $('#eligibilityModal');
+  $('#btnEligibility').onclick = () => {
+    if (!state.moteId) return;
+    modal.style.display = 'flex';
+    loadEligibilityInfo();
+  };
+  $('#modalClose').onclick = () => modal.style.display = 'none';
+  window.onclick = (event) => { if (event.target == modal) modal.style.display = 'none'; };
+
+  function loadEligibilityInfo(){
+    $('#eligibilityList').innerHTML = '<li class="hint">Laster...</li>';
+    $('#proxyDelegate').innerHTML = '<option>Laster...</option>';
+    setProxyStatus('');
+    google.script.run.withSuccessHandler(data => {
+      if (!data) return;
+      // Liste over alle stemmeberettigede
+      const list = $('#eligibilityList'); list.innerHTML = '';
+      data.eligible.forEach(p => {
+        const li = document.createElement('li');
+        let status = p.hasVoted ? '✔️ Stemt' : '—';
+        if (p.proxyFor) status = `Proxy for ${p.proxyFor}`;
+        if (p.proxy) status += ` (via ${p.proxy})`;
+        li.innerHTML = `<span>${escapeHtml(p.name)}</span><span class="hint">${status}</span>`;
+        list.appendChild(li);
+      });
+      // Fullmakt-dropdown
+      const sel = $('#proxyDelegate'); sel.innerHTML = '<option value="">Velg person...</option>';
+      data.proxies.forEach(p => {
+        if(p.id !== state.user.id){
+          const opt = document.createElement('option');
+          opt.value = p.id; opt.textContent = escapeHtml(p.name);
+          sel.appendChild(opt);
+        }
+      });
+    }).getEligibility(state.moteId);
+  }
+
+  $('#btnAssignProxy').onclick = () => {
+    const toUserId = $('#proxyDelegate').value;
+    if (!toUserId) { setProxyStatus('Vennligst velg en person.'); return; }
+    setProxyStatus('Gir fullmakt...');
+    google.script.run
+      .withSuccessHandler(res => {
+        setProxyStatus(res.message || 'Fullmakt gitt.');
+        loadEligibilityInfo(); // Refresh list
+      })
+      .withFailureHandler(err => setProxyStatus(err.message || 'Kunne ikke gi fullmakt.'))
+      .assignProxy(state.moteId, toUserId);
+  };
+
   // ------- NESTEN-SANNTID POLLING -------
   function startPolling(){
     stopPolling();
@@ -540,6 +715,13 @@
           }
         }
       }
+      // NY: Sjekk for stemmeoppdateringer
+      if (ch.votesUpdated && ch.votesUpdated.includes(state.sakId)){
+        loadVoteStatus();
+        $('#liveBadge').style.display='inline-block';
+        activity = true;
+      }
+
       state.lastTick = ch.serverNow || new Date().toISOString();
       adjustPolling(activity);
     }).rtGetChanges(state.moteId, state.lastTick);

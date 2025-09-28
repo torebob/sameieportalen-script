@@ -28,7 +28,16 @@ const SHEETS = Object.freeze({
   HMS: 'HMS_Egenkontroll',
   MOTER: 'Møter',
   MOTE_SAKER: 'MøteSaker',
-  MOTE_KOMMENTARER: 'MøteSakKommentarer'
+  MOTE_KOMMENTARER: 'MøteSakKommentarer',
+  OPPSLAG: 'Oppslag',
+  OPPSLAG_SPORING: 'OppslagSporing',
+  EPOST_LOGG: 'E-post-Logg'
+});
+
+const SHEET_HEADERS = Object.freeze({
+  [SHEETS.OPPSLAG]: ['Oppslag-ID', 'Tittel', 'Innhold', 'Forfatter', 'Dato-Sendt', 'Målgruppe', 'Antall-Sendt', 'Antall-Åpnet'],
+  [SHEETS.OPPSLAG_SPORING]: ['Sporing-ID', 'Oppslag-ID', 'Person-ID', 'Dato-Åpnet'],
+  [SHEETS.EPOST_LOGG]: ['Epost-ID', 'Mottatt-Dato', 'Avsender', 'Emne', 'Kategori', 'Status', 'Svar-Forslag', 'Original-Innhold', 'Tråd-ID']
 });
 
 const PROPS = PropertiesService.getScriptProperties();
@@ -148,6 +157,7 @@ function onOpen(e) {
 
   // Hovedmeny (alle)
   addIf('Dashbord', 'openDashboardAuto');
+  addIf('E-postassistent', 'openEmailAssistant');
   menu.addSeparator();
   addIf('Møteoversikt & Protokoller…', 'openMeetingsUI');
   addIf('Møtesaker (editor)…', 'openMoteSakEditor');
@@ -182,6 +192,11 @@ function onOpen(e) {
     const admin = ui.createMenu('Admin');
     addIf('Opprett basisfaner', 'createBaseSheets');
     addIf('Kjør kvalitetssjekk', 'runAllChecks');
+    admin.addSeparator();
+    addIf('Initialiser E-postassistent', 'initializeEmailFeature');
+    addIf('Kjør E-post-behandling (manuell)', 'processIncomingEmails');
+    addIf('Aktiver automatisk e-postbehandling', 'createEmailProcessingTrigger');
+    addIf('Test E-post-kategorisering', 'testEmailCategorizationAccuracy');
     admin.addSeparator();
     addIf('Synkroniser årshjul til kalender', 'syncYearWheelToCalendar');
     addIf("Oppdater 'Ansvarlig'-liste", 'adminUpdateTasksDropdown');

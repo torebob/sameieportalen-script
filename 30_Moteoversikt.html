@@ -30,6 +30,7 @@
          - (valgfritt) listInnspill(sakId) → [{sakId,ts,from,text}]
          - (ny) unlockMeeting(moteId) → {ok,status}
          - (ny) moveAgendaToMeeting(sakId, toMoteId) → {ok}
+         - (ny) getProtocolPreviewUrl(moteId) -> {url}
          - (valgfritt sanntid) rtServerNow(), rtGetChanges(moteId, sinceIso)
   ====================================================================================== -->
 
@@ -97,6 +98,7 @@
       <div class="toolbar">
         <button class="btn primary" id="btnSaveMeeting">Lagre møte</button>
         <button class="btn" id="btnNewMeeting">Nytt møte</button>
+        <button class="btn" id="btnViewProtocol" style="display:none">Vis protokoll</button>
         <span id="saveStatus" class="status"></span>
       </div>
     </div>
@@ -250,6 +252,8 @@
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
+    $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
+
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
       google.script.run.withSuccessHandler(can=>{
@@ -305,6 +309,7 @@
     clearSak();
     updateStatusBadge();
     applyLockUI(false);
+    $('#btnViewProtocol').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
@@ -347,6 +352,26 @@
   // Øvrig
   $('#btnNewMeeting').onclick = clearMeeting;
   $('#btnRefresh').onclick = refreshMeetings;
+  $('#btnViewProtocol').onclick = function(){
+    if (!state.moteId) return;
+    setStatus('Henter forhåndsvisning...');
+    if (!google.script.run.getProtocolPreviewUrl){
+      return setStatus('Funksjonen getProtocolPreviewUrl er ikke tilgjengelig.');
+    }
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res && res.url) {
+          window.open(res.url, '_blank');
+          setStatus('Forhåndsvisning åpnet i ny fane.');
+        } else {
+          setStatus('Kunne ikke hente forhåndsvisning.');
+        }
+      })
+      .withFailureHandler(err => {
+        setStatus(err.message || 'En feil oppstod ved henting av forhåndsvisning.');
+      })
+      .getProtocolPreviewUrl(state.moteId);
+  };
   $('#btnReload').onclick = ()=> { if (state.moteId) refreshCurrentMeeting(); };
   $('#scopePlanned').onclick = ()=>{ $('#scopePlanned').classList.add('active'); $('#scopePast').classList.remove('active'); refreshMeetings(); };
   $('#scopePast').onclick     = ()=>{ $('#scopePast').classList.add('active');  $('#scopePlanned').classList.remove('active'); refreshMeetings(); };

@@ -156,6 +156,30 @@ function sendProtokollForGodkjenning(moteId, protokollUrl) {
   }
 }
 
+function getProtocolPreviewUrl(moteId) {
+  try {
+    if (!moteId) throw new Error('Mangler Møte-ID.');
+
+    const mote = _findMoteRow_Protokoll_(moteId);
+    if (!mote) throw new Error(`Fant ikke møtet med ID "${moteId}".`);
+
+    const protokollUrlCol = mote.H['Protokoll-URL'];
+    if (protokollUrlCol === -1) {
+      throw new Error('Fant ikke kolonnen "Protokoll-URL" i møte-arket.');
+    }
+
+    const url = mote.sheet.getRange(mote.row, protokollUrlCol + 1).getValue();
+    if (!url) {
+      throw new Error('Protokoll-URL er ikke registrert for dette møtet.');
+    }
+
+    return { url: String(url).trim() };
+  } catch (e) {
+    safeLog('Protokoll_Preview_Feil', `getProtocolPreviewUrl: ${e.message}`);
+    throw new Error(e.message);
+  }
+}
+
 function handleProtokollApprovalRequest(e) {
   const title = 'Protokoll';
   const page = msg => HtmlService.createHtmlOutput(`<h3>${title}</h3><p>${msg}</p>`);

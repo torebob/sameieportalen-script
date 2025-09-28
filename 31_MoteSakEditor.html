@@ -54,6 +54,8 @@
       <textarea id="bakgrunn" rows="5" placeholder="Faktagrunnlag/beskrivelse"></textarea>
       <label>Forslag til tekst til vedtak</label>
       <textarea id="vedtak" rows="4" placeholder="Formulering som kan vedtas"></textarea>
+      <label>Referatnotat (vises kun for styret)</label>
+      <textarea id="notat" rows="5" placeholder="Skriv referat her under møtet..."></textarea>
       <div class="stack">
         <button id="btnSave" class="btn primary">Lagre sak</button>
         <button id="btnNew" class="btn">Nullstill</button>
@@ -86,13 +88,13 @@
 
     function clearForm(){
       el('#sakId').value=''; el('#tittel').value=''; el('#foreslattAv').value=''; el('#gdpr').value='';
-      el('#bakgrunn').value=''; el('#vedtak').value='';
+      el('#bakgrunn').value=''; el('#vedtak').value=''; el('#notat').value='';
     }
     function loadList(){
       google.script.run.withSuccessHandler(renderList).withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).listAgendaItems(MOTE_ID);
     }
     function save(){
-      const payload = { tittel:el('#tittel').value, foreslattAv:el('#foreslattAv').value, gdprNote:el('#gdpr').value, bakgrunn:el('#bakgrunn').value, forslagVedtak:el('#vedtak').value };
+      const payload = { tittel:el('#tittel').value, foreslattAv:el('#foreslattAv').value, gdprNote:el('#gdpr').value, bakgrunn:el('#bakgrunn').value, forslagVedtak:el('#vedtak').value, notat:el('#notat').value };
       const sakId = el('#sakId').value;
       if (!payload.tittel){ toast('Tittel mangler'); return; }
       if (!sakId){
@@ -111,6 +113,7 @@
       el('#gdpr').value = item.gdprNote || '';
       el('#bakgrunn').value = item.bakgrunn || '';
       el('#vedtak').value = item.forslagVedtak || '';
+      el('#notat').value = item.notat || '';
     }
     function addComment(sakId, fase){
       const input = document.querySelector(`#c_${fase}_${sakId}`);
@@ -167,6 +170,13 @@
               // Using innerHTML is safe because content is escaped.
               forslag.innerHTML = `<strong>Forslag til vedtak</strong><br>${escapeHtml(it.forslagVedtak)}`;
               wrap.appendChild(forslag);
+          }
+
+          if (it.notat) {
+              const notat = document.createElement('div');
+              notat.className = 'comment';
+              notat.innerHTML = `<strong>Referatnotat</strong><br>${escapeHtml(it.notat)}`;
+              wrap.appendChild(notat);
           }
 
           const stack = document.createElement('div');

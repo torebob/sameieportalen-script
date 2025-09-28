@@ -244,24 +244,3 @@ function _extractFormIdFromUrl_(url) {
   const m = String(url || '').match(/\/forms\/d\/([a-zA-Z0-9_-]+)/);
   return m ? m[1] : '';
 }
-
-function _isValidEmail_(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
-}
-
-function _getBoardEmails_() {
-  const ss = SpreadsheetApp.getActive();
-  const sh = ss.getSheetByName(SHEETS.BOARD);
-  if (!sh || sh.getLastRow() < 2) return [];
-  return sh.getRange(2, 2, sh.getLastRow() - 1, 1).getValues().flat().map(v => String(v || '').trim()).filter(_isValidEmail_);
-}
-
-function _setCell_(sh, row, col, v) {
-  if (row && col) {
-    try {
-      sh.getRange(row, col).setValue(v);
-    } catch (e) {
-      _safeLog_('FormsScheduler', `Skriving til celle (${row},${col}) feilet: ${e.message}`);
-    }
-  }
-}

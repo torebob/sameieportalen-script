@@ -31,6 +31,7 @@
     "22_AI_Kommunikasjon_API.js",
     "22_Mail_Processor.js",
     "23_Mail_Assistent_API.js",
+    "24_Protokoll_Generator.js",
     "25_Search_API.js",
     "37_Dashboard.html",
     "40_Mail_Assistent_UI.html",

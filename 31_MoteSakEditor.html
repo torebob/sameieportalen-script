@@ -21,7 +21,7 @@
     .card{background:#0f172a;border:1px solid #1f2937;border-radius:12px;padding:16px}
     h2{margin:0 0 12px}
     label{display:block;font-size:12px;color:#93a3b8;margin:10px 0 6px}
-    input,textarea{width:100%;background:#0b1324;color:#e5e7eb;border:1px solid #1f2937;border-radius:8px;padding:10px 12px;font-size:14px}
+    input,textarea,select{width:100%;background:#0b1324;color:#e5e7eb;border:1px solid #1f2937;border-radius:8px;padding:10px 12px;font-size:14px;box-sizing:border-box}
     .btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #1f2937;border-radius:9px;padding:10px 14px;background:#0b1b33;color:#e2e8f0;cursor:pointer}
     .btn.primary{background:#2563eb;border-color:#2563eb}
     .btn.green{background:#16a34a;border-color:#16a34a}
@@ -54,6 +54,8 @@
       <textarea id="bakgrunn" rows="5" placeholder="Faktagrunnlag/beskrivelse"></textarea>
       <label>Forslag til tekst til vedtak</label>
       <textarea id="vedtak" rows="4" placeholder="Formulering som kan vedtas"></textarea>
+      <label>Ansvarlig styremedlem (valgfritt)</label>
+      <select id="ansvarlig"></select>
       <div class="stack">
         <button id="btnSave" class="btn primary">Lagre sak</button>
         <button id="btnNew" class="btn">Nullstill</button>
@@ -86,13 +88,20 @@
 
     function clearForm(){
       el('#sakId').value=''; el('#tittel').value=''; el('#foreslattAv').value=''; el('#gdpr').value='';
-      el('#bakgrunn').value=''; el('#vedtak').value='';
+      el('#bakgrunn').value=''; el('#vedtak').value=''; el('#ansvarlig').value='';
     }
     function loadList(){
-      google.script.run.withSuccessHandler(renderList).withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).listAgendaItems(MOTE_ID);
+      google.script.run.withSuccessHandler(renderList).withFailureHandler(e=>toast('Feil: '+(e&&e.message?e.message:e))).listAgenda(MOTE_ID);
     }
     function save(){
-      const payload = { tittel:el('#tittel').value, foreslattAv:el('#foreslattAv').value, gdprNote:el('#gdpr').value, bakgrunn:el('#bakgrunn').value, forslagVedtak:el('#vedtak').value };
+      const payload = {
+        tittel:el('#tittel').value,
+        forslagAv:el('#foreslattAv').value,
+        gdprNote:el('#gdpr').value,
+        bakgrunn:el('#bakgrunn').value,
+        forslagVedtak:el('#vedtak').value,
+        ansvarlig: el('#ansvarlig').value
+      };
       const sakId = el('#sakId').value;
       if (!payload.tittel){ toast('Tittel mangler'); return; }
       if (!sakId){
@@ -111,6 +120,7 @@
       el('#gdpr').value = item.gdprNote || '';
       el('#bakgrunn').value = item.bakgrunn || '';
       el('#vedtak').value = item.forslagVedtak || '';
+      el('#ansvarlig').value = item.ansvarlig || '';
     }
     function addComment(sakId, fase){
       const input = document.querySelector(`#c_${fase}_${sakId}`);
@@ -152,6 +162,13 @@
               muted.textContent += ` • ${escapeHtml(it.gdprNote)}`;
           }
           wrap.appendChild(muted);
+
+          if (it.ansvarlig) {
+            const ansvarlig = document.createElement('div');
+            ansvarlig.className = 'muted';
+            ansvarlig.innerHTML = `<strong>Ansvarlig:</strong> ${escapeHtml(it.ansvarlig)}`;
+            wrap.appendChild(ansvarlig);
+          }
 
           if (it.bakgrunn) {
               const bakgrunn = document.createElement('div');
@@ -258,6 +275,19 @@
         .getAiAssistance(text, mode);
     }
 
+    function populateBoardMembers(names) {
+      const select = el('#ansvarlig');
+      select.innerHTML = '<option value="">Ikke tildelt</option>';
+      if(names && names.length) {
+        names.forEach(name => {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', ()=>{
       el('#btnSave').addEventListener('click', save);
       el('#btnNew').addEventListener('click', clearForm);
@@ -272,6 +302,7 @@
       el('#btnAiTasks').addEventListener('click', () => callAi('tasks'));
 
       loadList();
+      google.script.run.withSuccessHandler(populateBoardMembers).getBoardMembers();
     });
 
     // Helper function to escape HTML, in case it's not defined elsewhere

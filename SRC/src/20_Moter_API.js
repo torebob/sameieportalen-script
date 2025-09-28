@@ -14,7 +14,7 @@
   const STEMMER_SHEET  = SHEETS.MOTE_STEMMER;
 
   const MEETINGS_HEADERS = ['id','type','dato','start','slutt','sted','tittel','agenda','status','created_ts','updated_ts'];
-  const SAKER_HEADERS = ['mote_id','sak_id','saksnr','tittel','forslag','vedtak','created_ts','updated_ts'];
+  const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslagAv', 'gdprNote', 'bakgrunn', 'forslagVedtak', 'vedtak', 'status', 'ansvarlig', 'created_ts', 'updated_ts'];
   const INNSPILL_HEADERS = ['sak_id','ts','from','text'];
   const STEMMER_HEADERS = ['vote_id','sak_id','mote_id','email','name','vote','ts'];
 
@@ -39,7 +39,7 @@
     const email = (Session.getActiveUser()?.getEmail() || Session.getEffectiveUser()?.getEmail() || '').toLowerCase();
     let name = '';
     try {
-      const boardSheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.BOARD);
+      const boardSheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.STYRET);
       if (boardSheet && boardSheet.getLastRow() > 1) {
         const boardData = boardSheet.getRange(2, 1, boardSheet.getLastRow() - 1, 2).getValues();
         const match = boardData.find(row => String(row[1] || '').toLowerCase() === email);
@@ -48,6 +48,17 @@
     } catch(e) {}
     return { email, name };
   }
+  function getBoardMembers() {
+  try {
+    const sheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.STYRET);
+    if (!sheet || sheet.getLastRow() < 2) return [];
+    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+    return data.map(row => row[0]).filter(name => name && name.trim() !== '');
+  } catch (e) {
+    log_('Styremedlemmer_FEIL', e.message);
+    return [];
+  }
+}
   function getMoteIdForSak_(sakId) {
     const sakerSheet = ensureSheet_(SAKER_SHEET, SAKER_HEADERS);
     const index = Indexer.get(SAKER_SHEET, SAKER_HEADERS, 'sak_id');
@@ -240,13 +251,14 @@
     }
   }
 
-  function newAgendaItem(moteId) {
+  function addAgendaItem(moteId, payload) {
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
       const sakerSheet = ensureSheet_(SAKER_SHEET, SAKER_HEADERS);
-      const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
+      const H = SAKER_HEADERS;
       const idx = Object.fromEntries(H.map((h, i) => [h, i]));
+
       const sakId = `SAK-${Utilities.getUuid().slice(0, 8)}`;
       const saksnr = nextSaksnr_(moteId);
       const now = new Date();
@@ -255,6 +267,13 @@
       newRow[idx.mote_id] = moteId;
       newRow[idx.sak_id] = sakId;
       newRow[idx.saksnr] = saksnr;
+      newRow[idx.tittel] = payload.tittel || '';
+      newRow[idx.forslagAv] = payload.forslagAv || '';
+      newRow[idx.gdprNote] = payload.gdprNote || '';
+      newRow[idx.bakgrunn] = payload.bakgrunn || '';
+      newRow[idx.forslagVedtak] = payload.forslagVedtak || '';
+      newRow[idx.status] = 'Planlagt';
+      newRow[idx.ansvarlig] = payload.ansvarlig || '';
       newRow[idx.created_ts] = now;
       newRow[idx.updated_ts] = now;
 
@@ -263,18 +282,22 @@
 
       log_('Sak', `Ny sak ${sakId} (${saksnr}) for møte ${moteId}`);
       return { ok: true, sakId, saksnr };
-    } finally {
+    } catch(e) {
+       log_('Sak_FEIL', `Add item: ${e.stack}`);
+       return {ok: false, message: e.message};
+    }
+    finally {
       lock.releaseLock();
     }
   }
 
-  function saveAgenda(payload) {
+  function updateAgendaItem(payload) {
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
       const sakerSheet = ensureSheet_(SAKER_SHEET, SAKER_HEADERS);
-      const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
-      const idx = { tittel: H.indexOf('tittel'), forslag: H.indexOf('forslag'), vedtak: H.indexOf('vedtak'), updated_ts: H.indexOf('updated_ts') };
+      const H = SAKER_HEADERS;
+      const idx = Object.fromEntries(H.map((h, i) => [h, i]));
 
       const index = Indexer.get(SAKER_SHEET, SAKER_HEADERS, 'sak_id');
       const rowNum = index[payload.sakId];
@@ -284,13 +307,20 @@
       const cur = range.getValues()[0];
       
       cur[idx.tittel] = payload.tittel ?? cur[idx.tittel];
-      cur[idx.forslag] = payload.forslag ?? cur[idx.forslag];
-      cur[idx.vedtak] = payload.vedtak ?? cur[idx.vedtak];
+      cur[idx.forslagAv] = payload.forslagAv ?? cur[idx.forslagAv];
+      cur[idx.gdprNote] = payload.gdprNote ?? cur[idx.gdprNote];
+      cur[idx.bakgrunn] = payload.bakgrunn ?? cur[idx.bakgrunn];
+      cur[idx.forslagVedtak] = payload.forslagVedtak ?? cur[idx.forslagVedtak];
+      cur[idx.ansvarlig] = payload.ansvarlig ?? cur[idx.ansvarlig];
       cur[idx.updated_ts] = new Date();
       
       range.setValues([cur]);
       return { ok: true, message: 'Sak lagret' };
-    } finally {
+    } catch(e) {
+       log_('Sak_FEIL', `Update item: ${e.stack}`);
+       return {ok: false, message: e.message};
+    }
+    finally {
       lock.releaseLock();
     }
   }
@@ -301,13 +331,22 @@
     if (last < 2) return [];
     
     const data = sakerSheet.getRange(2, 1, last - 1, sakerSheet.getLastColumn()).getValues();
-    const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
+    const H = SAKER_HEADERS;
     const i = Object.fromEntries(H.map((h, i) => [h, i]));
 
     return data.filter(r => r[i.mote_id] === moteId)
       .map(r => ({
-        moteId: r[i.mote_id], sakId: r[i.sak_id], saksnr: r[i.saksnr],
-        tittel: r[i.tittel], forslag: r[i.forslag], vedtak: r[i.vedtak],
+        moteId: r[i.mote_id],
+        sakId: r[i.sak_id],
+        saksnr: r[i.saksnr],
+        tittel: r[i.tittel],
+        forslagAv: r[i.forslagAv],
+        gdprNote: r[i.gdprNote],
+        bakgrunn: r[i.bakgrunn],
+        forslagVedtak: r[i.forslagVedtak],
+        vedtak: r[i.vedtak],
+        status: r[i.status],
+        ansvarlig: r[i.ansvarlig],
         updated_ts: r[i.updated_ts]
       }))
       .sort((a,b)=> String(a.saksnr).localeCompare(String(b.saksnr)));
@@ -466,9 +505,10 @@
   global.uiBootstrap = uiBootstrap;
   global.upsertMeeting = upsertMeeting;
   global.listMeetings_ = listMeetings_;
-  global.newAgendaItem = newAgendaItem;
-  global.saveAgenda = saveAgenda;
+  global.addAgendaItem = addAgendaItem;
+  global.updateAgendaItem = updateAgendaItem;
   global.listAgenda = listAgenda;
+  global.getBoardMembers = getBoardMembers;
   global.deleteAgendaItem = deleteAgendaItem;
   global.appendInnspill = appendInnspill;
   global.listInnspill = listInnspill;

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="utf-8">
+    <title>Oppgaveoversikt</title>
+    <base target="_top">
+    <style>
+      :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--warning:#f59e0b;--danger:#ef4444}
+      *{box-sizing:border-box}
+      body{margin:0;padding:16px;font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,system-ui,sans-serif;background:var(--bg);color:#fff;line-height:1.5}
+      main {max-width: 1200px; margin: 0 auto;}
+      h1 { border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 16px; }
+      .controls { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; background-color: var(--card); border-radius: 8px; margin-bottom: 24px; align-items: flex-end; }
+      .control-group { display: flex; flex-direction: column; gap: 4px; }
+      label { font-size: 12px; color: var(--muted); font-weight: 500; }
+      select, .btn { border:1px solid var(--border); background:var(--bg); color:#e2e8f0; padding:8px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
+      .btn{background:var(--primary);border-color:var(--primary);font-weight:500;transition:all .2s ease}
+      .btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.1)}
+      .btn:disabled{opacity:.5;cursor:not-allowed}
+      #task-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+      #task-table th, #task-table td { border: 1px solid var(--border); padding: 10px 12px; text-align: left; font-size: 14px; }
+      #task-table th { background: var(--bg); cursor: pointer; user-select: none; }
+      #task-table th:hover { background: #1f2937; }
+      #task-table tbody tr:nth-child(odd) { background-color: var(--card); }
+      #task-table tbody tr:hover { background-color: #1e293b; }
+      #loader { text-align: center; padding: 40px; font-size: 16px; }
+      .error-msg { color: var(--danger); background-color: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); padding: 12px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>Oppgaveoversikt for Administratorer</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="status-filter">Status</label>
+                <select id="status-filter">
+                    <option value="">Alle statuser</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="assignee-filter">Ansvarlig</label>
+                <select id="assignee-filter">
+                    <option value="">Alle ansvarlige</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="sort-by">Sorter etter</label>
+                <select id="sort-by">
+                    <option value="Frist">Frist</option>
+                    <option value="Status">Status</option>
+                    <option value="Ansvarlig">Ansvarlig</option>
+                </select>
+            </div>
+            <div class="control-group">
+                 <label for="sort-order">&nbsp;</label>
+                <select id="sort-order">
+                    <option value="asc">Stigende</option>
+                    <option value="desc">Synkende</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <button id="filter-btn" class="btn">Filtrer</button>
+            </div>
+        </div>
+
+        <div id="loader">Laster...</div>
+        <div id="results">
+            <table id="task-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Oppgave-ID</th>
+                        <th>Tittel</th>
+                        <th>Ansvarlig</th>
+                        <th>Status</th>
+                        <th>Frist</th>
+                        <th>Seksjonsnr</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div id="error-container"></div>
+        </div>
+    </main>
+
+    <script>
+      const App = {
+        loader: document.getElementById('loader'),
+        table: document.getElementById('task-table'),
+        tableBody: document.querySelector('#task-table tbody'),
+        errorContainer: document.getElementById('error-container'),
+        filterBtn: document.getElementById('filter-btn'),
+
+        init() {
+          this.setupEventListeners();
+          this.loadFilterData();
+          this.fetchTasks();
+        },
+
+        setupEventListeners() {
+          this.filterBtn.addEventListener('click', () => this.fetchTasks());
+        },
+
+        showLoading(isLoading) {
+          this.loader.style.display = isLoading ? 'block' : 'none';
+          this.table.style.display = isLoading ? 'none' : 'table';
+          if (isLoading) this.errorContainer.innerHTML = '';
+        },
+
+        showError(message) {
+            this.errorContainer.innerHTML = `<div class="error-msg">${message}</div>`;
+        },
+
+        run(funcName, ...args) {
+          return new Promise((resolve, reject) => {
+            google.script.run
+              .withSuccessHandler(resolve)
+              .withFailureHandler(reject)
+              [funcName](...args);
+          });
+        },
+
+        async loadFilterData() {
+          try {
+            const res = await this.run('getTaskFilterData');
+            if (res.ok) {
+              this.populateSelect('status-filter', res.statuses);
+              this.populateSelect('assignee-filter', res.assignees);
+            } else {
+              this.showError('Kunne ikke laste filterdata: ' + res.error);
+            }
+          } catch (err) {
+            this.showError('En feil oppstod under lasting av filterdata: ' + (err.message || err));
+          }
+        },
+
+        populateSelect(elementId, items) {
+          const select = document.getElementById(elementId);
+          items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item;
+            option.textContent = item;
+            select.appendChild(option);
+          });
+        },
+
+        async fetchTasks() {
+          this.showLoading(true);
+          this.filterBtn.disabled = true;
+
+          try {
+            const options = {
+              status: document.getElementById('status-filter').value,
+              assignee: document.getElementById('assignee-filter').value,
+              sortBy: document.getElementById('sort-by').value,
+              sortOrder: document.getElementById('sort-order').value,
+            };
+            const res = await this.run('getTasks', options);
+            if (res.ok) {
+              this.renderTable(res.tasks);
+            } else {
+              this.showError('Kunne ikke hente oppgaver: ' + res.error);
+            }
+          } catch (err) {
+            this.showError('En feil oppstod: ' + (err.message || err));
+            this.table.style.display = 'none';
+          } finally {
+            this.showLoading(false);
+            this.filterBtn.disabled = false;
+          }
+        },
+
+        renderTable(tasks) {
+          this.tableBody.innerHTML = '';
+          if (tasks.length === 0) {
+            const row = this.tableBody.insertRow();
+            const cell = row.insertCell();
+            cell.colSpan = 6;
+            cell.textContent = 'Ingen oppgaver matchet filterkriteriene.';
+            cell.style.textAlign = 'center';
+            return;
+          }
+
+          tasks.forEach(task => {
+            const row = this.tableBody.insertRow();
+            row.insertCell().textContent = task['Oppgave-ID'] || '';
+            row.insertCell().textContent = task['Tittel'] || '';
+            row.insertCell().textContent = task['Ansvarlig'] || '';
+            row.insertCell().textContent = task['Status'] || '';
+            row.insertCell().textContent = task['Frist'] || '';
+            row.insertCell().textContent = task['Seksjonsnr'] || '';
+          });
+        }
+      };
+
+      document.addEventListener('DOMContentLoaded', () => App.init());
+    </script>
+</body>
+</html>

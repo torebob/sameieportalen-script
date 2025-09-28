@@ -28,6 +28,7 @@
     PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html', title: 'Protokoll-godkjenning', w: 980, h: 760 },
     SEKSJON_HISTORIKK: { file: '32_SeksjonHistorikk.html', title: 'Seksjonshistorikk', w: 1100, h: 760 },
     VAKTMESTER: { file: '33_VaktmesterVisning.html', title: 'Vaktmester', w: 1100, h: 800 },
+    TASKS_OVERVIEW: { file: '44_Tasks_Overview.html', title: 'Oppgaveoversikt for Administratorer', w: 1280, h: 840 },
   };
 
   if (!globalThis.UI_FILES) {
@@ -104,7 +105,7 @@
     // Fetch and parse admin buttons from config, with a hardcoded fallback.
     const adminButtonsConfig = _getConfigValue_(
       'DASHBOARD_ADMIN_BUTTONS',
-      'Del dokument|openShareDocumentUI|primary,Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools'
+      'Oppgaveoversikt|openTasksOverviewUI|primary,Del dokument|openShareDocumentUI,Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools'
     );
 
     const adminButtons = adminButtonsConfig.split(',').map(s => {
@@ -166,6 +167,15 @@
     }
   };
 
+  const openTasksOverviewUI = () => {
+    const uiDef = UI_FILES.TASKS_OVERVIEW;
+    const html = HtmlService.createHtmlOutputFromFile(`SRC/${uiDef.file}`)
+      .setWidth(uiDef.w)
+      .setHeight(uiDef.h);
+    SpreadsheetApp.getUi().showModalDialog(html, uiDef.title);
+  };
+
+  globalThis.openTasksOverviewUI = openTasksOverviewUI;
   globalThis.dashMetrics = dashMetrics;
 
   globalThis.clearDashboardCache = () => {

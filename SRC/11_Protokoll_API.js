@@ -81,9 +81,7 @@ const _ensureSheet_Protokoll_ = (name, headers) => {
 
 function sendProtokollForGodkjenning(moteId, protokollUrl) {
   try {
-    if (typeof hasPermission === 'function' && !hasPermission('VIEW_ADMIN_MENU')) {
-      throw new Error('Tilgang nektet. (Krever VIEW_ADMIN_MENU)');
-    }
+    requirePermission('SEND_PROTOCOLS', 'Sende protokoller for godkjenning');
 
     if (!moteId) throw new Error('Mangler Møte-ID.');
     const mote = _findMoteRow_Protokoll_(moteId);

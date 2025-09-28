@@ -138,6 +138,7 @@
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
+      requirePermission('MANAGE_MEETINGS', 'Administrere møter');
       if (!payload?.tittel?.trim()) return { ok: false, message: 'Møtetittel er påkrevd' };
       
       const sh = _ensureSheet_(MOTER, MEETINGS_HEADERS);
@@ -236,6 +237,7 @@
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
+      requirePermission('MANAGE_MEETINGS', 'Administrere møter');
       const sakerSheet = _ensureSheet_(MOTE_SAKER, SAKER_HEADERS);
       const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
       const idx = H.reduce((acc, h, i) => ({ ...acc, [h]: i }), {});
@@ -264,6 +266,7 @@
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
+      requirePermission('MANAGE_MEETINGS', 'Administrere møter');
       const sakerSheet = _ensureSheet_(MOTE_SAKER, SAKER_HEADERS);
       const H = sakerSheet.getRange(1, 1, 1, sakerSheet.getLastColumn()).getValues()[0];
       const idx = { tittel: H.indexOf('tittel'), forslag: H.indexOf('forslag'), vedtak: H.indexOf('vedtak'), updated_ts: H.indexOf('updated_ts') };
@@ -310,6 +313,7 @@
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
     try {
+      requirePermission('MANAGE_MEETINGS', 'Administrere møter');
       const sakerSheet = _ensureSheet_(MOTE_SAKER, SAKER_HEADERS);
       const index = Indexer.get(MOTE_SAKER, SAKER_HEADERS, 'sak_id');
       const rowNum = index[sakId];

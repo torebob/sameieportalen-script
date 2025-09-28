@@ -36,6 +36,8 @@
     'EXPORT_DATA': ['Styremedlem', 'Kjernebruker', 'Admin'],
     'VIEW_VAKTMESTER_UI': ['Vaktmester', 'Admin'],
     'OPEN_MEETINGS_UI': ['Styremedlem', 'Kjernebruker', 'Admin'],
+    'MANAGE_MEETINGS': ['Styremedlem', 'Kjernebruker', 'Admin'],
+    'SEND_PROTOCOLS': ['Styremedlem', 'Kjernebruker', 'Admin'],
     'GENERATE_REPORTS': ['Styremedlem', 'Kjernebruker', 'Admin'],
     'VIEW_BUDGET_MENU': ['Styremedlem', 'Kjernebruker', 'Admin']
   });

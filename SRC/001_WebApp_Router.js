@@ -20,6 +20,7 @@ function doGet(e) {
       protokoll: handleProtokollApprovalRequest,
       tracking: handleTrackingPixelRequest,
       budget: handleBudgetAppRequest,
+      faq: handleFaqRequest, // Ny rute for FAQ-siden
     };
 
     // Hvis ingen side er spesifisert, bruk 'budget' som standard.

@@ -1,0 +1,309 @@
+<? var FILE = '29_Gjoremal.html'; var VERSION = '1.0.0'; var UPDATED = '2025-09-28'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportal — Gjøremål</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444;--dialog-bg:rgba(15,23,42,0.8)}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .title{font-size:22px;font-weight:700}
+    .muted{color:var(--muted);font-size:13px}
+    .controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer;font-size:14px}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
+    .task-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+    .task-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;display:flex;flex-direction:column}
+    .task-card h3{margin:0 0 8px;font-size:16px;font-weight:600}
+    .task-meta{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;gap:12px}
+    .task-desc{font-size:14px;color:#cbd5e1;margin-bottom:16px;flex-grow:1}
+    .task-footer{display:flex;justify-content:space-between;align-items:center}
+    .task-status{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:500}
+    .status-open{background-color:#3b82f620;color:#60a5fa}
+    .status-completed{background-color:#10b98120;color:#34d399}
+    .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
+    .toast.ok{background:var(--success)}
+    .toast.err{background:var(--danger)}
+    /* --- Modal --- */
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:var(--dialog-bg);display:flex;align-items:center;justify-content:center;z-index:1001;visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}
+    .modal.open{visibility:visible;opacity:1}
+    .modal-content{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:100%;max-width:500px}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .modal-title{font-size:18px;font-weight:700}
+    .form-group{margin-bottom:16px}
+    .form-group label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+    .form-group input,.form-group textarea,.form-group select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:#0c1526;color:#fff;font-size:14px}
+    .form-group textarea{resize:vertical;min-height:80px}
+    .modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <div class="title">Oppgave- og Sakshåndtering</div>
+        <div class="muted">Versjon <?= VERSION ?> • <span id="status" aria-live="polite">Laster inn...</span></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <input type="search" id="searchInput" placeholder="Søk i oppgaver..." class="form-group input" style="padding: 10px; min-width: 220px;"/>
+        <select id="statusFilter" class="form-group select" style="padding: 10px;">
+          <option value="all">Alle statuser</option>
+          <option value="Open">Åpen</option>
+          <option value="Completed">Fullført</option>
+        </select>
+        <select id="assigneeFilter" class="form-group select" style="padding: 10px;">
+          <option value="all">Alle ansvarlige</option>
+        </select>
+      </div>
+      <button class="btn primary" id="btnNewTask">➕ Ny oppgave</button>
+    </div>
+
+    <div id="taskGrid" class="task-grid">
+      <!-- Tasks will be dynamically inserted here -->
+    </div>
+  </div>
+
+  <div id="taskModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <div id="modalTitle" class="modal-title">Ny oppgave</div>
+        <button class="btn" onclick="closeModal()">✖</button>
+      </div>
+      <form id="taskForm">
+        <input type="hidden" id="taskId" />
+        <div class="form-group">
+          <label for="taskTitle">Tittel</label>
+          <input type="text" id="taskTitle" required />
+        </div>
+        <div class="form-group">
+          <label for="taskDesc">Beskrivelse</label>
+          <textarea id="taskDesc"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="taskAssignee">Ansvarlig</label>
+          <select id="taskAssignee" required></select>
+        </div>
+        <div class="form-group">
+          <label for="taskDueDate">Frist</label>
+          <input type="date" id="taskDueDate" />
+        </div>
+        <div class="form-group">
+          <label for="taskAttachment">Vedlegg</label>
+          <input type="file" id="taskAttachment" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn" onclick="closeModal()">Avbryt</button>
+          <button type="submit" class="btn primary">Lagre</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let tasks = []; // Full dataset for client-side operations
+    const modal = document.getElementById('taskModal');
+    const btnNewTask = document.getElementById('btnNewTask');
+
+    function toast(msg, kind){
+      const t=document.createElement('div'); t.className='toast ' + (kind||'');
+      t.textContent=String(msg||''); document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2800);
+    }
+
+    function openModal() {
+      document.getElementById('taskForm').reset();
+      document.getElementById('taskId').value = '';
+      document.getElementById('modalTitle').textContent = 'Ny oppgave';
+      modal.classList.add('open');
+    }
+
+    function closeModal() {
+      modal.classList.remove('open');
+    }
+
+    btnNewTask.addEventListener('click', openModal);
+
+    // Close modal if user clicks outside of it
+    window.addEventListener('click', e => {
+      if (e.target === modal) {
+        closeModal();
+      }
+    });
+
+    function renderTasks(displayTasks) {
+      const grid = document.getElementById('taskGrid');
+      grid.innerHTML = ''; // Clear existing tasks
+      if (!displayTasks || displayTasks.length === 0) {
+        grid.innerHTML = '<p>Ingen oppgaver funnet.</p>';
+        return;
+      }
+
+      displayTasks.forEach(task => {
+        const card = document.createElement('div');
+        card.className = 'task-card';
+        card.innerHTML = `
+          <h3>${task.title}</h3>
+          <div class="task-meta">
+            <span>Ansvarlig: <strong>${task.assignee}</strong></span>
+            <span>Frist: <strong>${task.dueDate || 'Ingen'}</strong></span>
+          </div>
+          <p class="task-desc">${task.description || 'Ingen beskrivelse.'}</p>
+          <div class="task-footer">
+            <span class="task-status ${task.status === 'Open' ? 'status-open' : 'status-completed'}">${task.status}</span>
+            <button class="btn" onclick="editTask('${task.id}')">Rediger</button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function fetchTasks() {
+      document.getElementById('status').textContent = 'Laster oppgaver...';
+      google.script.run
+        .withSuccessHandler(response => {
+          if (response.ok) {
+            tasks = response.tasks; // Populate global tasks array
+            renderTasks(tasks);
+            document.getElementById('status').textContent = 'Klar';
+          } else {
+            toast(response.message || 'Kunne ikke hente oppgaver.', 'err');
+            document.getElementById('status').textContent = 'Feil';
+          }
+        })
+        .withFailureHandler(err => {
+          toast(err.message, 'err');
+          document.getElementById('status').textContent = 'Feil';
+        })
+        .gjoremalGet();
+    }
+
+    function editTask(id) {
+      const task = tasks.find(t => t.id === id);
+      if (task) {
+        document.getElementById('modalTitle').textContent = 'Rediger oppgave';
+        document.getElementById('taskId').value = task.id;
+        document.getElementById('taskTitle').value = task.title;
+        document.getElementById('taskDesc').value = task.description;
+        document.getElementById('taskAssignee').value = task.assignee;
+        document.getElementById('taskDueDate').value = task.dueDate;
+        modal.classList.add('open');
+      }
+    }
+
+    document.getElementById('taskForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const submitBtn = this.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Lagrer...';
+
+      const fileInput = document.getElementById('taskAttachment');
+      const file = fileInput.files[0];
+
+      const sendPayload = (payload) => {
+        google.script.run
+          .withSuccessHandler(response => {
+            if (response.ok) {
+              toast('Oppgave lagret!', 'ok');
+              closeModal();
+              fetchTasks(); // Refresh the task list
+            } else {
+              toast(response.message || 'Kunne ikke lagre oppgaven.', 'err');
+            }
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Lagre';
+          })
+          .withFailureHandler(err => {
+            toast(err.message, 'err');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Lagre';
+          })
+          .gjoremalSave(payload);
+      };
+
+      const payload = {
+        id: document.getElementById('taskId').value,
+        title: document.getElementById('taskTitle').value,
+        description: document.getElementById('taskDesc').value,
+        assignee: document.getElementById('taskAssignee').value,
+        dueDate: document.getElementById('taskDueDate').value,
+      };
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          payload.attachment = {
+            base64: e.target.result.split(',')[1],
+            mimeType: file.type,
+            name: file.name
+          };
+          sendPayload(payload);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        payload.attachment = null;
+        sendPayload(payload);
+      }
+    });
+
+    function applyFilters() {
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const status = document.getElementById('statusFilter').value;
+      const assignee = document.getElementById('assigneeFilter').value;
+
+      const filteredTasks = tasks.filter(task => {
+        const matchesSearch = !searchTerm ||
+                              task.title.toLowerCase().includes(searchTerm) ||
+                              (task.description && task.description.toLowerCase().includes(searchTerm));
+        const matchesStatus = status === 'all' || task.status === status;
+        const matchesAssignee = assignee === 'all' || task.assignee === assignee;
+
+        return matchesSearch && matchesStatus && matchesAssignee;
+      });
+
+      renderTasks(filteredTasks);
+    }
+
+    function populateUsers(users) {
+      const assigneeSelect = document.getElementById('taskAssignee');
+      const filterSelect = document.getElementById('assigneeFilter');
+
+      assigneeSelect.innerHTML = ''; // Clear placeholder
+      filterSelect.innerHTML = '<option value="all">Alle ansvarlige</option>';
+
+      users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.email;
+        option.textContent = user.name;
+
+        assigneeSelect.appendChild(option.cloneNode(true));
+        filterSelect.appendChild(option.cloneNode(true));
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchTasks();
+      google.script.run
+        .withSuccessHandler(response => {
+          if (response.ok) {
+            populateUsers(response.users);
+          } else {
+            toast('Kunne ikke laste brukere.', 'err');
+          }
+        })
+        .gjoremalGetUsers();
+
+      document.getElementById('searchInput').addEventListener('input', applyFilters);
+      document.getElementById('statusFilter').addEventListener('change', applyFilters);
+      document.getElementById('assigneeFilter').addEventListener('change', applyFilters);
+    });
+  </script>
+</body>
+</html>

@@ -35,6 +35,7 @@ function onEdit(e){
 
       case SHEETS.TASKS:
         _ensureTaskIdOnRow_(sh, e.range);
+        handleTaskStatusChange(e); // Notify on status change
         break;
 
       default:

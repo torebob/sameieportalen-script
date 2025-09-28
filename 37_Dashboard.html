@@ -28,6 +28,17 @@
     .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
     .toast.ok{background:var(--success)}
     .toast.err{background:var(--danger)}
+    /* --- Search --- */
+    .search-section { margin-bottom: 14px; }
+    .search-bar { display: flex; gap: 10px; margin-bottom: 10px; }
+    .search-bar input { flex-grow: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: #0c1526; color: #fff; font-size: 14px; }
+    .search-results { margin-top: 16px; max-height: 400px; overflow-y: auto; border-top: 1px solid var(--border); }
+    .search-results:empty { border-top: none; }
+    .result-item { padding: 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .result-item:last-child { border-bottom: none; }
+    .result-title a { color: #e2e8f0; text-decoration: none; font-weight: 600; }
+    .result-title a:hover { color: var(--primary); text-decoration: underline; }
+    .result-meta { font-size: 12px; color: var(--muted); }
     /* --- NEW: Skeleton Loader --- */
     .skeleton{background-color:var(--border);color:transparent;border-radius:4px;animation:pulse 1.5s cubic-bezier(0.4,0,0.6,1) infinite}
     @keyframes pulse{50%{opacity:.5}}
@@ -43,6 +54,17 @@
         <div class="muted">Versjon <?= VERSION ?> • <span id="status" aria-live="polite">Laster inn...</span></div>
       </div>
       <button class="btn" id="btnRefresh">Oppdater tall</button>
+    </div>
+
+    <div class="card search-section">
+      <h3><span style="font-size: 1.2em; vertical-align: -0.1em; margin-right: 4px;">🔎</span>Søk i arkivet</h3>
+      <div class="search-bar">
+        <input type="search" id="searchInput" placeholder="Søk etter 'brannsikkerhet', saksnummer, etc." style="flex-grow: 1;">
+        <button id="searchButton" class="btn primary">Søk</button>
+      </div>
+      <div id="searchResults" class="search-results">
+        <!-- Search results will be dynamically inserted here -->
+      </div>
     </div>
 
     <div class="grid">
@@ -189,6 +211,82 @@
 
     document.getElementById('btnRefresh').addEventListener('click', ()=>refresh(true));
     refresh(false); // Initial load (from cache if available)
+
+    // --- Search Functionality ---
+    const searchInput = document.getElementById('searchInput');
+    const searchButton = document.getElementById('searchButton');
+    const searchResultsContainer = document.getElementById('searchResults');
+
+    function renderSearchResults(response) {
+      searchResultsContainer.innerHTML = ''; // Clear previous results
+
+      if (!response || !response.ok) {
+        const message = response ? response.message : 'Ukjent feil ved søk.';
+        searchResultsContainer.innerHTML = `<div class="result-item" style="color: var(--danger);">${message}</div>`;
+        return;
+      }
+
+      if (!response.results || response.results.length === 0) {
+        searchResultsContainer.innerHTML = `<div class="result-item">Ingen treff. Prøv et annet søkeord.</div>`;
+        return;
+      }
+
+      response.results.forEach(item => {
+        const resultEl = document.createElement('div');
+        resultEl.className = 'result-item';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'result-title';
+
+        // If there's a direct link, make the title a clickable link.
+        if (item.link) {
+          titleEl.innerHTML = `<a href="${item.link}" target="_blank" rel="noopener noreferrer">${item.title}</a>`;
+        } else {
+          titleEl.textContent = item.title;
+        }
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'result-meta';
+        metaEl.textContent = item.type;
+
+        resultEl.appendChild(titleEl);
+        resultEl.appendChild(metaEl);
+        searchResultsContainer.appendChild(resultEl);
+      });
+    }
+
+    function executeSearch() {
+      const query = searchInput.value.trim();
+      if (query.length < 3) {
+        toast('Søketekst må være minst 3 tegn.', 'err');
+        return;
+      }
+
+      searchButton.disabled = true;
+      searchButton.textContent = 'Søker...';
+      searchResultsContainer.innerHTML = '<div class="result-item">Laster...</div>';
+
+      google.script.run
+        .withSuccessHandler(response => {
+          searchButton.disabled = false;
+          searchButton.textContent = 'Søk';
+          renderSearchResults(response);
+        })
+        .withFailureHandler(error => {
+          searchButton.disabled = false;
+          searchButton.textContent = 'Søk';
+          searchResultsContainer.innerHTML = `<div class="result-item" style="color: var(--danger);">Feil: ${error.message}</div>`;
+          toast(error.message, 'err');
+        })
+        .searchContent(query);
+    }
+
+    searchButton.addEventListener('click', executeSearch);
+    searchInput.addEventListener('keypress', event => {
+      if (event.key === 'Enter') {
+        executeSearch();
+      }
+    });
   </script>
 </body>
 </html>

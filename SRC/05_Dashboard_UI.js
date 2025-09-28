@@ -104,7 +104,7 @@
     // Fetch and parse admin buttons from config, with a hardcoded fallback.
     const adminButtonsConfig = _getConfigValue_(
       'DASHBOARD_ADMIN_BUTTONS',
-      'Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools'
+      'Del dokument|openShareDocumentUI|primary,Kjør systemsjekk|runAllChecks|success,Aktiver utviklerverktøy|adminEnableDevTools,Deaktiver utviklerverktøy|adminDisableDevTools'
     );
 
     const adminButtons = adminButtonsConfig.split(',').map(s => {

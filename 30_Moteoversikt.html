@@ -38,6 +38,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Møteoversikt & Protokoller</title>
   <link rel="stylesheet" href="styles/moteoversikt.css">
+  <link rel="stylesheet" href="SRC/calendar.css">
   <style>
     .task-link-container {
         margin-top: 12px;
@@ -57,6 +58,9 @@
     }
     .task-link-container a:hover {
         text-decoration: underline;
+    }
+    #calendar-container {
+      display: none; /* Skjult som standard */
     }
   </style>
 </head>
@@ -145,11 +149,20 @@
       <div class="toolbar" style="justify-content:space-between">
         <h3 style="margin:0">Planlagte møter</h3>
         <div class="seg">
-          <button id="scopePlanned" class="active">Kommende</button>
-          <button id="scopePast">Avholdte</button>
+          <button id="viewToggleList" class="active">Liste</button>
+          <button id="viewToggleCalendar">Kalender</button>
         </div>
       </div>
-      <ul id="planned" class="planned list"><li class="hint">Laster…</li></ul>
+      <div id="list-container">
+        <div class="toolbar" style="justify-content:space-between">
+          <div class="seg">
+            <button id="scopePlanned" class="active">Kommende</button>
+            <button id="scopePast">Avholdte</button>
+          </div>
+        </div>
+        <ul id="planned" class="planned list"><li class="hint">Laster…</li></ul>
+      </div>
+      <div id="calendar-container"></div>
       <div class="toolbar"><button class="btn" id="btnRefresh">Oppdater</button></div>
     </div>
   </div>
@@ -220,11 +233,11 @@
     <ul id="documentList" class="list"><li class="hint">Ingen dokumenter lastet opp.</li></ul>
   </div>
 </div>
-
+<script src="SRC/calendar.js"></script>
 <script>
   const $ = s => document.querySelector(s);
   const LOCKED_STATUSES = ['Protokoll under godkjenning','Protokoll godkjent','Arkivert'];
-  let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false };
+  let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, calendarInstance: null };
 
   function escapeHtml(unsafe) {
     if (typeof unsafe !== 'string') return '';
@@ -283,12 +296,28 @@
   google.script.run.withSuccessHandler(res => {
     state.user = res?.user || null;
     $('#innspillFrom').textContent = 'Fra: ' + (state.user?.email || '—');
+    initializeCalendar();
     refreshMeetings();
     // Load board members for participant selection
     if (google.script.run.getBoardMembers) {
       google.script.run.withSuccessHandler(drawParticipants).getBoardMembers();
     }
   }).uiBootstrap();
+
+  function initializeCalendar() {
+    const calendarEl = $('#calendar-container');
+    state.calendarInstance = new calendar(calendarEl, {
+      abbrDay: true,
+      onEventClick: (evt) => {
+        loadMeeting(evt.meetingData);
+      },
+      onDayClick: (date, evts) => {
+        if (evts.length > 0) {
+          loadMeeting(evts[0].meetingData);
+        }
+      }
+    });
+  }
 
   function drawParticipants(members) {
     const list = $('#participants-list');
@@ -307,20 +336,52 @@
 
   function refreshMeetings(){
     $('#planned').innerHTML = '<li class="hint">Laster…</li>';
-    const scope = $('#scopePast').classList.contains('active') ? 'past' : 'planned';
-    google.script.run.withSuccessHandler(drawMeetings).listMeetings_({scope});
+    google.script.run.withSuccessHandler(drawMeetings).listMeetings_({scope: 'all'});
   }
 
   function drawMeetings(list){
-    const ul = $('#planned'); ul.innerHTML='';
-    if (!list || !list.length){ ul.innerHTML = '<li class="hint">Ingen møter i listen.</li>'; return; }
-    list.forEach(m => {
+    const ul = $('#planned');
+    ul.innerHTML='';
+
+    // Clear existing events from calendar
+    state.calendarInstance.events = [];
+
+    if (!list || !list.length){
+      ul.innerHTML = '<li class="hint">Ingen møter i listen.</li>';
+      state.calendarInstance.drawCalendar();
+      return;
+    }
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const scope = $('#scopePast').classList.contains('active') ? 'past' : 'planned';
+    const filteredList = list.filter(m => {
+        if (!m.dato) return scope === 'planned';
+        const meetingDate = m.dato instanceof Date ? m.dato : new Date(m.dato);
+        return scope === 'past' ? meetingDate < today : meetingDate >= today;
+    });
+
+    if (filteredList.length === 0) {
+      ul.innerHTML = '<li class="hint">Ingen møter i listen for valgt periode.</li>';
+    }
+
+    filteredList.forEach(m => {
       const li = document.createElement('li');
       li.innerHTML = `<strong>${escapeHtml(m.tittel||m.type)}</strong><br>${escapeHtml(m.type)} • ${m.dato?fmtDate(m.dato):''} • ${escapeHtml(m.start||'')} • ${escapeHtml(m.sted||'')}`;
       li.style.cursor='pointer';
       li.onclick = () => loadMeeting(m);
       ul.appendChild(li);
     });
+
+    // Populate calendar
+    const events = list.map(m => ({
+      date: new Date(m.dato),
+      desc: m.tittel,
+      meetingData: m
+    }));
+    state.calendarInstance.events = events;
+    state.calendarInstance.drawCalendar();
   }
 
   function loadMeeting(m){
@@ -577,8 +638,31 @@
       .getProtocolPreviewUrl(state.moteId);
   };
   $('#btnReload').onclick = ()=> { if (state.moteId) refreshCurrentMeeting(); };
-  $('#scopePlanned').onclick = ()=>{ $('#scopePlanned').classList.add('active'); $('#scopePast').classList.remove('active'); refreshMeetings(); };
-  $('#scopePast').onclick     = ()=>{ $('#scopePast').classList.add('active');  $('#scopePlanned').classList.remove('active'); refreshMeetings(); };
+
+  $('#scopePlanned').onclick = ()=>{
+    $('#scopePlanned').classList.add('active');
+    $('#scopePast').classList.remove('active');
+    refreshMeetings();
+  };
+  $('#scopePast').onclick = ()=>{
+    $('#scopePast').classList.add('active');
+    $('#scopePlanned').classList.remove('active');
+    refreshMeetings();
+  };
+
+  $('#viewToggleList').onclick = () => {
+    $('#list-container').style.display = 'block';
+    $('#calendar-container').style.display = 'none';
+    $('#viewToggleList').classList.add('active');
+    $('#viewToggleCalendar').classList.remove('active');
+  };
+
+  $('#viewToggleCalendar').onclick = () => {
+    $('#list-container').style.display = 'none';
+    $('#calendar-container').style.display = 'block';
+    $('#viewToggleCalendar').classList.add('active');
+    $('#viewToggleList').classList.remove('active');
+  };
 
   // Lås opp (kun for autoriserte + når låst)
   $('#btnUnlock').onclick = function(){

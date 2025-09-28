@@ -258,7 +258,7 @@
     if (!list || !list.length){ ul.innerHTML = '<li class="hint">Ingen møter i listen.</li>'; return; }
     list.forEach(m => {
       const li = document.createElement('li');
-      li.innerHTML = `<strong>${m.tittel||m.type}</strong><br>${m.type} • ${m.dato?fmtDate(m.dato):''} • ${m.start||''} • ${m.sted||''}`;
+      li.innerHTML = `<strong>${escapeHtml(m.tittel||m.type)}</strong><br>${escapeHtml(m.type)} • ${m.dato?fmtDate(m.dato):''} • ${escapeHtml(m.start||'')} • ${escapeHtml(m.sted||'')}`;
       li.style.cursor='pointer';
       li.onclick = () => loadMeeting(m);
       ul.appendChild(li);
@@ -573,9 +573,6 @@
     box.scrollTop = box.scrollHeight;
   }
 
-  function escapeHtml(s){
-    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  }
 </script>
 </body>
 </html>

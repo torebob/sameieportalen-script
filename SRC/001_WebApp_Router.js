@@ -35,7 +35,7 @@ function doGet(e) {
     Logger.log(`doGet Router Warning: ${errorMessage}`);
 
     if (page) {
-        return HtmlService.createHtmlOutput(`<h1>Ukjent side</h1><p>Siden '${page}' finnes ikke.</p>`);
+        return HtmlService.createHtmlOutput(`<h1>Ukjent side</h1><p>Siden '${escapeHtml(page)}' finnes ikke.</p>`);
     } else {
         // Fallback hvis standard-handleren (budget) mangler.
         return HtmlService.createHtmlOutput('<h1>Velkommen</h1><p>Standard-siden kunne ikke lastes.</p>');
@@ -44,6 +44,6 @@ function doGet(e) {
   } catch (err) {
     const errorMessage = err?.message || String(err);
     Logger.log(`doGet Router Error: ${errorMessage}`);
-    return HtmlService.createHtmlOutput(`<h1>En feil oppstod</h1><p>${errorMessage}</p>`);
+    return HtmlService.createHtmlOutput(`<h1>En feil oppstod</h1><p>${escapeHtml(errorMessage)}</p>`);
   }
 }

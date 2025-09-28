@@ -120,8 +120,8 @@
       items.forEach(it=>{
         const wrap = document.createElement('div'); wrap.className='item';
         wrap.innerHTML = `
-          <div class="title">${it.saksnr || ''} – ${it.tittel || ''} <span class="badge">${it.status || 'Planlagt'}</span></div>
-          <div class="muted">Foreslått av: ${it.forslagAv || '(ukjent)'} ${it.gdprNote ? ' • ' + it.gdprNote : ''}</div>
+          <div class="title">${escapeHtml(it.saksnr || '')} – ${escapeHtml(it.tittel || '')} <span class="badge">${escapeHtml(it.status || 'Planlagt')}</span></div>
+          <div class="muted">Foreslått av: ${escapeHtml(it.forslagAv || '(ukjent)')} ${it.gdprNote ? ' • ' + escapeHtml(it.gdprNote) : ''}</div>
           ${it.bakgrunn ? '<div class="comment"><strong>Bakgrunn</strong><br>'+escapeHtml(it.bakgrunn)+'</div>' : ''}
           ${it.forslagVedtak ? '<div class="comment"><strong>Forslag til vedtak</strong><br>'+escapeHtml(it.forslagVedtak)+'</div>' : ''}
           <div class="stack">
@@ -143,8 +143,6 @@
       });
     }
     window._edit = edit;
-
-    function escapeHtml(s){ return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
 
     document.addEventListener('DOMContentLoaded', ()=>{
       el('#btnSave').addEventListener('click', save);

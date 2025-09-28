@@ -46,8 +46,8 @@
         if(!arr || !arr.length) return `<p><i>Ingen data for ${title.toLowerCase()}.</i></p>`;
         const keys = Object.keys(arr[0]).length ? Object.keys(arr[0]) : null;
         if(!keys){ return `<p><i>Ingen data.</i></p>`; }
-        const rows = arr.map(r => `<tr>` + keys.map(k => `<td>${r[k]??''}</td>`).join('') + `</tr>`).join('');
-        return `<h4>${title}</h4><table><tr>` + keys.map(k=>`<th>${k}</th>`).join('') + `</tr>${rows}</table>`;
+        const rows = arr.map(r => `<tr>` + keys.map(k => `<td>${escapeHtml(r[k]??'')}</td>`).join('') + `</tr>`).join('');
+        return `<h4>${title}</h4><table><tr>` + keys.map(k=>`<th>${escapeHtml(k)}</th>`).join('') + `</tr>${rows}</table>`;
       }
       html += render('Eierskap', data.eierskap);
       html += render('Leie', data.leie);

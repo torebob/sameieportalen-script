@@ -185,15 +185,15 @@
     function addRow(data = {}) {
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input class="cell-account" type="text" placeholder="Konto" value="${data.account || ''}" ${readOnly?'disabled':''}></td>
-        <td><input class="cell-name" type="text" placeholder="Navn" value="${data.name || ''}" ${readOnly?'disabled':''}></td>
-        <td><input class="cell-cc" type="text" placeholder="Kostnadssted" value="${data.costCenter || ''}" ${readOnly?'disabled':''}></td>
-        <td><input class="cell-proj" type="text" placeholder="Prosjekt" value="${data.project || ''}" ${readOnly?'disabled':''}></td>
-        <td><input class="cell-vat" type="text" placeholder="${$('defaultVat').value || '0'}" value="${data.vat || ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-account" type="text" placeholder="Konto" value="${escapeHtml(data.account || '')}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-name" type="text" placeholder="Navn" value="${escapeHtml(data.name || '')}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-cc" type="text" placeholder="Kostnadssted" value="${escapeHtml(data.costCenter || '')}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-proj" type="text" placeholder="Prosjekt" value="${escapeHtml(data.project || '')}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-vat" type="text" placeholder="${escapeHtml($('defaultVat').value || '0')}" value="${escapeHtml(data.vat || '')}" ${readOnly?'disabled':''}></td>
         <td>${typeSelect(data.type || $('defaultType').value || '')}</td>
         <td>${monthSelect(data.month || '')}</td>
         <td><input class="cell-amount" type="text" placeholder="0,00" value="${data.amount != null ? data.amount : ''}" ${readOnly?'disabled':''}></td>
-        <td><input class="cell-comment" type="text" placeholder="Kommentar" value="${data.comment || ''}" ${readOnly?'disabled':''}></td>
+        <td><input class="cell-comment" type="text" placeholder="Kommentar" value="${escapeHtml(data.comment || '')}" ${readOnly?'disabled':''}></td>
         <td class="row-actions"><button ${readOnly?'disabled':''} title="Slett rad" onclick="this.closest('tr').remove();">Slett</button></td>
       `;
       $('gridBody').appendChild(tr);
@@ -253,7 +253,7 @@
       let tfootSum = new Array(m.length).fill(0);
       let body = '<tbody>';
       for (const r of rows) {
-        body += `<tr><td>${r.account || ''}</td><td>${r.name || ''}</td>`;
+        body += `<tr><td>${escapeHtml(r.account || '')}</td><td>${escapeHtml(r.name || '')}</td>`;
         for (let i=0;i<m.length;i++) {
           const v = Number(r[m[i]] || 0);
           tfootSum[i] += v;

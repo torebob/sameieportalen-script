@@ -139,7 +139,7 @@ function sendProtokollForGodkjenning(moteId, protokollUrl) {
       const rejectUrl = webAppUrl ? `${webAppUrl}?page=protokoll&gid=${encodeURIComponent(gid)}&token=${encodeURIComponent(tokenCell)}&action=reject` : url;
 
       const subject = `[Sameieportalen] Til godkjenning: Protokoll ${moteId}`;
-      const body = `<p>Hei ${board[j].navn},</p><p>Protokollen for møtet <b>${moteId}</b> er klar for godkjenning.</p><p><a href="${url}" target="_blank" rel="noopener"><b>Les protokollen her</b></a></p>${webAppUrl ? `<p>Registrer ditt valg:</p><div style="margin:12px 0"><a href="${approveUrl}" style="background:#16a34a;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none;margin-right:8px">Godkjenn</a><a href="${rejectUrl}" style="background:#dc2626;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none">Avvis</a></div>` : '<p>(WebApp-URL mangler, kontakt administrator.)</p>'}<p>— Sameieportalen</p>`;
+      const body = `<p>Hei ${escapeHtml(board[j].navn)},</p><p>Protokollen for møtet <b>${escapeHtml(moteId)}</b> er klar for godkjenning.</p><p><a href="${url}" target="_blank" rel="noopener"><b>Les protokollen her</b></a></p>${webAppUrl ? `<p>Registrer ditt valg:</p><div style="margin:12px 0"><a href="${approveUrl}" style="background:#16a34a;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none;margin-right:8px">Godkjenn</a><a href="${rejectUrl}" style="background:#dc2626;color:#fff;padding:10px 14px;border-radius:6px;text-decoration:none">Avvis</a></div>` : '<p>(WebApp-URL mangler, kontakt administrator.)</p>'}<p>— Sameieportalen</p>`;
 
       try {
         MailApp.sendEmail({ to: email, subject, htmlBody: body });
@@ -225,6 +225,6 @@ function handleProtokollApprovalRequest(e) {
 
   } catch (err) {
     safeLog('Protokoll_WebApp_Feil', err.message);
-    return page(err.message).setTitle('En feil oppstod');
+    return page(escapeHtml(err.message)).setTitle('En feil oppstod');
   }
 }

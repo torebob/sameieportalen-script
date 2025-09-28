@@ -63,8 +63,8 @@ function sendOppslag(payload) {
         const trackingUrl = `${webAppUrl}?page=tracking&oppslagId=${oppslagId}&personId=${personId}`;
         const htmlBody = `
           <html><body>
-            <h2>${payload.tittel}</h2>
-            <div style="white-space: pre-wrap; font-size: 14px;">${payload.innhold}</div>
+            <h2>${escapeHtml(payload.tittel)}</h2>
+            <div style="white-space: pre-wrap; font-size: 14px;">${escapeHtml(payload.innhold)}</div>
             <p>Med vennlig hilsen,<br>Styret</p>
             <img src="${trackingUrl}" width="1" height="1" alt="">
           </body></html>`;

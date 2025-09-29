@@ -9,7 +9,7 @@
   const PROPS = PropertiesService.getScriptProperties();
   const { MOTER, MOTE_SAKER, MOTE_KOMMENTARER, MOTE_SAKSPAPIRER, MOTE_STEMMER, BOARD } = SHEETS;
 
-  const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts', 'participants'];
+  const MEETINGS_HEADERS = ['id', 'type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'agenda', 'status', 'created_ts', 'updated_ts', 'participants', 'recurrence_rule'];
   const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslag', 'vedtak', 'created_ts', 'updated_ts'];
   const SAKSPAPIRER_HEADERS = ['id', 'mote_id', 'sak_id', 'dokumentnavn', 'drive_url', 'fil_id', 'opplastet_av', 'opplastet_ts'];
   const INNSPILL_HEADERS = ['sak_id', 'ts', 'from', 'text'];
@@ -181,6 +181,7 @@
         newRow[idx.created_ts] = now;
         newRow[idx.updated_ts] = now;
         newRow[idx.participants] = Array.isArray(payload.participants) ? payload.participants.join(',') : '';
+        newRow[idx.recurrence_rule] = payload.recurrence_rule ? JSON.stringify(payload.recurrence_rule) : '';
         sh.appendRow(newRow);
         Indexer.set(MOTER, 'id', id, sh.getLastRow());
       } else {
@@ -197,6 +198,9 @@
         if (payload.participants !== undefined) {
           cur[idx.participants] = Array.isArray(payload.participants) ? payload.participants.join(',') : '';
         }
+        if (payload.recurrence_rule !== undefined) {
+            cur[idx.recurrence_rule] = payload.recurrence_rule ? JSON.stringify(payload.recurrence_rule) : '';
+        }
         range.setValues([cur]);
         id = cur[idx.id];
       }
@@ -210,6 +214,61 @@
     }
   }
 
+  const _generateRecurringMeetings = (baseMeeting, rule) => {
+    const occurrences = [];
+    const today = new Date();
+    const limit = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate()); // Generate for 1 year ahead
+
+    let d = new Date(baseMeeting.dato);
+    d.setHours(0, 0, 0, 0);
+
+    // Start from the current month
+    d.setDate(1);
+
+    for (let i = 0; i < 12; i++) { // Generate for the next 12 months
+        let currentMonth = new Date(d.getFullYear(), d.getMonth() + i, 1);
+        let targetDate = findNthDayOfMonth(currentMonth, rule.day, rule.occurrence);
+
+        if (targetDate >= today && targetDate <= limit) {
+            const newMeeting = { ...baseMeeting };
+            newMeeting.dato = targetDate;
+            newMeeting.isRecurringInstance = true;
+            newMeeting.baseId = baseMeeting.id;
+            // Create a unique, stable ID for the instance
+            newMeeting.id = `${baseMeeting.id}-rec-${Utilities.formatDate(targetDate, _tz_(), 'yyyyMMdd')}`;
+            occurrences.push(newMeeting);
+        }
+    }
+    return occurrences;
+  };
+
+  const findNthDayOfMonth = (date, dayOfWeek, occurrence) => {
+    const d = new Date(date);
+    d.setDate(1); // Start at the first of the month
+
+    // Find the first occurrence of the target day
+    while (d.getDay() !== dayOfWeek) {
+        d.setDate(d.getDate() + 1);
+    }
+
+    if (occurrence > 1) {
+        d.setDate(d.getDate() + (occurrence - 1) * 7);
+    } else if (occurrence === -1) { // Last occurrence
+        let lastDate = new Date(d);
+        while (true) {
+            let nextTry = new Date(lastDate);
+            nextTry.setDate(nextTry.getDate() + 7);
+            if (nextTry.getMonth() !== d.getMonth()) {
+                break; // We've gone into the next month
+            }
+            lastDate = nextTry;
+        }
+        return lastDate;
+    }
+    return d;
+  };
+
+
   const listMeetings_ = (args) => {
     const scope = args?.scope || 'planned';
     const sh = _ensureSheet_(MOTER, MEETINGS_HEADERS);
@@ -220,21 +279,38 @@
     const H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
     const i = H.reduce((acc, h, i) => ({ ...acc, [h]: i }), {});
 
+    const allMeetings = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return data
-      .map(r => ({
-        id: r[i.id], type: r[i.type] || 'Styremøte', dato: r[i.dato], start: r[i.start] || '',
-        slutt: r[i.slutt] || '', sted: r[i.sted] || '', tittel: r[i.tittel] || '',
-        agenda: r[i.agenda] || '', status: r[i.status] || 'Planlagt',
-        participants: r[i.participants] ? String(r[i.participants]).split(',') : []
-      }))
+    data.forEach(r => {
+        const baseMeeting = {
+            id: r[i.id], type: r[i.type] || 'Styremøte', dato: r[i.dato], start: r[i.start] || '',
+            slutt: r[i.slutt] || '', sted: r[i.sted] || '', tittel: r[i.tittel] || '',
+            agenda: r[i.agenda] || '', status: r[i.status] || 'Planlagt',
+            participants: r[i.participants] ? String(r[i.participants]).split(',') : [],
+            recurrence_rule: r[i.recurrence_rule] ? JSON.parse(r[i.recurrence_rule]) : null,
+            isRecurringInstance: false, // This is a base meeting
+            baseId: null
+        };
+
+        allMeetings.push(baseMeeting);
+
+        if (baseMeeting.recurrence_rule && baseMeeting.recurrence_rule.frequency === 'monthly') {
+            const recurringInstances = _generateRecurringMeetings(baseMeeting, baseMeeting.recurrence_rule);
+            allMeetings.push(...recurringInstances);
+        }
+    });
+
+    return allMeetings
       .filter(m => m.status !== 'Slettet' && m.status !== 'Arkivert')
       .filter(m => {
         if (!m.dato) return scope === 'planned';
         const meetingDate = m.dato instanceof Date ? m.dato : new Date(m.dato);
-        return scope === 'past' ? meetingDate < today : meetingDate >= today;
+        if (scope === 'past') {
+            return meetingDate < today;
+        }
+        return meetingDate >= today;
       })
       .sort((a, b) => (a.dato?.getTime() || 0) - (b.dato?.getTime() || 0));
   };

@@ -81,6 +81,10 @@
         </div>
       </div>
 
+      <div id="instanceNotice" class="banner info" style="display:none; margin-top: 10px;">
+        Dette er en repeterende forekomst. Endringer må gjøres på hovedhendelsen.
+      </div>
+
       <input type="hidden" id="mote-id" />
 
       <div class="row">
@@ -123,6 +127,47 @@
       <div>
         <label>Tittel <span class="hint">(påkrevd)</span></label>
         <input id="tittel" placeholder="Styremøte september 2025" required />
+      </div>
+
+      <div id="recurrence-section" style="margin-top: 12px; padding: 10px; background-color: #f9f9f9; border-radius: 6px;">
+        <label style="display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="chkRecurrence">
+          <strong>Repeterende hendelse</strong>
+        </label>
+        <div id="recurrence-options" style="display: none; margin-top: 8px; padding-left: 28px;">
+          <div class="row">
+            <div>
+              <label>Frekvens</label>
+              <select id="recurrence-frequency">
+                <option value="monthly">Månedlig</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Dag</label>
+              <select id="recurrence-day">
+                <option value="1">Mandag</option>
+                <option value="2">Tirsdag</option>
+                <option value="3">Onsdag</option>
+                <option value="4">Torsdag</option>
+                <option value="5">Fredag</option>
+                <option value="6">Lørdag</option>
+                <option value="0">Søndag</option>
+              </select>
+            </div>
+            <div>
+              <label>Uke i måneden</label>
+              <select id="recurrence-occurrence">
+                <option value="1">Første</option>
+                <option value="2">Andre</option>
+                <option value="3">Tredje</option>
+                <option value="4">Fjerde</option>
+                <option value="-1">Siste</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div>
@@ -237,7 +282,7 @@
 <script>
   const $ = s => document.querySelector(s);
   const LOCKED_STATUSES = ['Protokoll under godkjenning','Protokoll godkjent','Arkivert'];
-  let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, calendarInstance: null };
+  let state = { user:null, moteId:null, instanceId: null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, calendarInstance: null };
 
   function escapeHtml(unsafe) {
     if (typeof unsafe !== 'string') return '';
@@ -281,6 +326,17 @@
       });
     });
     $('#moveWrap').style.display = (state.sakId && !locked) ? 'inline-flex' : 'none';
+  }
+
+  function applyInstanceLockUI(isInstance) {
+    const fieldsToLock = ['type', 'dato', 'start', 'slutt', 'sted', 'tittel', 'chkRecurrence', 'recurrence-frequency', 'recurrence-day', 'recurrence-occurrence'];
+    fieldsToLock.forEach(id => {
+        const el = $(`#${id}`);
+        if (el) el.disabled = isInstance;
+    });
+
+    $('#btnSaveMeeting').style.display = isInstance ? 'none' : 'inline-block';
+    $('#instanceNotice').style.display = isInstance ? 'block' : 'none';
   }
 
   function updateStatusBadge(){
@@ -385,7 +441,13 @@
   }
 
   function loadMeeting(m){
-    state.moteId = m.id;
+    if (m.isRecurringInstance) {
+      state.instanceId = m.id;
+      state.moteId = m.baseId;
+    } else {
+      state.instanceId = null;
+      state.moteId = m.id;
+    }
     state.meetingStatus = m.status || 'Planlagt';
     $('#mote-id').value = state.moteId;
     $('#type').value  = m.type||'Styremøte';
@@ -410,6 +472,7 @@
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
+    applyInstanceLockUI(m.isRecurringInstance);
     $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
     $('#btnSendInnkalling').style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
 
@@ -420,6 +483,23 @@
     } else {
       videoActions.style.display = 'none';
     }
+
+    // Recurrence
+    const recurrenceRule = m.recurrence_rule;
+    const chkRecurrence = $('#chkRecurrence');
+    const recurrenceOptions = $('#recurrence-options');
+
+    if (recurrenceRule && typeof recurrenceRule === 'object') {
+      chkRecurrence.checked = true;
+      recurrenceOptions.style.display = 'block';
+      $('#recurrence-frequency').value = recurrenceRule.frequency || 'monthly';
+      $('#recurrence-day').value = recurrenceRule.day || '1';
+      $('#recurrence-occurrence').value = recurrenceRule.occurrence || '1';
+    } else {
+      chkRecurrence.checked = false;
+      recurrenceOptions.style.display = 'none';
+    }
+
 
     // RBAC: kan låse opp?
     if (google.script.run.hasPermission){
@@ -520,14 +600,23 @@
 
   function clearMeeting(){
     stopPolling();
-    state.moteId=null; state.meetingStatus=null; state.canUnlock=false;
+    state.moteId=null; state.instanceId=null; state.meetingStatus=null; state.canUnlock=false;
     $('#mote-id').value='';
     $('#type').value='Styremøte'; $('#dato').value=''; $('#start').value='18:00'; $('#slutt').value='20:00';
     $('#sted').value=''; $('#tittel').value='';
+
+    // Clear recurrence
+    $('#chkRecurrence').checked = false;
+    $('#recurrence-options').style.display = 'none';
+    $('#recurrence-frequency').value = 'monthly';
+    $('#recurrence-day').value = '1';
+    $('#recurrence-occurrence').value = '1';
+
     setStatus('');
     clearSak();
     updateStatusBadge();
     applyLockUI(false);
+    applyInstanceLockUI(false);
     $('#btnViewProtocol').style.display = 'none';
     $('#btnSendInnkalling').style.display = 'none';
     $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
@@ -574,8 +663,18 @@
       sted:   $('#sted').value,
       tittel: $('#tittel').value,
       agenda: '',
-      participants: participants
+      participants: participants,
+      recurrence_rule: null
     };
+
+    if ($('#chkRecurrence').checked) {
+      form.recurrence_rule = {
+        frequency: $('#recurrence-frequency').value,
+        day: parseInt($('#recurrence-day').value, 10),
+        occurrence: parseInt($('#recurrence-occurrence').value, 10)
+      };
+    }
+
     if (!form.tittel.trim()){ setStatus('Møtetittel er påkrevd.'); return; }
     if (!form.datoISO){ setStatus('Velg dato.'); return; }
 
@@ -889,6 +988,11 @@
     });
     box.scrollTop = box.scrollHeight;
   }
+
+  // Recurrence checkbox logic
+  $('#chkRecurrence').addEventListener('change', function() {
+    $('#recurrence-options').style.display = this.checked ? 'block' : 'none';
+  });
 
 </script>
 </body>

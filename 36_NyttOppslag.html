@@ -71,6 +71,9 @@
         <label for="innhold">Innhold</label>
         <textarea id="innhold" placeholder="Skriv meldingen her..." required></textarea>
 
+        <label for="attachment">Vedlegg (valgfritt)</label>
+        <input id="attachment" type="file" />
+
         <button id="submitBtn" class="btn-submit">Send Oppslag</button>
         
         <div class="loader-overlay" id="loader"></div>
@@ -90,6 +93,25 @@
             msgEl.className = isSuccess ? 'ok' : 'err';
         }
         
+        function handleFormSubmit(formObject) {
+            google.script.run
+                .withSuccessHandler(res => {
+                    setLoading(false);
+                    if (res && res.ok) {
+                        setMsg(res.message, true);
+                        $('oppslagForm').reset();
+                        setTimeout(() => google.script.host.close(), 2500);
+                    } else {
+                        setMsg(res.error || 'En ukjent feil oppstod.', false);
+                    }
+                })
+                .withFailureHandler(err => {
+                    setLoading(false);
+                    setMsg('Feil: ' + (err.message || err), false);
+                })
+                .sendOppslag(formObject);
+        }
+
         $('oppslagForm').addEventListener('submit', (event) => {
             event.preventDefault();
             setMsg('', true);
@@ -104,25 +126,32 @@
                 setMsg('Alle felt må fylles ut.', false);
                 return;
             }
-            
-            setLoading(true);
-            setMsg('Sender oppslag, vennligst vent...', true);
 
-            google.script.run
-                .withSuccessHandler(res => {
+            const file = $('attachment').files[0];
+            if (file) {
+                setLoading(true);
+                setMsg('Laster opp vedlegg...', true);
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const fileData = {
+                        base64: e.target.result.split(',')[1],
+                        mimeType: file.type,
+                        name: file.name
+                    };
+                    payload.attachment = fileData;
+                    setMsg('Sender oppslag...', true);
+                    handleFormSubmit(payload);
+                };
+                reader.onerror = (e) => {
                     setLoading(false);
-                    if (res && res.ok) {
-                        setMsg(res.message, true);
-                        setTimeout(() => google.script.host.close(), 2500);
-                    } else {
-                        setMsg(res.error || 'En ukjent feil oppstod.', false);
-                    }
-                })
-                .withFailureHandler(err => {
-                    setLoading(false);
-                    setMsg('Feil: ' + (err.message || err), false);
-                })
-                .sendOppslag(payload);
+                    setMsg('Kunne ikke lese filen.', false);
+                };
+                reader.readAsDataURL(file);
+            } else {
+                setLoading(true);
+                setMsg('Sender oppslag, vennligst vent...', true);
+                handleFormSubmit(payload);
+            }
         });
 
         // Last inn målgrupper når siden er klar

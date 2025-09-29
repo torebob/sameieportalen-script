@@ -302,6 +302,7 @@
     if (google.script.run.getBoardMembers) {
       google.script.run.withSuccessHandler(drawParticipants).getBoardMembers();
     }
+    showCalendarView();
   }).uiBootstrap();
 
   function initializeCalendar() {
@@ -650,6 +651,16 @@
     refreshMeetings();
   };
 
+  function showCalendarView() {
+    $('#list-container').style.display = 'none';
+    $('#calendar-container').style.display = 'block';
+    $('#viewToggleCalendar').classList.add('active');
+    $('#viewToggleList').classList.remove('active');
+    if (state.calendarInstance) {
+      state.calendarInstance.drawCalendar();
+    }
+  }
+
   $('#viewToggleList').onclick = () => {
     $('#list-container').style.display = 'block';
     $('#calendar-container').style.display = 'none';
@@ -657,12 +668,7 @@
     $('#viewToggleCalendar').classList.remove('active');
   };
 
-  $('#viewToggleCalendar').onclick = () => {
-    $('#list-container').style.display = 'none';
-    $('#calendar-container').style.display = 'block';
-    $('#viewToggleCalendar').classList.add('active');
-    $('#viewToggleList').classList.remove('active');
-  };
+  $('#viewToggleCalendar').onclick = showCalendarView;
 
   // Lås opp (kun for autoriserte + når låst)
   $('#btnUnlock').onclick = function(){

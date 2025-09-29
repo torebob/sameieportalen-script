@@ -11,6 +11,9 @@ const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
 const SUPPLIERS_SHEET_NAME = 'Suppliers';
 const MESSAGES_SHEET_NAME = 'Messages';
+const SECTIONS_SHEET_NAME = 'Sections';
+const OWNERS_SHEET_NAME = 'Owners';
+const TENANTS_SHEET_NAME = 'Tenants';
 const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
 
 /**
@@ -26,6 +29,32 @@ function _createMessagesSheetIfNotExist() {
 }
 
 /**
+ * Creates the sheets for the Beboerregister module if they don't already exist.
+ * @private
+ */
+function _createBeboerregisterSheetsIfNotExist() {
+  const ss = SpreadsheetApp.openById(DB_SHEET_ID);
+
+  // Create Sections sheet
+  if (!ss.getSheetByName(SECTIONS_SHEET_NAME)) {
+    const sheet = ss.insertSheet(SECTIONS_SHEET_NAME);
+    sheet.appendRow(['id', 'seksjonsnummer', 'adresse', 'areal', 'antall_rom', 'etg']);
+  }
+
+  // Create Owners sheet
+  if (!ss.getSheetByName(OWNERS_SHEET_NAME)) {
+    const sheet = ss.insertSheet(OWNERS_SHEET_NAME);
+    sheet.appendRow(['id', 'sectionId', 'navn', 'fodselsdato_orgnr', 'epost', 'telefon']);
+  }
+
+  // Create Tenants sheet
+  if (!ss.getSheetByName(TENANTS_SHEET_NAME)) {
+    const sheet = ss.insertSheet(TENANTS_SHEET_NAME);
+    sheet.appendRow(['id', 'sectionId', 'navn', 'epost', 'telefon', 'leieperiodeStart', 'leieperiodeSlutt']);
+  }
+}
+
+/**
  * Validates that the script has been configured.
  * @private
  */
@@ -34,6 +63,7 @@ function _validateConfig() {
     throw new Error('Script not configured. Please follow SETUP_INSTRUCTIONS.md.');
   }
   _createMessagesSheetIfNotExist();
+  _createBeboerregisterSheetsIfNotExist();
 }
 
 /**
@@ -61,6 +91,188 @@ function gjoremalGet() {
   } catch (e) {
     return { ok: false, message: e.message };
   }
+}
+
+// --- Beboerregister Functions ---
+
+/**
+ * A generic helper function to fetch all data from a given sheet.
+ * @private
+ * @param {string} sheetName - The name of the sheet to read.
+ * @returns {Array<Object>} An array of objects representing the rows.
+ */
+function _getSheetData(sheetName) {
+  _validateConfig();
+  const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
+  if (!sheet) {
+    throw new Error(`Sheet "${sheetName}" not found.`);
+  }
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  const headers = data.shift();
+  return data.map(row => {
+    const record = {};
+    headers.forEach((header, i) => {
+      record[header] = row[i];
+    });
+    return record;
+  });
+}
+
+/**
+ * Fetches all data for the Beboerregister (Sections, Owners, Tenants).
+ * @returns {object} A response object containing all the data.
+ */
+function getBeboerregisterData() {
+  try {
+    const sections = _getSheetData(SECTIONS_SHEET_NAME);
+    const owners = _getSheetData(OWNERS_SHEET_NAME);
+    const tenants = _getSheetData(TENANTS_SHEET_NAME);
+
+    // Combine data for easier use on the frontend
+    const combinedData = sections.map(section => {
+      return {
+        ...section,
+        owners: owners.filter(o => o.sectionId === section.id),
+        tenants: tenants.filter(t => t.sectionId === section.id),
+      };
+    });
+
+    return { ok: true, data: combinedData };
+  } catch (e) {
+    Logger.log(e);
+    return { ok: false, error: `Kunne ikke hente beboerregister: ${e.message}` };
+  }
+}
+
+/**
+ * Generic function to save a record (create or update) to a specified sheet.
+ * @param {object} payload - The data object to save. Must include 'sheetName'.
+ * @returns {object} A response object indicating success or failure.
+ */
+function saveBeboerRecord(payload) {
+  try {
+    _validateConfig();
+    const { sheetName, ...record } = payload;
+    if (!sheetName) throw new Error("Sheet name is required.");
+
+    const validSheetNames = [SECTIONS_SHEET_NAME, OWNERS_SHEET_NAME, TENANTS_SHEET_NAME];
+    if (!validSheetNames.includes(sheetName)) {
+        throw new Error(`Invalid sheet name: ${sheetName}`);
+    }
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
+    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    if (record.id) {
+      // Update existing record
+      const data = sheet.getDataRange().getValues();
+      const rowIndex = data.findIndex(row => row[0] == record.id);
+
+      if (rowIndex > 0) {
+        const rowData = data[rowIndex];
+        const newRow = headers.map((header, i) => record[header] !== undefined ? record[header] : rowData[i]);
+        sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRow]);
+      } else {
+        throw new Error(`Record with ID ${record.id} not found in ${sheetName}.`);
+      }
+    } else {
+      // Create new record
+      record.id = Utilities.getUuid();
+      const newRow = headers.map(header => record[header] !== undefined ? record[header] : '');
+      sheet.appendRow(newRow);
+    }
+
+    return { ok: true, id: record.id };
+  } catch (e) {
+    Logger.log(e);
+    return { ok: false, error: `Server error: ${e.message}` };
+  }
+}
+
+/**
+ * Generic function to delete a record from a specified sheet.
+ * @param {object} payload - Must contain 'sheetName' and 'id'.
+ * @returns {object} A response object indicating success or failure.
+ */
+function deleteBeboerRecord(payload) {
+  try {
+    _validateConfig();
+    const { sheetName, id } = payload;
+    if (!sheetName || !id) throw new Error("Sheet name and ID are required.");
+
+    const validSheetNames = [SECTIONS_SHEET_NAME, OWNERS_SHEET_NAME, TENANTS_SHEET_NAME];
+    if (!validSheetNames.includes(sheetName)) {
+        throw new Error(`Invalid sheet name: ${sheetName}`);
+    }
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
+    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    const rowIndex = data.findIndex(row => row[0] == id);
+
+    if (rowIndex > 0) {
+        sheet.deleteRow(rowIndex + 1);
+        return { ok: true };
+    } else {
+      return { ok: false, error: `Record with ID ${id} not found in ${sheetName}.` };
+    }
+  } catch (e) {
+    Logger.log(e);
+    return { ok: false, error: `Server error: ${e.message}` };
+  }
+}
+
+/**
+ * Exports beboer data to a CSV file and returns its base64 representation.
+ * @param {string} type - The type of list to export ('all', 'owners', 'tenants').
+ * @returns {object} A response object with the CSV data.
+ */
+function exportBeboerliste(type = 'all') {
+    try {
+        const sections = _getSheetData(SECTIONS_SHEET_NAME);
+        const owners = _getSheetData(OWNERS_SHEET_NAME);
+        const tenants = _getSheetData(TENANTS_SHEET_NAME);
+
+        let csvContent = "";
+        let fileName = "";
+
+        if (type === 'owners' || type === 'all') {
+            csvContent += "Eiere\\n";
+            csvContent += "Seksjonsnr,Navn,E-post,Telefon\\n";
+            owners.forEach(owner => {
+                const section = sections.find(s => s.id === owner.sectionId);
+                csvContent += `${section ? section.seksjonsnummer : 'N/A'},${owner.navn},${owner.epost},${owner.telefon}\\n`;
+            });
+            if (type === 'all') csvContent += "\\n";
+        }
+
+        if (type === 'tenants' || type === 'all') {
+            csvContent += "Leietakere\\n";
+            csvContent += "Seksjonsnr,Navn,E-post,Telefon,Leieperiode Start,Leieperiode Slutt\\n";
+            tenants.forEach(tenant => {
+                const section = sections.find(s => s.id === tenant.sectionId);
+                csvContent += `${section ? section.seksjonsnummer : 'N/A'},${tenant.navn},${tenant.epost},${tenant.telefon},${tenant.leieperiodeStart},${tenant.leieperiodeSlutt}\\n`;
+            });
+        }
+
+        switch(type) {
+            case 'owners': fileName = 'eierliste.csv'; break;
+            case 'tenants': fileName = 'leietakerliste.csv'; break;
+            default: fileName = 'beboerliste.csv'; break;
+        }
+
+        const base64Csv = Utilities.base64Encode(csvContent, Utilities.Charset.UTF_8);
+
+        return { ok: true, file: { name: fileName, base64: base64Csv, mimeType: 'text/csv' } };
+
+    } catch (e) {
+        Logger.log(e);
+        return { ok: false, error: `Kunne ikke eksportere liste: ${e.message}` };
+    }
 }
 
 /**

@@ -117,7 +117,7 @@ function hmsStartRiskAssessment(templateId, areaName) {
   try {
     _validateConfig();
     if (!templateId || !areaName) {
-      throw new Error("Template ID and area name are required.");
+      throw new Error("Mal-ID og områdenavn er påkrevd.");
     }
 
     const templateSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(HMS_RISK_ASSESSMENT_TEMPLATES_SHEET_NAME);
@@ -125,7 +125,7 @@ function hmsStartRiskAssessment(templateId, areaName) {
     const templateRow = templateData.find(row => row[0] === templateId);
 
     if (!templateRow) {
-      throw new Error(`Template with ID ${templateId} not found.`);
+      throw new Error(`Mal med ID ${templateId} ble ikke funnet.`);
     }
 
     const assessmentSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(HMS_RISK_ASSESSMENTS_SHEET_NAME);
@@ -220,7 +220,7 @@ function hmsRegisterDeviation(deviationData) {
     _validateConfig();
     const { description, location, attachment } = deviationData;
     if (!description || !location) {
-      throw new Error("Description and location are required to register a deviation.");
+      throw new Error("Beskrivelse og sted er påkrevd for å registrere et avvik.");
     }
 
     // 1. Handle file attachment
@@ -245,7 +245,7 @@ function hmsRegisterDeviation(deviationData) {
     };
     const taskResult = gjoremalSave(taskPayload); // Assuming gjoremalSave is available and returns { ok: true, id: '...' }
     if (!taskResult.ok) {
-      throw new Error(`Failed to create linked task: ${taskResult.message}`);
+      throw new Error(`Klarte ikke å opprette tilknyttet oppgave: ${taskResult.message}`);
     }
     const linkedTaskId = taskResult.id;
 
@@ -328,7 +328,7 @@ function _getSheetData(sheetName) {
   _validateConfig();
   const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
   if (!sheet) {
-    throw new Error(`Sheet "${sheetName}" not found.`);
+    throw new Error(`Arket "${sheetName}" ble ikke funnet.`);
   }
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
@@ -364,7 +364,7 @@ function getRecordById_(sheetName, id) {
  */
 function saveRecord_(sheetName, record) {
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
-    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+    if (!sheet) throw new Error(`Arket "${sheetName}" ble ikke funnet.`);
 
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
@@ -377,7 +377,7 @@ function saveRecord_(sheetName, record) {
         const newRow = headers.map(header => record[header] !== undefined ? record[header] : data[rowIndex][headers.indexOf(header)]);
         sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRow]);
       } else {
-        throw new Error(`Record with ID ${record.id} not found in ${sheetName}.`);
+        throw new Error(`Post med ID ${record.id} ble ikke funnet i ${sheetName}.`);
       }
     } else {
       // Create
@@ -397,10 +397,10 @@ function saveRecord_(sheetName, record) {
  * @returns {object} A response object indicating success or failure.
  */
 function deleteRecord_(sheetName, id) {
-    if (!id) throw new Error("ID is required for deletion.");
+    if (!id) throw new Error("ID er påkrevd for sletting.");
 
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
-    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+    if (!sheet) throw new Error(`Arket "${sheetName}" ble ikke funnet.`);
 
     const data = sheet.getDataRange().getValues();
     const rowIndex = data.findIndex(row => row[0] == id);
@@ -409,6 +409,6 @@ function deleteRecord_(sheetName, id) {
         sheet.deleteRow(rowIndex + 1);
         return { ok: true };
     } else {
-      return { ok: false, error: `Record with ID ${id} not found in ${sheetName}.` };
+      return { ok: false, error: `Post med ID ${id} ble ikke funnet i ${sheetName}.` };
     }
 }

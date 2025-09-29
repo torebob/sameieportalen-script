@@ -6,14 +6,14 @@ function initializeSite() {
   try {
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
     if (!sheet) {
-        throw new Error("The 'WebsitePages' sheet does not exist. Please ensure the main website has been loaded at least once.");
+        throw new Error("'WebsitePages'-arket finnes ikke. Sørg for at hovednettstedet er lastet inn minst én gang.");
     }
 
     // Check if pages already exist to prevent duplicates
     const existingData = sheet.getDataRange().getValues();
     if (existingData.length > 1) { // >1 to account for header row
         // We can silently ignore instead of throwing an error, to make it more user friendly.
-        return { ok: true, message: "Site already initialized." };
+        return { ok: true, message: "Nettstedet er allerede initialisert." };
     }
 
     const defaultPages = [
@@ -71,7 +71,7 @@ function updateNewsArticle(article) {
     const headers = data.shift();
     const idIndex = headers.indexOf('id');
     const rowIndex = data.findIndex(row => row[idIndex] == article.id);
-    if (rowIndex === -1) throw new Error("Article not found");
+    if (rowIndex === -1) throw new Error("Artikkelen ble ikke funnet");
 
     const newRow = headers.map(h => article[h] || '');
     sheet.getRange(rowIndex + 2, 1, 1, headers.length).setValues([newRow]);
@@ -89,7 +89,7 @@ function deleteNewsArticle(articleId) {
         sheet.deleteRow(rowIndex + 1);
         return { ok: true };
     }
-    return { ok: false, message: "Article not found" };
+    return { ok: false, message: "Artikkelen ble ikke funnet" };
   } catch(e) { return { ok: false, message: e.message }; }
 }
 
@@ -112,7 +112,7 @@ function listDocuments() {
 
 function addDocument(fileObject, title, description) {
     try {
-        if (!fileObject) throw new Error("File data is missing.");
+        if (!fileObject) throw new Error("Fildata mangler.");
 
         const folder = DriveApp.getFolderById(ATTACHMENTS_FOLDER_ID);
         const decoded = Utilities.base64Decode(fileObject.base64, Utilities.Charset.UTF_8);
@@ -161,7 +161,7 @@ function deleteResource(resourceId) {
             sheet.deleteRow(rowIndex + 1);
             return { ok: true };
         }
-        return { ok: false, message: "Resource not found" };
+        return { ok: false, message: "Ressurs ikke funnet" };
     } catch (e) {
         return { ok: false, message: e.message };
     }
@@ -186,7 +186,7 @@ function deleteDocument(docId) {
             sheet.deleteRow(rowIndex + 2); // +2 because of header and 0-based index
             return { ok: true };
         }
-        return { ok: false, message: "Document not found" };
+        return { ok: false, message: "Dokument ikke funnet" };
     } catch(e) {
         console.error("Error in deleteDocument: " + e.message);
         return { ok: false, message: e.message };
@@ -226,13 +226,13 @@ function listPages() {
  */
 function deletePage(pageId) {
     try {
-        if (!pageId) throw new Error("Page ID is required.");
+        if (!pageId) throw new Error("Side-ID er påkrevd.");
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-        if (!sheet) throw new Error("'WebsitePages' sheet not found.");
+        if (!sheet) throw new Error("'WebsitePages'-arket ble ikke funnet.");
 
         const data = sheet.getDataRange().getValues();
         const pageIdIndex = data[0].indexOf('pageId');
-        if (pageIdIndex === -1) throw new Error("'pageId' column not found.");
+        if (pageIdIndex === -1) throw new Error("'pageId'-kolonnen ble ikke funnet.");
 
         const rowIndex = data.findIndex(row => row[pageIdIndex] == pageId);
 
@@ -240,7 +240,7 @@ function deletePage(pageId) {
             sheet.deleteRow(rowIndex + 1);
             return { ok: true };
         } else {
-            return { ok: false, message: "Page not found." };
+            return { ok: false, message: "Siden ble ikke funnet." };
         }
     } catch (e) {
         console.error("Error in deletePage: " + e.message);
@@ -256,9 +256,9 @@ function deletePage(pageId) {
  */
 function setPagePassword(pageId, password) {
     try {
-        if (!pageId) throw new Error("Page ID is required.");
+        if (!pageId) throw new Error("Side-ID er påkrevd.");
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-        if (!sheet) throw new Error("'WebsitePages' sheet not found.");
+        if (!sheet) throw new Error("'WebsitePages'-arket ble ikke funnet.");
 
         const data = sheet.getDataRange().getValues();
         const headers = data[0];
@@ -277,7 +277,7 @@ function setPagePassword(pageId, password) {
             sheet.getRange(rowIndex + 1, passwordIndex + 1).setValue(password);
             return { ok: true };
         } else {
-            return { ok: false, message: "Page not found." };
+            return { ok: false, message: "Siden ble ikke funnet." };
         }
     } catch (e) {
         console.error("Error in setPagePassword: " + e.message);

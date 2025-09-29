@@ -49,6 +49,7 @@
     <label>Versjon <input id="version" class="input" type="text" value="main"></label>
     <button id="btnLoad" class="btn">Last</button>
     <button id="btnSave" class="btn primary">Lagre (erstatt år+versjon)</button>
+    <button id="btnImport" class="btn ghost" title="Importer budsjett fra regnskapssystem (RI.17.2)">Importer</button>
     <div class="spinner" id="spin"></div>
     <span id="roleBadge" class="role">…</span>
   </div>
@@ -269,11 +270,44 @@
     URL.revokeObjectURL(url);
   }
 
+  function importFromAccounting() {
+    if (!canEdit()) { msg('Du har ikke redigeringstilgang til å importere og overskrive data.', 'err'); return; }
+    const year = Number(el('year').value);
+    if (!year) { msg('Oppgi år for import.', 'err'); return; }
+
+    const confirmation = confirm(`Er du sikker på at du vil importere budsjett for ${year} fra regnskapssystemet? Dette vil erstatte alle usavedre linjer i rutenettet.`);
+    if (!confirmation) return;
+
+    setBusy(true); msg('Importerer fra regnskapssystem…');
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(false);
+        if (!res || !res.ok) { msg(res && res.error ? `Importfeil: ${res.error}` : 'Kunne ikke importere data.', 'err'); return; }
+
+        // Assuming the API returns data in a compatible format.
+        // A real implementation might need more complex mapping.
+        rows = (res.data || []).map(item => ({
+          account: item.account,
+          name: item.name,
+          month: item.month,
+          amount: item.amount,
+          vat: item.vat,
+          comment: `Importert fra regnskapssystem - ${new Date().toLocaleDateString()}`
+        }));
+
+        render();
+        msg(`Importerte ${rows.length} linjer for ${year}. Husk å lagre.`, 'ok');
+      })
+      .withFailureHandler(e => { setBusy(false); msg(`Teknisk feil under import: ${e.message}`, 'err'); })
+      .importBudgetFromAccounting(year);
+  }
+
   // --- Events ---
   document.addEventListener('click', (ev) => {
     const t = ev.target;
     if (t.id === 'btnLoad') loadBudget();
     if (t.id === 'btnSave') saveReplace();
+    if (t.id === 'btnImport') importFromAccounting();
     if (t.id === 'btnAdd'){
       rows.push({ account:'', name:'', month: months[new Date().getMonth()] || 'Jan', amount:0, vat:'', comment:'' });
       render();

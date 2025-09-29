@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; }
+    .container { padding: 20px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    h4 { color: #005691; }
+    .invoice-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      border: 1.5px solid #ddd;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      background-color: #fff;
+      cursor: pointer;
+      transition: box-shadow 0.3s ease;
+    }
+    .invoice-list-item:hover { box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+    .invoice-details { flex-grow: 1; }
+    .invoice-supplier { font-weight: bold; font-size: 1.1em; }
+    .invoice-amount { font-weight: bold; color: #d32f2f; }
+    .invoice-status { font-weight: bold; padding: 5px 10px; border-radius: 12px; color: #fff; text-align: center; min-width: 120px; }
+    .status-Pending { background-color: #f57c00; }
+    .status-Approved { background-color: #388e3c; }
+    .status-Rejected { background-color: #d32f2f; }
+    .status-Partially { background-color: #1976d2; }
+    .modal-content h5 { color: #005691; }
+    .modal-footer .btn-flat { color: #005691; }
+    .preloader-wrapper { display: flex; justify-content: center; margin-top: 50px; }
+    #toast-container { top: auto !important; right: 20px !important; bottom: 20px !important; left: auto !important; }
+    .history-item { padding: 8px; border-bottom: 1px solid #eee; }
+    .history-item:last-child { border-bottom: none; }
+    .action-approve { color: #388e3c; }
+    .action-reject { color: #d32f2f; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h4>Fakturaattestering</h4>
+    </div>
+    <div id="loader" class="preloader-wrapper big active">
+      <div class="spinner-layer spinner-blue-only">
+        <div class="circle-clipper left"><div class="circle"></div></div>
+        <div class="gap-patch"><div class="circle"></div></div>
+        <div class="circle-clipper right"><div class="circle"></div></div>
+      </div>
+    </div>
+    <div id="invoice-list" class="collection" style="display:none;"></div>
+    <div id="error-message" class="card-panel red lighten-2" style="display:none; color: white;"></div>
+
+    <!-- Invoice Detail Modal -->
+    <div id="invoiceModal" class="modal modal-fixed-footer">
+      <div class="modal-content">
+        <h5 id="modal-supplier-name"></h5>
+        <p><strong>Beløp:</strong> <span id="modal-amount"></span></p>
+        <p><strong>Forfallsdato:</strong> <span id="modal-due-date"></span></p>
+        <p><strong>Fakturadato:</strong> <span id="modal-invoice-date"></span></p>
+        <p><strong>Beskrivelse:</strong> <span id="modal-description"></span></p>
+        <p><strong>Status:</strong> <span id="modal-status" class="invoice-status"></span></p>
+        <p><strong>Vedlegg:</strong> <a id="modal-attachment" href="#" target="_blank">Vis vedlegg</a></p>
+        <h6>Attesteringshistorikk</h6>
+        <div id="modal-history"></div>
+      </div>
+      <div class="modal-footer">
+        <div id="modal-actions">
+          <button id="rejectBtn" class="btn waves-effect waves-light red">Avvis</button>
+          <button id="approveBtn" class="btn waves-effect waves-light green">Godkjenn</button>
+        </div>
+        <div id="modal-closed-message" style="display:none;">
+            <p>Denne fakturaen er ferdigbehandlet.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    let currentUserEmail = '';
+    let currentInvoiceId = null;
+
+    document.addEventListener('DOMContentLoaded', function() {
+      M.Modal.init(document.querySelectorAll('.modal'));
+      google.script.run.withSuccessHandler(email => {
+        currentUserEmail = email;
+        loadInvoices();
+      }).withFailureHandler(showError).getUserEmail();
+    });
+
+    function loadInvoices() {
+      showLoader(true);
+      google.script.run
+        .withSuccessHandler(displayInvoices)
+        .withFailureHandler(showError)
+        .getInvoices();
+    }
+
+    function displayInvoices(response) {
+      showLoader(false);
+      const list = document.getElementById('invoice-list');
+      list.innerHTML = '';
+      if (!response.ok) {
+        showError(response.error);
+        return;
+      }
+      if (response.invoices.length === 0) {
+        list.innerHTML = '<div class="card-panel">Ingen fakturaer til behandling.</div>';
+      } else {
+        response.invoices.forEach(invoice => {
+          const item = document.createElement('div');
+          item.className = 'invoice-list-item';
+          item.onclick = () => showInvoiceDetails(invoice);
+
+          const statusClass = `status-${invoice.status.replace(' ', '-')}`;
+          item.innerHTML = `
+            <div class="invoice-details">
+              <div class="invoice-supplier">${invoice.supplierName}</div>
+              <div>Forfall: ${formatDate(invoice.dueDate)}</div>
+            </div>
+            <div class="invoice-amount">${formatCurrency(invoice.amount)}</div>
+            <div class="invoice-status ${statusClass}">${translateStatus(invoice.status)}</div>
+          `;
+          list.appendChild(item);
+        });
+      }
+      list.style.display = 'block';
+    }
+
+    function showInvoiceDetails(invoice) {
+      currentInvoiceId = invoice.id;
+      document.getElementById('modal-supplier-name').innerText = invoice.supplierName;
+      document.getElementById('modal-amount').innerText = formatCurrency(invoice.amount);
+      document.getElementById('modal-due-date').innerText = formatDate(invoice.dueDate);
+      document.getElementById('modal-invoice-date').innerText = formatDate(invoice.invoiceDate);
+      document.getElementById('modal-description').innerText = invoice.description || 'Ingen beskrivelse';
+
+      const statusEl = document.getElementById('modal-status');
+      statusEl.innerText = translateStatus(invoice.status);
+      statusEl.className = `invoice-status status-${invoice.status.replace(' ', '-')}`;
+
+      const attachmentLink = document.getElementById('modal-attachment');
+      if (invoice.attachmentUrl) {
+        attachmentLink.href = invoice.attachmentUrl;
+        attachmentLink.style.display = 'inline';
+      } else {
+        attachmentLink.style.display = 'none';
+      }
+
+      // Display history
+      const historyDiv = document.getElementById('modal-history');
+      historyDiv.innerHTML = '';
+      if (invoice.attestationHistory && invoice.attestationHistory.length > 0) {
+          invoice.attestationHistory.forEach(entry => {
+              const actionClass = entry.action === 'Approve' ? 'action-approve' : 'action-reject';
+              const historyItem = document.createElement('div');
+              historyItem.className = 'history-item';
+              historyItem.innerHTML = `
+                  <span>${new Date(entry.timestamp).toLocaleString()} - <b>${entry.user}</b></span>
+                  <span class="${actionClass}" style="float: right;">${entry.action === 'Approve' ? 'Godkjente' : 'Avviste'}</span>
+              `;
+              historyDiv.appendChild(historyItem);
+          });
+      } else {
+          historyDiv.innerHTML = '<p>Ingen historikk enda.</p>';
+      }
+
+      // Handle modal actions visibility
+      const modalActions = document.getElementById('modal-actions');
+      const modalClosedMessage = document.getElementById('modal-closed-message');
+      const hasAttested = invoice.attestationHistory.some(h => h.user === currentUserEmail);
+
+      if (invoice.status === 'Approved' || invoice.status === 'Rejected' || hasAttested) {
+        modalActions.style.display = 'none';
+        modalClosedMessage.style.display = 'block';
+        if (hasAttested) {
+            modalClosedMessage.innerHTML = '<p>Du har allerede behandlet denne fakturaen.</p>';
+        } else {
+            modalClosedMessage.innerHTML = '<p>Denne fakturaen er ferdigbehandlet.</p>';
+        }
+      } else {
+        modalActions.style.display = 'block';
+        modalClosedMessage.style.display = 'none';
+      }
+
+      M.Modal.getInstance(document.getElementById('invoiceModal')).open();
+    }
+
+    document.getElementById('approveBtn').onclick = () => attest('Approve');
+    document.getElementById('rejectBtn').onclick = () => attest('Reject');
+
+    function attest(action) {
+      showLoader(true);
+      M.Modal.getInstance(document.getElementById('invoiceModal')).close();
+      const payload = {
+        invoiceId: currentInvoiceId,
+        action: action,
+        userEmail: currentUserEmail
+      };
+      google.script.run
+        .withSuccessHandler(handleAttestationResponse)
+        .withFailureHandler(showError)
+        .attestInvoice(payload);
+    }
+
+    function handleAttestationResponse(response) {
+      if (response.ok) {
+        M.toast({html: `Fakturaen ble ${response.newStatus === 'Rejected' ? 'avvist' : 'attestert'}. Laster inn på nytt...`});
+        setTimeout(loadInvoices, 1500);
+      } else {
+        showError(response.message || response.error);
+        showLoader(false);
+      }
+    }
+
+    // --- UTILITY FUNCTIONS ---
+    function showLoader(show) {
+      document.getElementById('loader').style.display = show ? 'block' : 'none';
+    }
+
+    function showError(error) {
+      showLoader(false);
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.innerText = `En feil oppstod: ${error.toString()}`;
+      errorDiv.style.display = 'block';
+      console.error(error);
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      return new Date(dateString).toLocaleDateString('nb-NO');
+    }
+
+    function formatCurrency(amount) {
+      if (typeof amount !== 'number') return 'N/A';
+      return amount.toLocaleString('nb-NO', { style: 'currency', currency: 'NOK' });
+    }
+
+    function translateStatus(status) {
+        const translations = {
+            'Pending': 'Venter',
+            'Partially Approved': 'Delvis godkjent',
+            'Approved': 'Godkjent',
+            'Rejected': 'Avvist'
+        };
+        return translations[status] || status;
+    }
+  </script>
+</body>
+</html>

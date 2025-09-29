@@ -11,6 +11,7 @@ const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
 const SUPPLIERS_SHEET_NAME = 'Suppliers';
 const MESSAGES_SHEET_NAME = 'Messages';
+const INVOICES_SHEET_NAME = 'Invoices'; // New sheet for invoices
 const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
 
 /**
@@ -26,6 +27,19 @@ function _createMessagesSheetIfNotExist() {
 }
 
 /**
+ * Creates the Invoices sheet if it doesn't already exist.
+ * @private
+ */
+function _createInvoicesSheetIfNotExist() {
+  const ss = SpreadsheetApp.openById(DB_SHEET_ID);
+  if (!ss.getSheetByName(INVOICES_SHEET_NAME)) {
+    const sheet = ss.insertSheet(INVOICES_SHEET_NAME);
+    // Headers for the invoice sheet
+    sheet.appendRow(['id', 'supplierName', 'amount', 'dueDate', 'invoiceDate', 'description', 'attachmentUrl', 'status', 'attestationHistory', 'rules']);
+  }
+}
+
+/**
  * Validates that the script has been configured.
  * @private
  */
@@ -34,6 +48,7 @@ function _validateConfig() {
     throw new Error('Script not configured. Please follow SETUP_INSTRUCTIONS.md.');
   }
   _createMessagesSheetIfNotExist();
+  _createInvoicesSheetIfNotExist(); // Ensure the invoices sheet exists
 }
 
 /**
@@ -60,6 +75,189 @@ function gjoremalGet() {
     return { ok: true, tasks: tasks };
   } catch (e) {
     return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Gets the email of the active user.
+ * @returns {string} The user's email address.
+ */
+function getUserEmail() {
+  return Session.getActiveUser().getEmail();
+}
+
+// --- INVOICE ATTESTATION FUNCTIONS ---
+
+/**
+ * Retrieves all invoices from the Invoices sheet.
+ * @returns {object} A response object with the list of invoices.
+ */
+function getInvoices() {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(INVOICES_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${INVOICES_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return { ok: true, invoices: [] }; // No data is valid
+    const headers = data.shift();
+
+    const invoices = data.map(row => {
+      const invoice = {};
+      headers.forEach((header, i) => {
+        invoice[header] = row[i];
+      });
+      // Attempt to parse history if it's a string
+      if (invoice.attestationHistory && typeof invoice.attestationHistory === 'string') {
+        try {
+          invoice.attestationHistory = JSON.parse(invoice.attestationHistory);
+        } catch (e) {
+          invoice.attestationHistory = []; // Or handle error appropriately
+        }
+      }
+      return invoice;
+    }).sort((a, b) => new Date(b.invoiceDate) - new Date(a.invoiceDate)); // Sort by newest first
+
+    return { ok: true, invoices: invoices };
+  } catch (e) {
+    Logger.log(e);
+    return { ok: false, error: `Could not retrieve invoices: ${e.message}` };
+  }
+}
+
+/**
+ * Adds a new invoice and notifies the board.
+ * This is a helper function for demonstration; in a real-world scenario,
+ * this would be triggered by an external system (e.g., email from an accountant).
+ * @param {object} payload The invoice data.
+ * @returns {object} A response object indicating success or failure.
+ */
+function addInvoice(payload) {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(INVOICES_SHEET_NAME);
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    const newInvoice = {
+      id: Utilities.getUuid(),
+      status: 'Pending',
+      attestationHistory: JSON.stringify([]),
+      ...payload
+    };
+
+    // Set default rules if not provided
+    if (!newInvoice.rules) {
+        newInvoice.rules = JSON.stringify({ requiredApprovals: newInvoice.amount > 5000 ? 2 : 1 });
+    }
+
+    const newRow = headers.map(header => newInvoice[header] || '');
+    sheet.appendRow(newRow);
+
+    // --- Notify Board Members ---
+    const userSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
+    const usersData = userSheet.getDataRange().getValues();
+    usersData.shift(); // remove headers
+    const boardEmails = usersData
+      .filter(row => row[2] === 'Styret') // Assuming column C indicates role
+      .map(row => row[1])
+      .filter(email => email);
+
+    if (boardEmails.length > 0) {
+      const subject = `Ny faktura til attestering: ${newInvoice.supplierName}`;
+      const body = `
+        <p>En ny faktura krever din oppmerksomhet.</p>
+        <p><b>Leverandør:</b> ${newInvoice.supplierName}</p>
+        <p><b>Beløp:</b> ${newInvoice.amount} kr</p>
+        <p><b>Forfallsdato:</b> ${new Date(newInvoice.dueDate).toLocaleDateString()}</p>
+        <p>Vennligst logg inn i applikasjonen for å behandle den.</p>
+      `;
+      MailApp.sendEmail({
+        to: boardEmails.join(','),
+        subject: subject,
+        htmlBody: body,
+        name: "System"
+      });
+    }
+
+    return { ok: true, invoice: newInvoice };
+  } catch (e) {
+    Logger.log(e);
+    return { ok: false, error: `Could not add invoice: ${e.message}` };
+  }
+}
+
+
+/**
+ * Attests (approves or rejects) an invoice.
+ * @param {object} payload Contains invoiceId, action ('Approve' or 'Reject'), and userEmail.
+ * @returns {object} A response object indicating success or failure.
+ */
+function attestInvoice(payload) {
+  try {
+    _validateConfig();
+    const { invoiceId, action, userEmail } = payload;
+    if (!invoiceId || !action || !userEmail) {
+      throw new Error("Mangler invoiceId, action, eller userEmail.");
+    }
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(INVOICES_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const idColIndex = headers.indexOf('id');
+    const rowIndex = data.findIndex(row => row[idColIndex] === invoiceId);
+
+    if (rowIndex === -1) {
+      throw new Error(`Faktura med ID ${invoiceId} ble ikke funnet.`);
+    }
+
+    const rowData = data[rowIndex];
+    const invoice = {};
+    headers.forEach((header, i) => {
+      invoice[header] = rowData[i];
+    });
+
+    // --- Update Attestation History ---
+    let history = invoice.attestationHistory ? JSON.parse(invoice.attestationHistory) : [];
+
+    // Prevent duplicate attestations
+    if (history.some(entry => entry.user === userEmail)) {
+        return { ok: false, message: "Du har allerede attestert denne fakturaen." };
+    }
+
+    history.push({
+      user: userEmail,
+      action: action,
+      timestamp: new Date().toISOString()
+    });
+
+    // --- Update Status based on Rules ---
+    const rules = invoice.rules ? JSON.parse(invoice.rules) : { requiredApprovals: 1 };
+    const requiredApprovals = rules.requiredApprovals || 1;
+    const currentApprovals = history.filter(h => h.action === 'Approve').length;
+
+    let newStatus = invoice.status;
+    if (action === 'Reject') {
+      newStatus = 'Rejected';
+    } else if (action === 'Approve') {
+      if (currentApprovals >= requiredApprovals) {
+        newStatus = 'Approved';
+      } else {
+        newStatus = 'Partially Approved';
+      }
+    }
+
+    // --- Write Updates to Sheet ---
+    const statusColIndex = headers.indexOf('status');
+    const historyColIndex = headers.indexOf('attestationHistory');
+
+    sheet.getRange(rowIndex + 2, statusColIndex + 1).setValue(newStatus);
+    sheet.getRange(rowIndex + 2, historyColIndex + 1).setValue(JSON.stringify(history));
+
+    return { ok: true, newStatus: newStatus, newHistory: history };
+
+  } catch (e) {
+    Logger.log(e);
+    return { ok: false, error: `Attestering feilet: ${e.message}` };
   }
 }
 

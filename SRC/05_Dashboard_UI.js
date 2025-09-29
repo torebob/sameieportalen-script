@@ -122,6 +122,7 @@
     template.isAdmin = isAdmin;
     template.appName = appName;
     template.adminButtons = adminButtons;
+    template.webAppUrl = ScriptApp.getService().getUrl();
 
     const output = template.evaluate()
       .setTitle(`${appName} – Dashboard`)

@@ -36,6 +36,7 @@
 
         <? if (isAdmin) { ?>
             <div class="btn-group">
+                <a href="<?= webAppUrl ?>?page=leverandorliste" class="btn">Leverandører</a>
                 <? if (adminButtons && adminButtons.length > 0) { ?>
                     <? adminButtons.forEach(button => { ?>
                         <button class="btn admin-btn <?= button.class || '' ?>" data-action="<?= button.action ?>">

@@ -61,10 +61,13 @@ function hmsMigrateSchema_v1_1() {
 
   // Leverandører (valgfritt)
   var sup = ss.getSheetByName(SUPPLIERS_SHEET);
+  const suppliersHeader = ['Kategori/System','Komponent','Navn','Telefon','Epost','Notat','Avtaledokument URL'];
   if (!sup) {
     sup = ss.insertSheet(SUPPLIERS_SHEET);
-    sup.getRange(1,1,1,6).setValues([['Kategori/System','Komponent','Navn','Telefon','Epost','Notat']]).setFontWeight('bold');
+    sup.getRange(1,1,1,suppliersHeader.length).setValues([suppliersHeader]).setFontWeight('bold');
     sup.setFrozenRows(1);
+  } else {
+    _ensureColumns_(sup, suppliersHeader);
   }
 
   return 'HMS v1.1 migrering ok';

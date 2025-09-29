@@ -64,6 +64,7 @@ function _validateConfig() {
   }
   _createMessagesSheetIfNotExist();
   _createBeboerregisterSheetsIfNotExist();
+  _createHmsSheetsIfNotExist(); // Added this line
 }
 
 /**

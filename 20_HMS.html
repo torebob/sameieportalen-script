@@ -1,0 +1,534 @@
+<style>
+    /* Basic styling for the HMS module */
+    .hms-container {
+        padding: 20px;
+        font-family: Arial, sans-serif;
+    }
+
+    .hms-tabs {
+        display: flex;
+        border-bottom: 1px solid #ccc;
+        margin-bottom: 20px;
+    }
+
+    .hms-tab-item {
+        padding: 10px 20px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-right: 5px;
+    }
+
+    .hms-tab-item.active {
+        border-color: #ccc;
+        border-bottom: 1px solid white;
+        background-color: white;
+        margin-bottom: -1px;
+        border-radius: 5px 5px 0 0;
+    }
+
+    .hms-tab-content {
+        display: none;
+    }
+
+    .hms-tab-content.active {
+        display: block;
+    }
+
+    .hms-section {
+        margin-bottom: 30px;
+    }
+
+    .hms-section h3 {
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+
+    th {
+        background-color: #f2f2f2;
+    }
+
+    .hms-button {
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 15px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    .hms-button:hover {
+        background-color: #45a049;
+    }
+
+    .hms-button.delete {
+        background-color: #f44336;
+    }
+    .hms-button.delete:hover {
+        background-color: #da190b;
+    }
+
+    /* Modal styles */
+    .hms-modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+
+    .hms-modal-content {
+      background-color: #fefefe;
+      margin: 10% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 600px;
+      border-radius: 5px;
+    }
+
+    .hms-modal-close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+</style>
+
+<div class="hms-container">
+    <h2>HMS-Modul</h2>
+
+    <!-- Tabs -->
+    <div class="hms-tabs">
+        <div class="hms-tab-item active" onclick="showTab('risk')">Risikovurdering</div>
+        <div class="hms-tab-item" onclick="showTab('checklists')">Sjekklister</div>
+        <div class="hms-tab-item" onclick="showTab('deviation')">Registrer Avvik</div>
+        <div class="hms-tab-item" onclick="showTab('history')">Historikk & Rapportering</div>
+    </div>
+
+    <!-- Tab Content: Risk Assessment -->
+    <div id="risk" class="hms-tab-content active">
+        <div class="hms-section">
+            <h3>Start ny risikovurdering</h3>
+            <p>Velg en mal for å starte en ny risikovurdering for et spesifikt område.</p>
+            <form id="start-risk-form">
+                <label for="risk-template-select">Velg mal:</label>
+                <select id="risk-template-select" required></select>
+                <label for="risk-area-name">Navn på område (f.eks. "Lekeplass ved Blokk A"):</label>
+                <input type="text" id="risk-area-name" required>
+                <button type="submit" class="hms-button">Start Vurdering</button>
+            </form>
+        </div>
+        <div class="hms-section">
+            <h3>Pågående og fullførte vurderinger</h3>
+            <table id="risk-assessments-table">
+                <thead>
+                    <tr>
+                        <th>Område</th>
+                        <th>Mal</th>
+                        <th>Status</th>
+                        <th>Opprettet</th>
+                        <th>Fullført</th>
+                        <th>Handlinger</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows will be added dynamically -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Tab Content: Checklists -->
+    <div id="checklists" class="hms-tab-content">
+        <div class="hms-section">
+            <h3>Administrer sjekklister</h3>
+            <p>Opprett og vedlikehold sjekklister for regelmessige inspeksjoner.</p>
+            <button class="hms-button" id="new-checklist-btn">Opprett ny sjekkliste</button>
+        </div>
+        <table id="checklists-table">
+            <thead>
+                <tr>
+                    <th>Navn</th>
+                    <th>Beskrivelse</th>
+                    <th>Frekvens</th>
+                    <th>Handlinger</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Rows will be added dynamically -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Tab Content: Register Deviation -->
+    <div id="deviation" class="hms-tab-content">
+        <h3>Registrer avvik eller uønsket hendelse</h3>
+        <form id="deviation-form">
+            <label for="deviation-location">Lokasjon:</label>
+            <input type="text" id="deviation-location" required><br><br>
+            <label for="deviation-description">Beskrivelse av avvik:</label>
+            <textarea id="deviation-description" rows="4" required></textarea><br><br>
+            <label for="deviation-attachment">Legg ved bilde (valgfritt):</label>
+            <input type="file" id="deviation-attachment" accept="image/*"><br><br>
+            <button type="submit" class="hms-button">Registrer Avvik</button>
+        </form>
+    </div>
+
+    <!-- Tab Content: History & Reporting -->
+    <div id="history" class="hms-tab-content">
+        <div class="hms-section">
+            <h3>Aktivitetslogg</h3>
+            <p>En komplett logg over alle HMS-relaterte aktiviteter.</p>
+            <table id="history-table">
+                <thead>
+                    <tr>
+                        <th>Tidspunkt</th>
+                        <th>Bruker</th>
+                        <th>Aktivitetstype</th>
+                        <th>Beskrivelse</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows will be added dynamically -->
+                </tbody>
+            </table>
+        </div>
+        <div class="hms-section">
+            <h3>Generer Rapport</h3>
+            <p>Generer en årsrapport over alt utført HMS-arbeid.</p>
+            <button class="hms-button" id="generate-report-btn">Generer Årsrapport</button>
+            <div id="report-output" style="margin-top: 20px; white-space: pre-wrap; background: #f0f0f0; padding: 15px; border-radius: 5px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for creating/editing a checklist -->
+<div id="checklist-modal" class="hms-modal">
+    <div class="hms-modal-content">
+        <span class="hms-modal-close" onclick="closeModal('checklist-modal')">&times;</span>
+        <h3 id="checklist-modal-title">Ny Sjekkliste</h3>
+        <form id="checklist-form">
+            <input type="hidden" id="checklist-id">
+            <label for="checklist-name">Navn:</label>
+            <input type="text" id="checklist-name" required><br><br>
+            <label for="checklist-description">Beskrivelse:</label>
+            <input type="text" id="checklist-description"><br><br>
+            <label for="checklist-frequency">Frekvens (f.eks. Månedlig, Kvartalsvis):</label>
+            <input type="text" id="checklist-frequency"><br><br>
+            <h4>Sjekkpunkter</h4>
+            <div id="checklist-items-container">
+                <!-- Checklist items will be added here -->
+            </div>
+            <button type="button" onclick="addChecklistItem()">Legg til punkt</button>
+            <hr>
+            <button type="submit" class="hms-button">Lagre Sjekkliste</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    // --- UTILITY FUNCTIONS ---
+    function toBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    function showSpinner() { /* Implement spinner logic if needed */ console.log("Loading..."); }
+    function hideSpinner() { /* Implement spinner logic if needed */ console.log("Done."); }
+    function showAlert(message, type = 'info') { alert(message); }
+
+    // --- TAB HANDLING ---
+    function showTab(tabId) {
+        // Hide all tab contents
+        document.querySelectorAll('.hms-tab-content').forEach(content => content.classList.remove('active'));
+        // Deactivate all tab items
+        document.querySelectorAll('.hms-tab-item').forEach(item => item.classList.remove('active'));
+
+        // Show the selected tab content
+        document.getElementById(tabId).classList.add('active');
+        // Activate the selected tab item
+        document.querySelector(`.hms-tab-item[onclick="showTab('${tabId}')"]`).classList.add('active');
+
+        // Load data for the activated tab
+        loadTabData(tabId);
+    }
+
+    function loadTabData(tabId) {
+        switch(tabId) {
+            case 'risk':
+                loadRiskAssessmentTemplates();
+                loadRiskAssessments();
+                break;
+            case 'checklists':
+                loadChecklists();
+                break;
+            case 'history':
+                loadHistory();
+                break;
+        }
+    }
+
+    // --- MODAL HANDLING ---
+    function openModal(modalId) { document.getElementById(modalId).style.display = 'block'; }
+    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+    // --- RISK ASSESSMENT ---
+    function loadRiskAssessmentTemplates() {
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    const select = document.getElementById('risk-template-select');
+                    select.innerHTML = '<option value="">Velg en mal...</option>';
+                    response.templates.forEach(t => {
+                        select.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+                    });
+                } else {
+                    showAlert('Feil ved lasting av maler: ' + response.error, 'error');
+                }
+            })
+            .withFailureHandler(err => {
+                hideSpinner();
+                showAlert('Serverfeil: ' + err.message, 'error');
+            })
+            .hmsGetRiskAssessmentTemplates();
+    }
+
+    function loadRiskAssessments() { /* Placeholder */ }
+
+    document.getElementById('start-risk-form').addEventListener('submit', e => {
+        e.preventDefault();
+        const templateId = document.getElementById('risk-template-select').value;
+        const areaName = document.getElementById('risk-area-name').value;
+        if (!templateId || !areaName) {
+            showAlert('Vennligst velg en mal og angi et områdenavn.', 'warning');
+            return;
+        }
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    showAlert('Risikovurdering startet!', 'success');
+                    document.getElementById('start-risk-form').reset();
+                    loadRiskAssessments(); // Refresh list
+                } else {
+                    showAlert('Kunne ikke starte vurdering: ' + response.error, 'error');
+                }
+            })
+            .hmsStartRiskAssessment(templateId, areaName);
+    });
+
+    // --- CHECKLISTS ---
+    function loadChecklists() {
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    const tbody = document.getElementById('checklists-table').querySelector('tbody');
+                    tbody.innerHTML = '';
+                    response.checklists.forEach(c => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${c.name}</td>
+                                <td>${c.description}</td>
+                                <td>${c.frequency}</td>
+                                <td>
+                                    <button onclick="editChecklist('${c.id}')">Rediger</button>
+                                    <button class="delete" onclick="deleteChecklist('${c.id}')">Slett</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    showAlert('Feil ved lasting av sjekklister: ' + response.error, 'error');
+                }
+            })
+            .hmsGetChecklists();
+    }
+
+    document.getElementById('new-checklist-btn').addEventListener('click', () => {
+        document.getElementById('checklist-form').reset();
+        document.getElementById('checklist-id').value = '';
+        document.getElementById('checklist-modal-title').innerText = 'Ny Sjekkliste';
+        document.getElementById('checklist-items-container').innerHTML = '';
+        addChecklistItem(); // Add one empty item to start
+        openModal('checklist-modal');
+    });
+
+    function addChecklistItem(text = '') {
+        const container = document.getElementById('checklist-items-container');
+        const itemDiv = document.createElement('div');
+        itemDiv.innerHTML = `<input type="text" class="checklist-item-input" value="${text}" placeholder="Sjekkpunktbeskrivelse"> <button type="button" onclick="this.parentElement.remove()">Fjern</button>`;
+        container.appendChild(itemDiv);
+    }
+
+    document.getElementById('checklist-form').addEventListener('submit', e => {
+        e.preventDefault();
+        const items = [];
+        document.querySelectorAll('.checklist-item-input').forEach(input => {
+            if (input.value) items.push({ text: input.value });
+        });
+        const payload = {
+            id: document.getElementById('checklist-id').value,
+            name: document.getElementById('checklist-name').value,
+            description: document.getElementById('checklist-description').value,
+            frequency: document.getElementById('checklist-frequency').value,
+            itemsJson: JSON.stringify(items)
+        };
+
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    showAlert('Sjekkliste lagret!', 'success');
+                    closeModal('checklist-modal');
+                    loadChecklists();
+                } else {
+                    showAlert('Lagring feilet: ' + response.error, 'error');
+                }
+            })
+            .hmsSaveChecklist(payload);
+    });
+
+    function deleteChecklist(id) {
+        if (!confirm('Er du sikker på at du vil slette denne sjekklisten?')) return;
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    showAlert('Sjekkliste slettet.', 'success');
+                    loadChecklists();
+                } else {
+                    showAlert('Sletting feilet: ' + response.error, 'error');
+                }
+            })
+            .hmsDeleteChecklist(id);
+    }
+
+    // --- DEVIATIONS ---
+    document.getElementById('deviation-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const fileInput = document.getElementById('deviation-attachment');
+        let attachment = null;
+
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            attachment = {
+                name: file.name,
+                mimeType: file.type,
+                base64: await toBase64(file)
+            };
+        }
+
+        const payload = {
+            location: document.getElementById('deviation-location').value,
+            description: document.getElementById('deviation-description').value,
+            attachment: attachment
+        };
+
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    showAlert(`Avvik registrert! En oppgave med ID ${response.linkedTaskId} er opprettet.`, 'success');
+                    document.getElementById('deviation-form').reset();
+                } else {
+                    showAlert('Registrering feilet: ' + response.error, 'error');
+                }
+            })
+            .hmsRegisterDeviation(payload);
+    });
+
+    // --- HISTORY & REPORTING ---
+    function loadHistory() {
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    const tbody = document.getElementById('history-table').querySelector('tbody');
+                    tbody.innerHTML = '';
+                    response.history.forEach(h => {
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${new Date(h.timestamp).toLocaleString()}</td>
+                                <td>${h.user}</td>
+                                <td>${h.activityType}</td>
+                                <td>${h.description}</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    showAlert('Feil ved lasting av historikk: ' + response.error, 'error');
+                }
+            })
+            .hmsGetHistory(null); // Pass null for no filters for now
+    }
+
+    document.getElementById('generate-report-btn').addEventListener('click', () => {
+        // This is a simplified client-side report generation for demonstration.
+        // A more complex implementation would call a backend function.
+        showSpinner();
+        google.script.run
+            .withSuccessHandler(response => {
+                hideSpinner();
+                if (response.ok) {
+                    const reportOutput = document.getElementById('report-output');
+                    let reportText = `HMS Årsrapport - Generert ${new Date().toLocaleDateString()}\n\n`;
+                    reportText += "========================================\n\n";
+
+                    const deviations = response.report.deviations.length;
+                    const assessments = response.report.assessments.length;
+
+                    reportText += `Oppsummering:\n`;
+                    reportText += `- Antall registrerte avvik: ${deviations}\n`;
+                    reportText += `- Antall gjennomførte risikovurderinger: ${assessments}\n\n`;
+
+                    reportText += "Fullført HMS-arbeid:\n";
+                    response.report.log.forEach(item => {
+                       reportText += `- [${new Date(item.timestamp).toLocaleString()}] ${item.activityType}: ${item.description}\n`;
+                    });
+
+                    reportOutput.textContent = reportText;
+
+                } else {
+                    showAlert('Kunne ikke generere rapport: ' + response.error, 'error');
+                }
+            })
+            .hmsGenerateReport();
+    });
+
+    // --- INITIAL LOAD ---
+    document.addEventListener('DOMContentLoaded', () => {
+        showTab('risk'); // Show the first tab by default
+    });
+</script>

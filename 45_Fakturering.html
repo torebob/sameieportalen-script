@@ -1,0 +1,361 @@
+<!--
+ ==================================================================
+   FILE: 45_Fakturering.html
+   VERSION: 1.0.0
+   CREATED: 2025-09-28
+   PURPOSE: UI for invoicing module.
+ ==================================================================
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fakturering</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary: #3b82f6; --secondary: #64748b; --success: #10b981;
+            --danger: #ef4444; --warning: #f59e0b; --light: #f1f5f9;
+            --dark: #1e293b; --border: #cbd5e1;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: var(--light); margin: 0; padding: 1rem; }
+        .container { max-width: 1200px; margin: auto; }
+        h1, h2, h3 { color: var(--dark); margin-top: 0; }
+        .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 1rem; }
+        .tab-link { padding: 0.75rem 1.25rem; cursor: pointer; border: none; background: none; font-size: 1rem; color: var(--secondary); border-bottom: 2px solid transparent; }
+        .tab-link.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .card { background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151; }
+        input[type="text"], input[type="number"], input[type="date"], select {
+            width: 100%; padding: 0.75rem; border: 1px solid var(--border);
+            border-radius: 6px; box-sizing: border-box; font-size: 1rem;
+        }
+        .btn { padding: 0.75rem 1.25rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: 500; text-align: center; display: inline-block; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: #2563eb; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-success { background-color: var(--success); color: white; }
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background-color: #f9fafb; font-weight: 600; }
+        .status { padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+        .status-Ubetalt { background-color: #fee2e2; color: #b91c1c; }
+        .status-Betalt { background-color: #d1fae5; color: #065f46; }
+        .status-Delvis { background-color: #fef3c7; color: #92400e; }
+        #loader { display: none; text-align: center; padding: 2rem; }
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+            overflow: auto; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center;
+        }
+        .modal-content { background-color: #fefefe; margin: auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; }
+        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1><i class="fas fa-file-invoice-dollar"></i> Fakturering</h1>
+
+    <div class="tabs">
+        <button class="tab-link active" onclick="openTab(event, 'invoices')">Fakturaoversikt</button>
+        <button class="tab-link" onclick="openTab(event, 'templates')">Fakturamaler</button>
+        <button class="tab-link" onclick="openTab(event, 'generation')">Generer Fakturaer</button>
+    </div>
+
+    <div id="loader"><i class="fas fa-spinner fa-spin"></i> Laster data...</div>
+    <div id="notifications"></div>
+
+    <!-- Invoices Tab -->
+    <div id="invoices" class="tab-content active">
+        <div class="card">
+            <h2>Fakturaoversikt</h2>
+            <div class="table-wrapper">
+                <table id="invoiceTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Beboer</th>
+                            <th>Beløp</th>
+                            <th>Status</th>
+                            <th>Forfall</th>
+                            <th>Handling</th>
+                        </tr>
+                    </thead>
+                    <tbody><!-- Populated by JS --></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Templates Tab -->
+    <div id="templates" class="tab-content">
+        <div class="card">
+            <h2>Fakturamaler</h2>
+            <div id="templateList"></div>
+            <button class="btn btn-primary" onclick="showTemplateModal()"><i class="fas fa-plus"></i> Ny Mal</button>
+        </div>
+    </div>
+
+    <!-- Generation Tab -->
+    <div id="generation" class="tab-content">
+        <div class="card">
+            <h2>Generer Fakturaer fra Mal</h2>
+            <form id="generationForm">
+                <div class="form-group">
+                    <label for="templateSelect">Velg Mal</label>
+                    <select id="templateSelect" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="dueDate">Forfallsdato</label>
+                    <input type="date" id="dueDate" required>
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-cogs"></i> Generer Fakturaer</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Template Modal -->
+<div id="templateModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('templateModal')">&times;</span>
+        <h3 id="templateModalTitle">Ny Fakturamal</h3>
+        <form id="templateForm">
+            <input type="hidden" id="templateId">
+            <div class="form-group">
+                <label for="templateName">Navn</label>
+                <input type="text" id="templateName" required>
+            </div>
+            <div class="form-group">
+                <label for="templateAmount">Beløp</label>
+                <input type="number" id="templateAmount" required>
+            </div>
+            <div class="form-group">
+                <label for="templateDesc">Beskrivelse</label>
+                <input type="text" id="templateDesc" required>
+            </div>
+            <button type="submit" class="btn btn-success">Lagre Mal</button>
+        </form>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div id="paymentModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('paymentModal')">&times;</span>
+        <h3>Registrer Betaling</h3>
+        <form id="paymentForm">
+            <input type="hidden" id="paymentInvoiceId">
+            <div class="form-group">
+                <p><strong>Faktura ID:</strong> <span id="paymentInvoiceIdDisplay"></span></p>
+                <p><strong>Totalbeløp:</strong> <span id="paymentTotalAmount"></span></p>
+            </div>
+            <div class="form-group">
+                <label for="paymentAmount">Betalt beløp</label>
+                <input type="number" id="paymentAmount" step="0.01" required>
+            </div>
+            <button type="submit" class="btn btn-success">Registrer</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    const $ = id => document.getElementById(id);
+
+    function openTab(evt, tabName) {
+        document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+        document.querySelectorAll('.tab-link').forEach(tl => tl.classList.remove('active'));
+        $(tabName).style.display = 'block';
+        evt.currentTarget.classList.add('active');
+    }
+
+    function showLoader(show) {
+        $('loader').style.display = show ? 'block' : 'none';
+    }
+
+    function showNotification(message, isSuccess) {
+        const notif = $('notifications');
+        notif.innerHTML = `<div style="padding: 1rem; margin-bottom: 1rem; border-radius: 6px; background-color: ${isSuccess ? '#d1fae5' : '#fee2e2'}; color: ${isSuccess ? '#065f46' : '#b91c1c'};">${message}</div>`;
+        setTimeout(() => notif.innerHTML = '', 5000);
+    }
+
+    function run(func, ...args) {
+        showLoader(true);
+        return new Promise((resolve, reject) => {
+            google.script.run
+                .withSuccessHandler(response => {
+                    showLoader(false);
+                    if (response && response.ok) {
+                        resolve(response);
+                    } else {
+                        showNotification(response.message || 'An error occurred.', false);
+                        reject(response);
+                    }
+                })
+                .withFailureHandler(error => {
+                    showLoader(false);
+                    showNotification(error.message, false);
+                    reject(error);
+                })
+                [func](...args);
+        });
+    }
+
+    // Invoices
+    async function loadInvoices() {
+        const { invoices } = await run('getInvoices');
+        const tbody = $('invoiceTable').querySelector('tbody');
+        tbody.innerHTML = '';
+        invoices.forEach(inv => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${inv.id.substring(0, 8)}...</td>
+                <td>${inv.eierNavn} (${inv.seksjonsnummer})</td>
+                <td>${inv.belop.toFixed(2)} kr</td>
+                <td><span class="status status-${inv.status.replace(/\s+/g, '')}">${inv.status}</span></td>
+                <td>${new Date(inv.forfallsdato).toLocaleDateString()}</td>
+                <td>
+                    <button class="btn btn-primary" onclick="showPaymentModal('${inv.id}', ${inv.belop})" title="Registrer betaling">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </button>
+                    <button class="btn btn-secondary" onclick="sendInvoice('${inv.id}')" title="Send faktura på e-post">
+                        <i class="fas fa-envelope"></i>
+                    </button>
+                    ${inv.status !== 'Betalt' ? `<button class="btn btn-warning" onclick="sendReminder('${inv.id}')" title="Send purring">
+                        <i class="fas fa-bell"></i>
+                    </button>` : ''}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Templates
+    async function loadTemplates() {
+        const { templates } = await run('getInvoiceTemplates');
+        const list = $('templateList');
+        const select = $('templateSelect');
+        list.innerHTML = '';
+        select.innerHTML = '<option value="">Velg en mal</option>';
+        templates.forEach(t => {
+            const div = document.createElement('div');
+            div.className = 'grid-item';
+            div.innerHTML = `
+                <h4>${t.navn}</h4>
+                <p>Beløp: ${t.belop.toFixed(2)} kr</p>
+                <p>${t.beskrivelse}</p>
+                <button class="btn btn-secondary" onclick='showTemplateModal(${JSON.stringify(t)})'><i class="fas fa-edit"></i></button>
+            `;
+            list.appendChild(div);
+            select.innerHTML += `<option value="${t.id}">${t.navn}</option>`;
+        });
+    }
+
+    function showTemplateModal(template = null) {
+        const modal = $('templateModal');
+        $('templateForm').reset();
+        if (template) {
+            $('templateModalTitle').innerText = 'Rediger Mal';
+            $('templateId').value = template.id;
+            $('templateName').value = template.navn;
+            $('templateAmount').value = template.belop;
+            $('templateDesc').value = template.beskrivelse;
+        } else {
+            $('templateModalTitle').innerText = 'Ny Fakturamal';
+        }
+        modal.style.display = 'flex';
+    }
+
+    $('templateForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const payload = {
+            id: $('templateId').value || null,
+            navn: $('templateName').value,
+            belop: parseFloat($('templateAmount').value),
+            beskrivelse: $('templateDesc').value,
+        };
+        await run('saveInvoiceTemplate', payload);
+        showNotification('Mal lagret!', true);
+        closeModal('templateModal');
+        loadTemplates();
+    });
+
+    // Generation
+    $('generationForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const payload = {
+            templateId: $('templateSelect').value,
+            forfallsdato: $('dueDate').value
+        };
+        if (!payload.templateId || !payload.forfallsdato) {
+            showNotification('Vennligst velg mal og forfallsdato.', false);
+            return;
+        }
+        const res = await run('generateInvoicesFromTemplate', payload);
+        showNotification(`${res.count} fakturaer ble generert.`, true);
+        loadInvoices(); // Refresh invoice list
+        $('generationForm').reset();
+    });
+
+    // Payment
+    function showPaymentModal(invoiceId, totalAmount) {
+        $('paymentInvoiceId').value = invoiceId;
+        $('paymentInvoiceIdDisplay').innerText = invoiceId.substring(0, 8) + '...';
+        $('paymentTotalAmount').innerText = totalAmount.toFixed(2) + ' kr';
+        $('paymentAmount').value = totalAmount;
+        $('paymentModal').style.display = 'flex';
+    }
+
+    $('paymentForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const payload = {
+            invoiceId: $('paymentInvoiceId').value,
+            amount: parseFloat($('paymentAmount').value)
+        };
+        await run('registerPayment', payload);
+        showNotification('Betaling registrert!', true);
+        closeModal('paymentModal');
+        loadInvoices();
+    });
+
+    async function sendInvoice(invoiceId) {
+        if (confirm('Er du sikker på at du vil sende denne fakturaen på e-post?')) {
+            const res = await run('sendInvoiceEmail', invoiceId);
+            showNotification(res.message, true);
+        }
+    }
+
+    async function sendReminder(invoiceId) {
+        if (confirm('Er du sikker på at du vil sende en betalingspåminnelse for denne fakturaen?')) {
+            const res = await run('sendPaymentReminder', invoiceId);
+            showNotification(res.message, true);
+        }
+    }
+
+    function closeModal(modalId) {
+        $(modalId).style.display = 'none';
+    }
+
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = "none";
+        }
+    }
+
+    // Initial Load
+    window.addEventListener('DOMContentLoaded', () => {
+        loadInvoices();
+        loadTemplates();
+        $('dueDate').valueAsDate = new Date();
+    });
+</script>
+</body>
+</html>

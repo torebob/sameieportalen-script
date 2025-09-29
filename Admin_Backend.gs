@@ -12,7 +12,6 @@ function initializeSite() {
     // Check if pages already exist to prevent duplicates
     const existingData = sheet.getDataRange().getValues();
     if (existingData.length > 1) { // >1 to account for header row
-        // throw new Error("Site appears to be already initialized.");
         // We can silently ignore instead of throwing an error, to make it more user friendly.
         return { ok: true, message: "Site already initialized." };
     }

@@ -30,6 +30,12 @@ Follow these steps to configure the backend for the task management application.
     -   Add the following headers in the first row: `name`, `email`.
     -   Populate this sheet with the names and email addresses of the board members who can be assigned tasks.
 
+7.  **Create the `Suppliers` sheet.**
+    -   Click the `+` icon to add another new sheet.
+    -   Rename it to `Suppliers`.
+    -   Add the following headers in the first row, exactly as written:
+        `id`, `name`, `contactPerson`, `phone`, `email`, `contractId`, `services`, `notes`
+
 ## Step 2: Create the Google Drive Folder for Attachments
 
 1.  **Create a new folder in Google Drive.** You can do this by visiting [drive.google.com](https://drive.google.com) and clicking "New" > "Folder".

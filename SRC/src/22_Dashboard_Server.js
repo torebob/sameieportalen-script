@@ -112,7 +112,8 @@
       EIERSKIFTE: 'OPEN_OWNERSHIP_FORM',
       PROTOKOLL_GODKJENNING: 'OPEN_PROTOCOL_APPROVAL',
       SEKSJON_HISTORIKK: 'OPEN_SECTION_HISTORY',
-      VAKTMESTER: 'VIEW_VAKTMESTER_UI'
+      VAKTMESTER: 'VIEW_VAKTMESTER_UI',
+      LEVERANDOR_OVERSIKT: 'VIEW_SUPPLIER_REGISTRY'
     };
     const need = permMap[key];
     if (need && typeof hasPermission === 'function' && !hasPermission(need)) {

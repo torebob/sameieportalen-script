@@ -9,6 +9,7 @@
 const DB_SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with the actual ID of the Google Sheet
 const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
+const SUPPLIERS_SHEET_NAME = 'Suppliers';
 const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
 
 /**
@@ -45,6 +46,99 @@ function gjoremalGet() {
     return { ok: true, tasks: tasks };
   } catch (e) {
     return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Retrieves the list of suppliers.
+ * @returns {object} A response object with the list of suppliers.
+ */
+function getSuppliers() {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(SUPPLIERS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${SUPPLIERS_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return { ok: true, suppliers: [] }; // No data rows is a valid state
+    const headers = data.shift();
+
+    const suppliers = data.map(row => {
+      const supplier = {};
+      headers.forEach((header, i) => {
+        supplier[header] = row[i];
+      });
+      return supplier;
+    });
+
+    return { ok: true, suppliers: suppliers };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Saves a supplier (creates a new one or updates an existing one).
+ * @param {object} payload The supplier data from the client.
+ * @returns {object} A response object indicating success or failure.
+ */
+function saveSupplier(payload) {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(SUPPLIERS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${SUPPLIERS_SHEET_NAME}" not found.`);
+
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    if (payload.id) {
+      // Update existing supplier
+      const data = sheet.getDataRange().getValues();
+      const rowIndex = data.findIndex(row => row[0] == payload.id); // Assumes ID is in the first column
+
+      if (rowIndex > 0) { // rowIndex > 0 means it's not the header
+        const rowData = data[rowIndex];
+        const newRow = headers.map((header, i) => payload[header] !== undefined ? payload[header] : rowData[i]);
+        sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRow]);
+      } else {
+        throw new Error(`Supplier with ID ${payload.id} not found.`);
+      }
+    } else {
+      // Create new supplier
+      payload.id = Utilities.getUuid();
+      const newRow = headers.map(header => payload[header] !== undefined ? payload[header] : '');
+      sheet.appendRow(newRow);
+    }
+
+    return { ok: true, id: payload.id };
+  } catch (e) {
+    return { ok: false, message: `Server error: ${e.message}` };
+  }
+}
+
+/**
+ * Deletes a supplier by their ID.
+ * @param {string} id The ID of the supplier to delete.
+ * @returns {object} A response object indicating success or failure.
+ */
+function deleteSupplier(id) {
+  try {
+    _validateConfig();
+    if (!id) throw new Error("Supplier ID is required for deletion.");
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(SUPPLIERS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${SUPPLIERS_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    const rowIndex = data.findIndex(row => row[0] == id); // Assumes ID is in the first column
+
+    if (rowIndex > 0) { // rowIndex > 0 means it's not the header
+        sheet.deleteRow(rowIndex + 1); // sheet rows are 1-indexed, so rowIndex+1 is the correct row number
+        return { ok: true };
+    } else {
+      return { ok: false, message: `Supplier with ID ${id} not found.` };
+    }
+  } catch (e) {
+    return { ok: false, message: `Server error: ${e.message}` };
   }
 }
 

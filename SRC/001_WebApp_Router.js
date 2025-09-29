@@ -24,6 +24,7 @@ function doGet(e) {
       faq: handleFaqRequest, // Ny rute for FAQ-siden
       leverandor: renderLeverandorProfilPage, // Rute for leverandørprofil
       leverandorliste: renderLeverandorListePage, // Rute for leverandørliste
+      minside: renderMinSidePage, // Rute for Min Side
     };
 
     // Hvis ingen side er spesifisert, bruk 'budget' som standard.
@@ -87,4 +88,13 @@ function renderLeverandorListePage(e) {
   return HtmlService.createTemplateFromFile('45_Leverandor_Liste')
     .evaluate()
     .setTitle('Leverandørliste');
+}
+
+/**
+ * Viser "Min Side" for den innloggede brukeren.
+ */
+function renderMinSidePage(e) {
+  const template = HtmlService.createTemplateFromFile('46_MinSide');
+  template.appName = APP.NAME; // Gi app-navnet til malen
+  return template.evaluate().setTitle('Min Side');
 }

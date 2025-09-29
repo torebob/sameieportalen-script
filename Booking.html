@@ -1,0 +1,79 @@
+<!-- This is the main container for the booking page -->
+<div id="booking-container">
+    <h2>Book Fellesressurs</h2>
+    <div id="resource-selector-container">
+        <label for="resource-selector">Velg Ressurs:</label>
+        <select id="resource-selector">
+            <option value="">-- Vennligst velg --</option>
+        </select>
+    </div>
+
+    <hr>
+
+    <div id="calendar-container" style="display: none;">
+        <div id="calendar-header">
+            <button id="prev-month-btn">&lt; Forrige</button>
+            <h3 id="calendar-month-year"></h3>
+            <button id="next-month-btn">Neste &gt;</button>
+        </div>
+        <div id="calendar-grid">
+            <!-- Calendar will be rendered here by JavaScript -->
+        </div>
+        <div id="calendar-legend">
+            <span class="legend-item available"></span> Ledig
+            <span class="legend-item booked"></span> Opptatt
+        </div>
+    </div>
+</div>
+
+<!-- Booking Modal -->
+<div id="booking-modal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h3>Book Tid</h3>
+        <p><strong>Ressurs:</strong> <span id="modal-resource-name"></span></p>
+        <p><strong>Dato:</strong> <span id="modal-booking-date"></span></p>
+
+        <div id="existing-bookings-container" style="margin-bottom: 15px;">
+            <h4>Dagens Bookinger:</h4>
+            <ul id="existing-bookings-list" style="list-style-type: none; padding: 0;">
+                <!-- Bookings will be listed here -->
+            </ul>
+        </div>
+
+        <form id="booking-form">
+            <label for="booking-start-time">Starttid:</label>
+            <input type="time" id="booking-start-time" required step="3600"> <!-- Step by 1 hour -->
+            <label for="booking-end-time">Sluttid:</label>
+            <input type="time" id="booking-end-time" required step="3600">
+
+            <label for="user-name">Ditt Navn:</label>
+            <input type="text" id="user-name" required>
+            <label for="user-email">Din E-post:</label>
+            <input type="email" id="user-email" required>
+
+            <button type="submit">Bekreft Booking</button>
+        </form>
+        <p id="booking-error" style="color: red;"></p>
+    </div>
+</div>
+
+<style>
+    /* Add some basic styling for the calendar and modal */
+    #calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    #calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+    .calendar-day { border: 1px solid #ccc; padding: 10px; text-align: center; cursor: pointer; }
+    .calendar-day.header { font-weight: bold; background-color: #f2f2f2; cursor: default; }
+    .calendar-day.other-month { color: #aaa; cursor: default; }
+    .calendar-day.available:hover { background-color: #e6f7ff; }
+    .calendar-day.has-bookings { background-color: #fffbe6; }
+    #calendar-legend { margin-top: 10px; }
+    .legend-item { display: inline-block; width: 15px; height: 15px; margin-right: 5px; border: 1px solid #ccc; vertical-align: middle; }
+    .legend-item.available { background-color: white; }
+    .legend-item.has-bookings { background-color: #fffbe6; }
+
+    /* Modal styles */
+    .modal { position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+    .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; }
+    .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+</style>

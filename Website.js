@@ -20,6 +20,11 @@ function loadPage(pageId) {
         google.script.run.withSuccessHandler(renderNews).getNewsFeed();
     } else if (pageId === 'docs') {
         google.script.run.withSuccessHandler(renderDocuments).getDocuments();
+    } else if (pageId === 'booking') {
+        google.script.run.withSuccessHandler(html => {
+            contentDiv.innerHTML = html;
+            initBookingPage(); // Initialize the booking page script
+        }).getBookingPageHtml();
     } else {
         // First, try to get the page without a password.
         google.script.run

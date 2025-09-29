@@ -163,7 +163,15 @@
         <ul id="planned" class="planned list"><li class="hint">Laster…</li></ul>
       </div>
       <div id="calendar-container"></div>
-      <div class="toolbar"><button class="btn" id="btnRefresh">Oppdater</button></div>
+      <div class="toolbar">
+        <button class="btn" id="btnRefresh">Oppdater</button>
+        <button class="btn" id="btnExportCalendar">Eksporter kalender</button>
+      </div>
+      <div id="export-container" style="display:none; margin-top: 10px; padding: 8px; background-color: #f7f7f7; border-radius: 4px;">
+        <label for="export-url" style="display: block; margin-bottom: 4px;">Kalender-URL (for Google/Outlook):</label>
+        <input type="text" id="export-url" readonly style="width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 3px; background-color: #fff;" onfocus="this.select();" />
+        <p class="hint" style="margin-top: 6px; font-size: 0.9em;">Kopier denne lenken og legg den til i din eksterne kalendertjeneste.</p>
+      </div>
     </div>
   </div>
 
@@ -617,6 +625,39 @@
   // Øvrig
   $('#btnNewMeeting').onclick = clearMeeting;
   $('#btnRefresh').onclick = refreshMeetings;
+
+  $('#btnExportCalendar').onclick = function() {
+    setStatus('Henter eksport-URL...');
+    const container = $('#export-container');
+    const urlInput = $('#export-url');
+
+    // Check if the function exists on the server-side proxy
+    if (typeof google.script.run.getCalendarExportUrl !== 'function') {
+        setStatus('Feil: Funksjonen getCalendarExportUrl er ikke tilgjengelig. Sjekk at CalendarExport.gs er inkludert.');
+        urlInput.value = 'Funksjonen for eksport er ikke lastet inn.';
+        container.style.display = 'block';
+        return;
+    }
+
+    google.script.run
+      .withSuccessHandler(res => {
+        if (res.ok) {
+          urlInput.value = res.url;
+          container.style.display = 'block';
+          setStatus('URL for kalendereksport er klar.');
+        } else {
+          urlInput.value = res.message || 'Kunne ikke hente URL.';
+          container.style.display = 'block';
+          setStatus(res.message || 'En feil oppstod.');
+        }
+      })
+      .withFailureHandler(err => {
+        setStatus(`Feil: ${err.message}`);
+        urlInput.value = `En feil oppstod: ${err.message}`;
+        container.style.display = 'block';
+      })
+      .getCalendarExportUrl();
+  };
   $('#btnViewProtocol').onclick = function(){
     if (!state.moteId) return;
     setStatus('Henter forhåndsvisning...');

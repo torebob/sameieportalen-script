@@ -113,7 +113,8 @@
       PROTOKOLL_GODKJENNING: 'OPEN_PROTOCOL_APPROVAL',
       SEKSJON_HISTORIKK: 'OPEN_SECTION_HISTORY',
       VAKTMESTER: 'VIEW_VAKTMESTER_UI',
-      LEVERANDOR_OVERSIKT: 'VIEW_SUPPLIER_REGISTRY'
+      LEVERANDOR_OVERSIKT: 'VIEW_SUPPLIER_REGISTRY',
+      BEBOERREGISTER: 'OPEN_BEBOERREGISTER_UI'
     };
     const need = permMap[key];
     if (need && typeof hasPermission === 'function' && !hasPermission(need)) {

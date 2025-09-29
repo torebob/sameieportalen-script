@@ -5,6 +5,13 @@
  * to only the current document. This is a best practice for security.
  */
 
+// --- USER ACTION REQUIRED ---
+// To use the new "Henvendelse" feature, please add the following columns
+// to your 'Tasks' sheet in your Google Sheet:
+// - kategori
+// - innsendt_av
+// --------------------------
+
 // --- CONFIGURATION ---
 const DB_SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with the actual ID of the Google Sheet
 const TASKS_SHEET_NAME = 'Tasks';
@@ -370,6 +377,50 @@ function getMessageHistory() {
   } catch (e) {
     Logger.log(e);
     return { ok: false, error: `Kunne ikke hente meldingshistorikk: ${e.message}` };
+  }
+}
+
+/**
+ * Handles a new inquiry (henvendelse) from a resident and creates a task from it.
+ * @param {object} payload The inquiry data from the client.
+ * @returns {object} A response object indicating success or failure.
+ */
+function sendHenvendelse(payload) {
+  try {
+    _validateConfig();
+    const { tittel, innhold, kategori, attachment } = payload;
+
+    if (!tittel || !innhold || !kategori) {
+      throw new Error('Mangler tittel, innhold eller kategori.');
+    }
+
+    // BSM.11.4: Log timestamp and sender
+    const innsendtTid = new Date();
+    const innsendtAv = Session.getEffectiveUser().getEmail();
+
+    // Prepare a task object that matches the structure of the 'Tasks' sheet
+    const taskPayload = {
+      description: tittel, // Using 'description' for the task title
+      notes: innhold,      // Using 'notes' for the message body
+      kategori: kategori,
+      innsendt_av: innsendtAv,
+      status: 'Open',      // Default status for new tasks
+      created_at: innsendtTid,
+      attachment: attachment // Pass attachment through if it exists
+    };
+
+    // BSM.11.5: Use existing function to save the inquiry as a task
+    const result = gjoremalSave(taskPayload);
+
+    if (!result.ok) {
+      throw new Error(result.message || 'Klarte ikke å lagre henvendelsen som en oppgave.');
+    }
+
+    return { ok: true };
+
+  } catch (e) {
+    Logger.log(`Feil i sendHenvendelse: ${e.message}`);
+    return { ok: false, error: e.message };
   }
 }
 

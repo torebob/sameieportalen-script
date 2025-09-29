@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Innstillinger for Regnskapsintegrasjon</title>
+<style>
+  :root { --bg:#f8fafc; --card:#fff; --muted:#6b7280; --line:#e5e7eb; --accent:#2563eb; --danger:#dc2626; --ok:#16a34a; }
+  body { margin: 0; background: var(--bg); font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+  .container { max-width: 800px; margin: 40px auto; padding: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+  h1 { font-size: 24px; margin-top: 0; }
+  .form-group { margin-bottom: 20px; }
+  label { display: block; font-weight: 600; margin-bottom: 8px; color: #374151; }
+  .input, select { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 16px; }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 10px 16px; cursor: pointer; font-size: 16px; font-weight: 600; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-group { display: flex; gap: 12px; margin-top: 20px; }
+  .spinner { display: none; margin-left: 12px; width: 20px; height: 20px; border: 3px solid #93c5fd; border-top-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  .spinner.show { display: inline-block; }
+  .message { margin-top: 20px; font-size: 14px; padding: 12px; border-radius: 8px; }
+  .message.ok { color: #14532d; background: #dcfce7; border: 1px solid #bbf7d0; }
+  .message.error { color: #7f1d1d; background: #fee2e2; border: 1px solid #fecaca; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🔗 Innstillinger for Regnskapsintegrasjon</h1>
+  <p class="muted">Koble applikasjonen til deres regnskapssystem for å automatisere dataflyt.</p>
+
+  <div class="form-group">
+    <label for="system-select">Regnskapssystem (RI.17.1)</label>
+    <select id="system-select" class="input">
+      <option value="">Velg system...</option>
+      <option value="Xledger">Xledger</option>
+      <option value="Visma">Visma e-conomic</option>
+      <option value="Fortnox">Fortnox</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="api-key-input">API-Nøkkel / Token</label>
+    <input type="password" id="api-key-input" class="input" placeholder="Lim inn din sikre nøkkel her">
+  </div>
+
+  <div class="btn-group">
+    <button id="btn-save" class="btn primary">Lagre Innstillinger</button>
+    <div id="spinner" class="spinner"></div>
+  </div>
+
+  <div id="message-box" class="message" style="display: none;"></div>
+</div>
+
+<script>
+(() => {
+  const el = (id) => document.getElementById(id);
+  const systemSelect = el('system-select');
+  const apiKeyInput = el('api-key-input');
+  const btnSave = el('btn-save');
+  const spinner = el('spinner');
+  const messageBox = el('message-box');
+
+  function setBusy(isBusy) {
+    spinner.classList.toggle('show', isBusy);
+    btnSave.disabled = isBusy;
+  }
+
+  function showMessage(text, type = 'ok') {
+    messageBox.textContent = text;
+    messageBox.className = `message ${type}`;
+    messageBox.style.display = 'block';
+  }
+
+  function hideMessage() {
+    messageBox.style.display = 'none';
+  }
+
+  function loadSettings() {
+    setBusy(true);
+    hideMessage();
+    google.script.run
+      .withSuccessHandler(response => {
+        setBusy(false);
+        if (response.ok && response.settings) {
+          systemSelect.value = response.settings.system || '';
+          apiKeyInput.value = response.settings.apiKey || '';
+          if (response.settings.system) {
+            showMessage('Lagrede innstillinger lastet.', 'ok');
+          } else {
+            showMessage('Ingen innstillinger er lagret ennå.', 'muted');
+          }
+        } else {
+          showMessage(response.error || 'Kunne ikke hente innstillinger.', 'error');
+        }
+      })
+      .withFailureHandler(error => {
+        setBusy(false);
+        showMessage(`En teknisk feil oppstod: ${error.message}`, 'error');
+      })
+      .getAccountingSettings();
+  }
+
+  function saveSettings() {
+    const settings = {
+      system: systemSelect.value,
+      apiKey: apiKeyInput.value.trim()
+    };
+
+    if (!settings.system || !settings.apiKey) {
+      showMessage('Vennligst velg et system og oppgi en API-nøkkel.', 'error');
+      return;
+    }
+
+    setBusy(true);
+    hideMessage();
+    google.script.run
+      .withSuccessHandler(response => {
+        setBusy(false);
+        if (response.ok) {
+          showMessage('Innstillinger ble lagret!', 'ok');
+          // Clear key field for security after successful save
+          apiKeyInput.value = '';
+        } else {
+          showMessage(response.error || 'Lagring feilet.', 'error');
+        }
+      })
+      .withFailureHandler(error => {
+        setBusy(false);
+        showMessage(`En teknisk feil oppstod: ${error.message}`, 'error');
+      })
+      .saveAccountingSettings(settings);
+  }
+
+  // Event Listeners
+  btnSave.addEventListener('click', saveSettings);
+
+  // Initial load
+  document.addEventListener('DOMContentLoaded', loadSettings);
+})();
+</script>
+
+</body>
+</html>

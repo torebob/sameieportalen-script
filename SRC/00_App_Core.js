@@ -61,7 +61,8 @@ globalThis.UI_FILES = Object.freeze({
   LEVERANDOR_ADMIN:      { file: '44_LeverandorAdmin.html',          title: 'Leverandøradmin',            w: 1200, h: 760 },
   AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 },
   SHARE_DOCUMENT:        { file: '41_ShareDocument.html',            title: 'Del Dokument',               w: 800,  h: 600 },
-  AVTALEBEHANDLER:       { file: '44_Avtalebehandler.html',          title: 'Avtalebehandler',            w: 1000, h: 760 }
+  AVTALEBEHANDLER:       { file: '44_Avtalebehandler.html',          title: 'Avtalebehandler',            w: 1000, h: 760 },
+  NOKKEL_ADMIN:          { file: '42_NokkelAdmin.html',              title: 'Nøkkel- og Adgangsadm.',     w: 1100, h: 760 }
 });
 
 /*

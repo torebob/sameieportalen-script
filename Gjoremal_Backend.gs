@@ -10,6 +10,8 @@ const DB_SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with the actual ID of the G
 const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
 const SUPPLIERS_SHEET_NAME = 'Suppliers';
+const KEYS_SHEET_NAME = 'Keys';
+const KEY_HISTORY_SHEET_NAME = 'KeyHistory';
 const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
 
 /**
@@ -47,6 +49,168 @@ function gjoremalGet() {
   } catch (e) {
     return { ok: false, message: e.message };
   }
+}
+
+/**
+ * Retrieves the list of keys.
+ * @returns {object} A response object with the list of keys.
+ */
+function getKeys() {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(KEYS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${KEYS_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length < 2) return { ok: true, keys: [] }; // No data is valid
+    const headers = data.shift();
+
+    const keys = data.map(row => {
+      const key = {};
+      headers.forEach((header, i) => {
+        key[header] = row[i];
+      });
+      return key;
+    });
+
+    return { ok: true, keys: keys };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Saves a key (creates a new one or updates an existing one) and records its history.
+ * History is linked by the human-readable keyId, not the internal record UUID.
+ * @param {object} payload The key data from the client. Must include `keyId`.
+ * @returns {object} A response object indicating success or failure.
+ */
+function saveKey(payload) {
+  try {
+    _validateConfig();
+    if (!payload || !payload.keyId) {
+      throw new Error("Key ID (keyId) is required in the payload.");
+    }
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(KEYS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${KEYS_SHEET_NAME}" not found.`);
+
+    const historySheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(KEY_HISTORY_SHEET_NAME);
+    if (!historySheet) throw new Error(`Sheet "${KEY_HISTORY_SHEET_NAME}" not found.`);
+
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const user = Session.getActiveUser().getEmail();
+    const timestamp = new Date();
+
+    if (payload.id) {
+      // Update existing key
+      const data = sheet.getDataRange().getValues();
+      const rowIndex = data.findIndex(row => row[0] == payload.id);
+
+      if (rowIndex > 0) { // rowIndex > 0 means it's not the header
+        const oldRow = data[rowIndex];
+        const newRowData = headers.map((header, i) => payload[header] !== undefined ? payload[header] : oldRow[i]);
+        sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRowData]);
+
+        // Record history using the human-readable keyId
+        const changes = headers.map((h, i) => oldRow[i] !== newRowData[i] ? `${h}: '${oldRow[i]}' -> '${newRowData[i]}'` : null).filter(Boolean).join(', ');
+        historySheet.appendRow([Utilities.getUuid(), payload.keyId, timestamp, user, `Updated: ${changes || 'No changes detected.'}`]);
+
+      } else {
+        throw new Error(`Key with record ID ${payload.id} not found.`);
+      }
+    } else {
+      // Create new key
+      payload.id = Utilities.getUuid(); // Assign a new internal record UUID
+      payload.issuedDate = timestamp;
+      const newRow = headers.map(header => payload[header] || '');
+      sheet.appendRow(newRow);
+
+      // Record history using the human-readable keyId
+      historySheet.appendRow([Utilities.getUuid(), payload.keyId, timestamp, user, `Created and issued to ${payload.residentName || 'N/A'}`]);
+    }
+
+    return { ok: true, id: payload.id };
+  } catch (e) {
+    return { ok: false, message: `Server error: ${e.message}` };
+  }
+}
+
+/**
+ * Deletes a key by its internal record ID and records the deletion in history.
+ * @param {string} id The internal record ID of the key to delete.
+ * @returns {object} A response object indicating success or failure.
+ */
+function deleteKey(id) {
+  try {
+    _validateConfig();
+    if (!id) throw new Error("Key record ID is required for deletion.");
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(KEYS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${KEYS_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift(); // Get headers to find keyId column
+    const idColIndex = 0; // Assuming 'id' is always the first column
+    const keyIdColIndex = headers.indexOf('keyId');
+    if (keyIdColIndex === -1) throw new Error('Could not find "keyId" column in the Keys sheet.');
+
+    const rowIndex = data.findIndex(row => row[idColIndex] == id);
+
+    if (rowIndex !== -1) { // Found the key
+        const keyId = data[rowIndex][keyIdColIndex]; // Get the human-readable keyId for history logging
+        sheet.deleteRow(rowIndex + 2); // +1 for header, +1 for 0-based index -> 1-based rows
+
+        // Record history
+        const historySheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(KEY_HISTORY_SHEET_NAME);
+        if(historySheet) {
+          historySheet.appendRow([Utilities.getUuid(), keyId, new Date(), Session.getActiveUser().getEmail(), `Deleted key with identifier: ${keyId}`]);
+        }
+
+        return { ok: true };
+    } else {
+      return { ok: false, message: `Key with record ID ${id} not found.` };
+    }
+  } catch (e) {
+    return { ok: false, message: `Server error: ${e.message}` };
+  }
+}
+
+/**
+ * Retrieves the history for a specific key, searching by its human-readable ID.
+ * @param {string} keyId The human-readable ID of the key (e.g., "XYZ123").
+ * @returns {object} A response object with the key's history.
+ */
+function getKeyHistory(keyId) {
+    try {
+        _validateConfig();
+        if (!keyId) throw new Error("Key ID is required to retrieve history.");
+
+        const historySheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(KEY_HISTORY_SHEET_NAME);
+        if (!historySheet) throw new Error(`Sheet "${KEY_HISTORY_SHEET_NAME}" not found.`);
+
+        const data = historySheet.getDataRange().getValues();
+        if (data.length < 2) return { ok: true, history: [] }; // No history is valid
+
+        const headers = data.shift();
+        // Assuming history columns are: historyId, keyId, timestamp, user, details
+        const keyIdColIndex = 1;
+
+        const history = data
+            .filter(row => row[keyIdColIndex] === keyId) // Filter by the human-readable keyId
+            .map(row => {
+                let entry = {};
+                headers.forEach((header, i) => {
+                    entry[header] = row[i];
+                });
+                return entry;
+            })
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by newest first
+
+        return { ok: true, history: history };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
 }
 
 /**

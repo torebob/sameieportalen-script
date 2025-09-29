@@ -1,0 +1,230 @@
+<? var FILE = '42_NokkelAdmin.html'; var VERSION = '1.0.0'; var UPDATED = '2025-09-28'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Nøkkel- og Adgangsadministrasjon</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .title{font-size:22px;font-weight:700}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:20px}
+    th,td{padding:12px;border-bottom:1px solid var(--border);text-align:left}
+    th{font-size:12px;color:var(--muted);text-transform:uppercase}
+    .modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:1000;visibility:hidden;opacity:0;transition:opacity .2s,visibility .2s}
+    .modal.open{visibility:visible;opacity:1}
+    .modal-content{background:var(--card);padding:24px;border-radius:12px;width:90%;max-width:500px}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .form-group{margin-bottom:16px}
+    .form-group label{display:block;margin-bottom:6px;font-size:14px;color:var(--muted)}
+    .form-group input,.form-group select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:#0c1526;color:#fff}
+    .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1001;min-width:200px}
+    .toast.ok{background:var(--success)}
+    .toast.err{background:var(--danger)}
+    .actions button { margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="title">Nøkkel- og Adgangsadministrasjon</div>
+      <button class="btn primary" onclick="openForm()">Registrer ny nøkkel</button>
+    </div>
+    <table id="keysTable">
+      <thead>
+        <tr><th>Nøkkel ID</th><th>Beboer</th><th>Seksjon</th><th>Status</th><th>Områder</th><th>Handlinger</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="modal" id="formModal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h3 id="formTitle">Registrer ny nøkkel</h3>
+        <button onclick="closeForm()" style="background:none;border:none;color:#fff;font-size:24px;cursor:pointer">&times;</button>
+      </div>
+      <form id="keyForm">
+        <input type="hidden" id="id" name="id">
+        <div class="form-group">
+          <label for="keyId">Nøkkel/Brikke ID</label>
+          <input type="text" id="keyId" name="keyId" required>
+        </div>
+        <div class="form-group">
+          <label for="residentName">Beboer</label>
+          <input type="text" id="residentName" name="residentName" required>
+        </div>
+        <div class="form-group">
+          <label for="section">Seksjon (f.eks. 3B)</label>
+          <input type="text" id="section" name="section" required>
+        </div>
+        <div class="form-group">
+          <label for="accessAreas">Tilgangsområder (kommaseparert)</label>
+          <input type="text" id="accessAreas" name="accessAreas" placeholder="Hovedinngang, Vaskerom">
+        </div>
+        <div class="form-group">
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            <option value="Utstedt">Utstedt</option>
+            <option value="Returnert">Returnert</option>
+            <option value="Tapt">Tapt</option>
+          </select>
+        </div>
+        <button type="submit" class="btn primary">Lagre</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="historyModal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h3>Nøkkelhistorikk</h3>
+        <button onclick="closeHistoryModal()" style="background:none;border:none;color:#fff;font-size:24px;cursor:pointer">&times;</button>
+      </div>
+      <div id="historyContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const tableBody = document.querySelector('#keysTable tbody');
+    const formModal = document.getElementById('formModal');
+    const historyModal = document.getElementById('historyModal');
+    const keyForm = document.getElementById('keyForm');
+
+    function toast(msg, kind){
+      const t=document.createElement('div'); t.className='toast ' + (kind||'');
+      t.textContent=String(msg||''); document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2800);
+    }
+
+    function renderTable(keys) {
+      tableBody.innerHTML = '';
+      if (!keys || keys.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="6">Ingen nøkler registrert.</td></tr>';
+        return;
+      }
+      keys.forEach(key => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${key.keyId}</td>
+          <td>${key.residentName}</td>
+          <td>${key.section}</td>
+          <td>${key.status}</td>
+          <td>${key.accessAreas}</td>
+          <td class="actions">
+            <button class="btn" onclick="openForm(${JSON.stringify(key).replace(/"/g, '&quot;')})">Endre</button>
+            <button class="btn" onclick="viewHistory('${key.keyId}')">Historikk</button>
+            <button class="btn danger" onclick="deleteKey('${key.id}')">Slett</button>
+          </td>
+        `;
+        tableBody.appendChild(row);
+      });
+    }
+
+    function openForm(key = null) {
+      keyForm.reset();
+      const keyIdInput = document.getElementById('keyId');
+      keyIdInput.disabled = false; // Enable by default for new keys
+      document.getElementById('id').value = '';
+
+      if (key) {
+        document.getElementById('formTitle').textContent = 'Endre nøkkel';
+        Object.keys(key).forEach(k => {
+          if(keyForm.elements[k]) keyForm.elements[k].value = key[k];
+        });
+        keyIdInput.disabled = true; // Disable editing of keyId for existing keys
+      } else {
+        document.getElementById('formTitle').textContent = 'Registrer ny nøkkel';
+      }
+      formModal.classList.add('open');
+    }
+
+    function closeForm() {
+      formModal.classList.remove('open');
+    }
+
+    function closeHistoryModal() {
+      historyModal.classList.remove('open');
+    }
+
+    function fetchKeys() {
+      google.script.run
+        .withSuccessHandler(res => {
+          if(res.ok) renderTable(res.keys);
+          else toast(res.message, 'err');
+        })
+        .withFailureHandler(err => toast(err.message, 'err'))
+        .getKeys();
+    }
+
+    keyForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const formData = new FormData(keyForm);
+      const payload = Object.fromEntries(formData.entries());
+
+      google.script.run
+        .withSuccessHandler(res => {
+          if (res.ok) {
+            toast('Nøkkel lagret!', 'ok');
+            closeForm();
+            fetchKeys();
+          } else {
+            toast(res.message, 'err');
+          }
+        })
+        .withFailureHandler(err => toast(err.message, 'err'))
+        .saveKey(payload);
+    });
+
+    function deleteKey(id) {
+      if (!confirm('Er du sikker på at du vil slette denne nøkkelen?')) return;
+      google.script.run
+        .withSuccessHandler(res => {
+          if(res.ok) {
+            toast('Nøkkel slettet.', 'ok');
+            fetchKeys();
+          } else {
+            toast(res.message, 'err');
+          }
+        })
+        .withFailureHandler(err => toast(err.message, 'err'))
+        .deleteKey(id);
+    }
+
+    function viewHistory(keyId) {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (res.ok) {
+                    const historyContent = document.getElementById('historyContent');
+                    historyContent.innerHTML = '';
+                    if (res.history.length > 0) {
+                        const list = document.createElement('ul');
+                        res.history.forEach(entry => {
+                            const item = document.createElement('li');
+                            item.textContent = `${new Date(entry.timestamp).toLocaleString()}: ${entry.details} (av ${entry.user})`;
+                            list.appendChild(item);
+                        });
+                        historyContent.appendChild(list);
+                    } else {
+                        historyContent.textContent = 'Ingen historikk funnet.';
+                    }
+                    historyModal.classList.add('open');
+                } else {
+                    toast(res.message, 'err');
+                }
+            })
+            .withFailureHandler(err => toast(err.message, 'err'))
+            .getKeyHistory(keyId);
+    }
+
+    document.addEventListener('DOMContentLoaded', fetchKeys);
+  </script>
+</body>
+</html>

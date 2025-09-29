@@ -374,11 +374,20 @@
     state.calendarInstance = new calendar(calendarEl, {
       abbrDay: true,
       onEventClick: (evt) => {
+        if (evt.type === 'task') {
+          // Could potentially link to the task view in the future.
+          // For now, just log it and do nothing.
+          console.log('Task event clicked:', evt);
+          return;
+        }
         loadMeeting(evt.meetingData);
       },
       onDayClick: (date, evts) => {
         if (evts.length > 0) {
-          loadMeeting(evts[0].meetingData);
+          const firstMeeting = evts.find(e => e.type !== 'task');
+          if (firstMeeting) {
+            loadMeeting(firstMeeting.meetingData);
+          }
         }
       }
     });
@@ -399,20 +408,31 @@
     });
   }
 
-  function refreshMeetings(){
+  function refreshMeetings() {
     $('#planned').innerHTML = '<li class="hint">Laster…</li>';
-    google.script.run.withSuccessHandler(drawMeetings).listMeetings_({scope: 'all'});
+    google.script.run.withSuccessHandler(meetingsResponse => {
+      // Etter at møter er hentet, hent oppgaver
+      if (google.script.run.gjoremalGet) {
+        google.script.run.withSuccessHandler(tasksResponse => {
+          const meetings = (meetingsResponse && meetingsResponse.length) ? meetingsResponse : [];
+          const tasks = (tasksResponse && tasksResponse.ok) ? tasksResponse.tasks : [];
+          drawCalendarEvents(meetings, tasks);
+        }).gjoremalGet();
+      } else {
+        drawCalendarEvents(meetingsResponse || [], []);
+      }
+    }).listMeetings_({scope: 'all'});
   }
 
-  function drawMeetings(list){
+  function drawCalendarEvents(list, tasks){
     const ul = $('#planned');
     ul.innerHTML='';
 
     // Clear existing events from calendar
     state.calendarInstance.events = [];
 
-    if (!list || !list.length){
-      ul.innerHTML = '<li class="hint">Ingen møter i listen.</li>';
+    if ((!list || !list.length) && (!tasks || !tasks.length)) {
+      ul.innerHTML = '<li class="hint">Ingen møter eller oppgaver i listen.</li>';
       state.calendarInstance.drawCalendar();
       return;
     }
@@ -440,11 +460,27 @@
     });
 
     // Populate calendar
-    const events = list.map(m => ({
-      date: new Date(m.dato),
-      desc: m.tittel,
-      meetingData: m
-    }));
+    let events = [];
+    if (list && list.length) {
+      events = events.concat(list.map(m => ({
+        date: new Date(m.dato),
+        desc: m.tittel,
+        meetingData: m,
+        type: 'meeting' // Å.5.3
+      })));
+    }
+
+    if (tasks && tasks.length) {
+      const taskEvents = tasks.filter(t => t.dueDate).map(t => ({
+        date: new Date(t.dueDate),
+        desc: `Frist: ${t.title}`,
+        meetingData: { id: `task-${t.id}`, tittel: `Frist: ${t.title}` }, // Mock meeting data
+        type: 'task', // Å.5.3
+        className: 'event-task' // Custom class for styling
+      }));
+      events = events.concat(taskEvents);
+    }
+
     state.calendarInstance.events = events;
     state.calendarInstance.drawCalendar();
   }

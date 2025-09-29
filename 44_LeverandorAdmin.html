@@ -1,0 +1,212 @@
+<? var FILE = '34_LeverandorAdmin.html'; ?>
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <?!= include('AppMetaPartial') ?>
+  <title>Leverandøradmin</title>
+  <style>
+    :root { --card: #fff; --muted: #6b7280; --border: #e5e7eb; --brand: #0ea5e9; --ok: #10b981; --warn: #ef4444; --ink: #0f172a; --bg: #f8fafc; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    .wrap { padding: 16px; max-width: 1200px; margin: auto; }
+    .grid { display: grid; grid-template-columns: 400px 1fr; gap: 24px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    h2, h3 { margin: 0 0 16px; }
+    label { display: block; font-weight: 600; margin: 12px 0 6px; }
+    input, textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fbfdff; }
+    textarea { resize: vertical; min-height: 80px; }
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; background: #fff; font-weight: 600; }
+    .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .btn.danger { background: var(--warn); border-color: var(--warn); color: #fff; }
+    .status { min-height: 20px; color: var(--muted); font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); }
+    th { background-color: #f9fafb; }
+    tr:hover { background-color: #f4f7ff; }
+    .hint { color: var(--muted); font-size: 14px; padding: 16px 0; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h2>Leverandører</h2>
+  <p class="hint">Her kan du administrere leverandører og deres kontaktinformasjon.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3 id="formTitle">Ny leverandør</h3>
+      <form id="supplierForm">
+        <input type="hidden" id="s_id">
+        <div>
+          <label for="s_navn">Navn</label>
+          <input id="s_navn" type="text" placeholder="F.eks. Rørlegger AS" required>
+        </div>
+        <div>
+          <label for="s_kontaktperson">Kontaktperson</label>
+          <input id="s_kontaktperson" type="text" placeholder="Ola Nordmann">
+        </div>
+        <div>
+          <label for="s_telefon">Telefon</label>
+          <input id="s_telefon" type="tel" placeholder="123 45 678">
+        </div>
+        <div>
+          <label for="s_epost">E-post</label>
+          <input id="s_epost" type="email" placeholder="kontakt@example.com">
+        </div>
+        <div>
+          <label for="s_adresse">Adresse</label>
+          <textarea id="s_adresse" placeholder="Gatenavn 1, 0123 Oslo"></textarea>
+        </div>
+        <div class="toolbar">
+          <button type="submit" class="btn primary">Lagre</button>
+          <button type="button" class="btn" id="btnClear">Tøm skjema</button>
+          <button type="button" class="btn danger" id="btnDelete" style="display:none;">Slett</button>
+        </div>
+        <div class="status" id="formStatus"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Eksisterende leverandører</h3>
+      <div id="supplierListContainer">
+        <table id="supplierTable">
+          <thead>
+            <tr>
+              <th>Navn</th>
+              <th>Kontaktperson</th>
+              <th>Telefon</th>
+              <th>E-post</th>
+            </tr>
+          </thead>
+          <tbody id="supplierTableBody">
+            <!-- Rader lastes inn her -->
+          </tbody>
+        </table>
+        <div id="listStatus" class="hint">Laster leverandører...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = s => document.querySelector(s);
+  let state = { suppliers: [], selectedId: null };
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function loadSuppliers() {
+    $('#listStatus').textContent = 'Laster leverandører...';
+    google.script.run.withSuccessHandler(res => {
+      if (!res || !res.ok) {
+        $('#listStatus').textContent = res?.error || 'Kunne ikke laste leverandører.';
+        return;
+      }
+      state.suppliers = res.suppliers || [];
+      renderTable();
+      $('#listStatus').textContent = state.suppliers.length === 0 ? 'Ingen leverandører funnet.' : '';
+    }).withFailureHandler(err => {
+      $('#listStatus').textContent = 'Feil: ' + err.message;
+    }).getSuppliers();
+  }
+
+  function renderTable() {
+    const tbody = $('#supplierTableBody');
+    tbody.innerHTML = '';
+    state.suppliers.forEach(s => {
+      const tr = document.createElement('tr');
+      tr.style.cursor = 'pointer';
+      tr.innerHTML = `
+        <td>${escapeHtml(s.navn)}</td>
+        <td>${escapeHtml(s.kontaktperson)}</td>
+        <td>${escapeHtml(s.telefon)}</td>
+        <td>${escapeHtml(s.epost)}</td>
+      `;
+      tr.onclick = () => selectSupplier(s.id);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function selectSupplier(id) {
+    const supplier = state.suppliers.find(s => s.id === id);
+    if (!supplier) return;
+
+    state.selectedId = id;
+    $('#formTitle').textContent = 'Rediger leverandør';
+    $('#s_id').value = supplier.id;
+    $('#s_navn').value = supplier.navn;
+    $('#s_kontaktperson').value = supplier.kontaktperson;
+    $('#s_telefon').value = supplier.telefon;
+    $('#s_epost').value = supplier.epost;
+    $('#s_adresse').value = supplier.adresse;
+    $('#btnDelete').style.display = 'inline-flex';
+    $('#formStatus').textContent = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function clearForm() {
+    state.selectedId = null;
+    $('#supplierForm').reset();
+    $('#formTitle').textContent = 'Ny leverandør';
+    $('#btnDelete').style.display = 'none';
+    $('#s_id').value = '';
+    $('#formStatus').textContent = '';
+  }
+
+  $('#supplierForm').onsubmit = (e) => {
+    e.preventDefault();
+    const payload = {
+      id: $('#s_id').value || null,
+      navn: $('#s_navn').value.trim(),
+      kontaktperson: $('#s_kontaktperson').value.trim(),
+      telefon: $('#s_telefon').value.trim(),
+      epost: $('#s_epost').value.trim(),
+      adresse: $('#s_adresse').value.trim(),
+    };
+
+    if (!payload.navn) {
+      $('#formStatus').textContent = 'Navn er påkrevd.';
+      return;
+    }
+
+    $('#formStatus').textContent = 'Lagrer...';
+    google.script.run.withSuccessHandler(res => {
+      if (!res || !res.ok) {
+        $('#formStatus').textContent = res?.error || 'Lagring feilet.';
+        return;
+      }
+      $('#formStatus').textContent = 'Leverandør lagret!';
+      clearForm();
+      loadSuppliers();
+    }).withFailureHandler(err => {
+      $('#formStatus').textContent = 'Feil: ' + err.message;
+    }).saveSupplier(payload);
+  };
+
+  $('#btnClear').onclick = clearForm;
+
+  $('#btnDelete').onclick = () => {
+    if (!state.selectedId) return;
+    if (!confirm('Er du sikker på at du vil slette denne leverandøren?')) return;
+
+    $('#formStatus').textContent = 'Sletter...';
+    google.script.run.withSuccessHandler(res => {
+      if (!res || !res.ok) {
+        $('#formStatus').textContent = res?.error || 'Sletting feilet.';
+        return;
+      }
+      $('#formStatus').textContent = 'Leverandør slettet.';
+      clearForm();
+      loadSuppliers();
+    }).withFailureHandler(err => {
+      $('#formStatus').textContent = 'Feil: ' + err.message;
+    }).deleteSupplier(state.selectedId);
+  };
+
+  // Initial load
+  document.addEventListener('DOMContentLoaded', loadSuppliers);
+</script>
+</body>
+</html>

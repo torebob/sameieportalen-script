@@ -57,6 +57,7 @@ globalThis.UI_FILES = Object.freeze({
   PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html', title: 'Protokoll-godkjenning',   w: 980,  h: 760 },
   SEKSJON_HISTORIKK:     { file: '32_SeksjonHistorikk.html',         title: 'Seksjonshistorikk',          w: 1100, h: 760 },
   VAKTMESTER:            { file: '33_VaktmesterVisning.html',        title: 'Vaktmester',                 w: 1100, h: 800 },
+  LEVERANDOR_ADMIN:      { file: '44_LeverandorAdmin.html',          title: 'Leverandøradmin',            w: 1200, h: 760 },
   AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 },
   SHARE_DOCUMENT:        { file: '41_ShareDocument.html',            title: 'Del Dokument',               w: 800,  h: 600 }
 });
@@ -196,6 +197,8 @@ function onOpen(e) {
   if (typeof hasPermission === 'function' && hasPermission('VIEW_ADMIN_MENU')) {
     menu.addSeparator();
     const admin = ui.createMenu('Admin');
+    addIf('Leverandøradmin', 'openLeverandorAdmin');
+    admin.addSeparator();
     addIf('Opprett basisfaner', 'createBaseSheets');
     addIf('Kjør kvalitetssjekk', 'runAllChecks');
     admin.addSeparator();
@@ -313,6 +316,9 @@ if (typeof globalThis.openSectionHistory !== 'function') {
 }
 if (typeof globalThis.openVaktmesterUI !== 'function') {
   globalThis.openVaktmesterUI = () => _openHtmlFromMap_('VAKTMESTER', 'modal');
+}
+if (typeof globalThis.openLeverandorAdmin !== 'function') {
+  globalThis.openLeverandorAdmin = () => _openHtmlFromMap_('LEVERANDOR_ADMIN', 'modal');
 }
 if (typeof globalThis.openShareDocumentUI !== 'function') {
   globalThis.openShareDocumentUI = () => _openHtmlFromMap_('SHARE_DOCUMENT', 'modal');

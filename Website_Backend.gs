@@ -177,3 +177,134 @@ function savePageContent(pageId, content) {
     return { ok: false, message: e.message };
   }
 }
+
+
+// --- Booking System Functions ---
+
+function _getOrCreateSheet(sheetName, headers) {
+    const ss = SpreadsheetApp.openById(DB_SHEET_ID);
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+        sheet = ss.insertSheet(sheetName);
+        sheet.appendRow(headers);
+    }
+    return sheet;
+}
+
+function listResources() {
+    try {
+        const sheet = _getOrCreateSheet('CommonResources', ['id', 'name', 'description', 'maxBookingHours', 'price', 'cancellationDeadline']);
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        const resources = data.map(row => {
+            const resource = {};
+            headers.forEach((h, i) => resource[h] = row[i]);
+            return resource;
+        });
+        return { ok: true, resources: resources };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+}
+
+function getBookings(resourceId, year, month) {
+    try {
+        const sheet = _getOrCreateSheet('Bookings', ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']);
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        const resourceIdIndex = headers.indexOf('resourceId');
+        const startTimeIndex = headers.indexOf('startTime');
+
+        const bookings = data.filter(row => {
+            if (row[resourceIdIndex] !== resourceId) {
+                return false;
+            }
+            const bookingDate = new Date(row[startTimeIndex]);
+            // Filter by month and year to reduce data transfer
+            return bookingDate.getFullYear() === year && bookingDate.getMonth() === month;
+        }).map(row => {
+            const booking = {};
+            headers.forEach((h, i) => booking[h] = row[i]);
+            return booking;
+        });
+
+        return { ok: true, bookings: bookings };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+}
+
+function createBooking(bookingDetails) {
+    try {
+        const { resourceId, startTime, endTime, userName, userEmail } = bookingDetails;
+        const start = new Date(startTime);
+        const end = new Date(endTime);
+
+        // --- Conflict Check ---
+        const bookingsSheet = _getOrCreateSheet('Bookings', ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']);
+        const data = bookingsSheet.getDataRange().getValues();
+        const headers = data.shift();
+        const resourceIdIndex = headers.indexOf('resourceId');
+        const startTimeIndex = headers.indexOf('startTime');
+        const endTimeIndex = headers.indexOf('endTime');
+
+        const conflictingBooking = data.find(row => {
+            if (row[resourceIdIndex] !== resourceId) return false;
+            const existingStart = new Date(row[startTimeIndex]);
+            const existingEnd = new Date(row[endTimeIndex]);
+            // Check for overlap: (StartA < EndB) and (EndA > StartB)
+            return start < existingEnd && end > existingStart;
+        });
+
+        if (conflictingBooking) {
+            return { ok: false, message: "Tiden er allerede booket. Vennligst velg en annen tid." };
+        }
+
+        // --- Create Booking ---
+        const id = Utilities.getUuid();
+        const createdAt = new Date().toISOString();
+        bookingsSheet.appendRow([id, resourceId, startTime, endTime, userEmail, userName, createdAt]);
+
+        // --- Get Resource Name for Email ---
+        const resourceSheet = _getOrCreateSheet('CommonResources', ['id', 'name']);
+        const resourceData = resourceSheet.getDataRange().getValues();
+        const resourceHeaders = resourceData.shift();
+        const resIdIndex = resourceHeaders.indexOf('id');
+        const resourceNameIndex = resourceHeaders.indexOf('name');
+        const resourceRow = resourceData.find(r => r[resIdIndex] === resourceId);
+        const resourceName = resourceRow ? resourceRow[resourceNameIndex] : 'Ukjent Ressurs';
+
+        // --- Send Confirmation Email ---
+        const subject = "Booking bekreftelse";
+        const body = `
+            Hei ${userName},
+
+            Din booking er bekreftet:
+            Ressurs: ${resourceName}
+            Starttid: ${start.toLocaleString('no-NO')}
+            Sluttid: ${end.toLocaleString('no-NO')}
+
+            Takk!
+        `;
+        // Using a try-catch for the email in case of permission issues,
+        // so it doesn't block the booking itself.
+        try {
+            MailApp.sendEmail(userEmail, subject, body);
+        } catch(e) {
+            console.error("Could not send confirmation email: " + e.message);
+            // Don't fail the whole operation, just log the error.
+        }
+
+        return { ok: true, id: id };
+    } catch (e) {
+        return { ok: false, message: "En feil oppstod under booking: " + e.message };
+    }
+}
+
+/**
+ * Gets the raw HTML for the booking page.
+ * @returns {string} The HTML content of Booking.html.
+ */
+function getBookingPageHtml() {
+    return HtmlService.createHtmlOutputFromFile('Booking.html').getContent();
+}

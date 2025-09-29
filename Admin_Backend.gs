@@ -131,6 +131,43 @@ function addDocument(fileObject, title, description) {
     }
 }
 
+// --- Common Resource Management ---
+
+function addResource(resource) {
+    try {
+        const sheet = _getOrCreateSheet('CommonResources', ['id', 'name', 'description', 'maxBookingHours', 'price', 'cancellationDeadline']);
+        const id = Utilities.getUuid();
+        sheet.appendRow([
+            id,
+            resource.name,
+            resource.description,
+            resource.maxBookingHours || '',
+            resource.price || '',
+            resource.cancellationDeadline || ''
+        ]);
+        return { ok: true, id: id };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+}
+
+function deleteResource(resourceId) {
+    try {
+        const sheet = _getOrCreateSheet('CommonResources', ['id', 'name', 'description', 'maxBookingHours', 'price', 'cancellationDeadline']);
+        const data = sheet.getDataRange().getValues();
+        const idIndex = data[0].indexOf('id');
+        const rowIndex = data.findIndex(row => row[idIndex] == resourceId);
+
+        if (rowIndex > 0) {
+            sheet.deleteRow(rowIndex + 1);
+            return { ok: true };
+        }
+        return { ok: false, message: "Resource not found" };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+}
+
 function deleteDocument(docId) {
     try {
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');

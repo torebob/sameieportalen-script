@@ -100,6 +100,31 @@
         </table>
     </div>
 
+    <div class="admin-section" id="resource-management">
+        <h2>Manage Common Resources</h2>
+        <div id="resource-form">
+            <input type="text" id="resource-name" placeholder="Resource Name" style="width: 98%; margin-bottom: 10px;">
+            <textarea id="resource-description" placeholder="Description" style="width: 98%; height: 60px; margin-bottom: 10px;"></textarea>
+            <input type="number" id="resource-max-hours" placeholder="Max Booking Hours (e.g., 8)" style="margin-bottom: 10px;">
+            <input type="number" id="resource-price" placeholder="Price (NOK)" style="margin-bottom: 10px;">
+            <input type="number" id="resource-cancel-deadline" placeholder="Cancellation Deadline (hours)" style="margin-bottom: 10px;">
+            <button id="add-resource-btn">Add Resource</button>
+        </div>
+        <table id="resources-table" style="width: 100%; margin-top: 15px;">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Description</th>
+                    <th>Booking Rules</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="resources-list">
+                <!-- Resource list will be populated by script -->
+            </tbody>
+        </table>
+    </div>
+
     <script>
         const APP_URL = '<?= ScriptApp.getService().getUrl() ?>';
 
@@ -180,7 +205,81 @@
             loadPages();
             loadNews();
             loadDocuments();
+            loadResources();
         });
+
+        // --- Resource Management Script ---
+        function loadResources() {
+            google.script.run.withSuccessHandler(renderResources).listResources();
+        }
+
+        function renderResources(response) {
+            if (!response.ok) {
+                alert('Error loading resources: ' + response.message);
+                return;
+            }
+            const resourcesList = document.getElementById('resources-list');
+            resourcesList.innerHTML = ''; // Clear existing list
+            response.resources.forEach(resource => {
+                const row = document.createElement('tr');
+                const rules = `
+                    Max Hours: ${resource.maxBookingHours || 'N/A'}<br>
+                    Price: ${resource.price || 'Free'}<br>
+                    Cancel Deadline: ${resource.cancellationDeadline || 'N/A'} hours
+                `;
+                row.innerHTML = `
+                    <td>${resource.name}</td>
+                    <td>${resource.description}</td>
+                    <td>${rules}</td>
+                    <td>
+                        <button onclick="deleteResource('${resource.id}')">Delete</button>
+                    </td>
+                `;
+                resourcesList.appendChild(row);
+            });
+        }
+
+        function deleteResource(resourceId) {
+            if (confirm('Are you sure you want to delete this resource?')) {
+                google.script.run
+                    .withSuccessHandler(() => {
+                        alert('Resource deleted!');
+                        loadResources(); // Refresh the list
+                    })
+                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .deleteResource(resourceId);
+            }
+        }
+
+        document.getElementById('add-resource-btn').addEventListener('click', () => {
+            const resource = {
+                name: document.getElementById('resource-name').value.trim(),
+                description: document.getElementById('resource-description').value.trim(),
+                maxBookingHours: document.getElementById('resource-max-hours').value,
+                price: document.getElementById('resource-price').value,
+                cancellationDeadline: document.getElementById('resource-cancel-deadline').value
+            };
+
+            if (!resource.name) {
+                alert('Please enter a resource name.');
+                return;
+            }
+
+            google.script.run
+                .withSuccessHandler(() => {
+                    alert('Resource added!');
+                    // Clear form
+                    document.getElementById('resource-name').value = '';
+                    document.getElementById('resource-description').value = '';
+                    document.getElementById('resource-max-hours').value = '';
+                    document.getElementById('resource-price').value = '';
+                    document.getElementById('resource-cancel-deadline').value = '';
+                    loadResources(); // Refresh list
+                })
+                .withFailureHandler(err => alert('Error: ' + err.message))
+                .addResource(resource);
+        });
+
 
         // --- News Management Script ---
 

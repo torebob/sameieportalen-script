@@ -116,6 +116,45 @@ function saveSupplier(payload) {
 }
 
 /**
+ * Deletes a task by its ID.
+ * @param {string} taskId The ID of the task to delete.
+ * @returns {object} A response object indicating success or failure.
+ */
+function gjoremalDeleteTask(taskId) {
+  try {
+    _validateConfig();
+    if (!taskId) {
+      throw new Error("Task ID is required for deletion.");
+    }
+
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
+    if (!sheet) {
+      throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found.`);
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idColumnIndex = headers.indexOf('id');
+
+    if (idColumnIndex === -1) {
+      throw new Error("Column 'id' not found in the Tasks sheet.");
+    }
+
+    const rowIndexToDelete = data.findIndex((row, index) => index > 0 && row[idColumnIndex] == taskId);
+
+    if (rowIndexToDelete !== -1) {
+      sheet.deleteRow(rowIndexToDelete + 1);
+      return { ok: true };
+    } else {
+      return { ok: false, message: `Task with ID ${taskId} not found.` };
+    }
+  } catch (e) {
+    console.error(`Error in gjoremalDeleteTask: ${e.message}`);
+    return { ok: false, message: e.message };
+  }
+}
+
+/**
  * Deletes a supplier by their ID.
  * @param {string} id The ID of the supplier to delete.
  * @returns {object} A response object indicating success or failure.

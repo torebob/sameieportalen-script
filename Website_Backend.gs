@@ -14,7 +14,7 @@ function doGet(e) {
     if (action === 'edit') {
         const pageId = e.parameter.page;
         if (!pageId) {
-            return HtmlService.createHtmlOutput('Page ID is required for editing.');
+            return HtmlService.createHtmlOutput('Side-ID er påkrevd for redigering.');
         }
         const template = HtmlService.createTemplateFromFile('Edit_Page');
         template.pageId = pageId;
@@ -127,7 +127,7 @@ function verifyPassword(pageId, password) {
     if (pageContent && !pageContent.authRequired) {
         return pageContent;
     }
-    return { ok: false, message: 'Invalid password' };
+    return { ok: false, message: 'Ugyldig passord' };
 }
 
 /**
@@ -166,7 +166,7 @@ function savePageContent(pageId, content) {
       const newRow = headers.map(h => {
         if (h === 'pageId') return pageId;
         if (h === 'content') return content;
-        if (h === 'title') return `Ny Side (${pageId})`; // Default title
+        if (h === 'title') return `Ny side (${pageId})`; // Default title
         return '';
       });
       sheet.appendRow(newRow);
@@ -291,13 +291,13 @@ function createBooking(bookingDetails) {
         try {
             MailApp.sendEmail(userEmail, subject, body);
         } catch(e) {
-            console.error("Could not send confirmation email: " + e.message);
+            console.error("Kunne ikke sende bekreftelses-epost: " + e.message);
             // Don't fail the whole operation, just log the error.
         }
 
         return { ok: true, id: id };
     } catch (e) {
-        return { ok: false, message: "En feil oppstod under booking: " + e.message };
+        return { ok: false, message: "En feil oppstod under bookingen: " + e.message };
     }
 }
 

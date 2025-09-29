@@ -67,7 +67,7 @@ function _createBeboerregisterSheetsIfNotExist() {
  */
 function _validateConfig() {
   if (DB_SHEET_ID.startsWith('YOUR_') || ATTACHMENTS_FOLDER_ID.startsWith('YOUR_')) {
-    throw new Error('Script not configured. Please follow SETUP_INSTRUCTIONS.md.');
+    throw new Error('Skriptet er ikke konfigurert. Vennligst følg SETUP_INSTRUCTIONS.md.');
   }
   _createMessagesSheetIfNotExist();
   _createBeboerregisterSheetsIfNotExist();
@@ -82,7 +82,7 @@ function gjoremalGet() {
   try {
     _validateConfig();
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found. Please check sheet name.`);
+    if (!sheet) throw new Error(`Arket "${TASKS_SHEET_NAME}" ble ikke funnet. Vennligst sjekk arknavnet.`);
 
     const data = sheet.getDataRange().getValues();
     const headers = data.shift(); // Remove header row
@@ -113,7 +113,7 @@ function _getSheetData(sheetName) {
   _validateConfig();
   const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
   if (!sheet) {
-    throw new Error(`Sheet "${sheetName}" not found.`);
+    throw new Error(`Arket "${sheetName}" ble ikke funnet.`);
   }
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return [];
@@ -162,15 +162,15 @@ function saveBeboerRecord(payload) {
   try {
     _validateConfig();
     const { sheetName, ...record } = payload;
-    if (!sheetName) throw new Error("Sheet name is required.");
+    if (!sheetName) throw new Error("Arknavn er påkrevd.");
 
     const validSheetNames = [SECTIONS_SHEET_NAME, OWNERS_SHEET_NAME, TENANTS_SHEET_NAME];
     if (!validSheetNames.includes(sheetName)) {
-        throw new Error(`Invalid sheet name: ${sheetName}`);
+        throw new Error(`Ugyldig arknavn: ${sheetName}`);
     }
 
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
-    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+    if (!sheet) throw new Error(`Arket "${sheetName}" ble ikke funnet.`);
 
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
@@ -184,7 +184,7 @@ function saveBeboerRecord(payload) {
         const newRow = headers.map((header, i) => record[header] !== undefined ? record[header] : rowData[i]);
         sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRow]);
       } else {
-        throw new Error(`Record with ID ${record.id} not found in ${sheetName}.`);
+        throw new Error(`Post med ID ${record.id} ble ikke funnet i ${sheetName}.`);
       }
     } else {
       // Create new record
@@ -196,7 +196,7 @@ function saveBeboerRecord(payload) {
     return { ok: true, id: record.id };
   } catch (e) {
     Logger.log(e);
-    return { ok: false, error: `Server error: ${e.message}` };
+    return { ok: false, error: `Serverfeil: ${e.message}` };
   }
 }
 
@@ -209,15 +209,15 @@ function deleteBeboerRecord(payload) {
   try {
     _validateConfig();
     const { sheetName, id } = payload;
-    if (!sheetName || !id) throw new Error("Sheet name and ID are required.");
+    if (!sheetName || !id) throw new Error("Arknavn og ID er påkrevd.");
 
     const validSheetNames = [SECTIONS_SHEET_NAME, OWNERS_SHEET_NAME, TENANTS_SHEET_NAME];
     if (!validSheetNames.includes(sheetName)) {
-        throw new Error(`Invalid sheet name: ${sheetName}`);
+        throw new Error(`Ugyldig arknavn: ${sheetName}`);
     }
 
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(sheetName);
-    if (!sheet) throw new Error(`Sheet "${sheetName}" not found.`);
+    if (!sheet) throw new Error(`Arket "${sheetName}" ble ikke funnet.`);
 
     const data = sheet.getDataRange().getValues();
     const rowIndex = data.findIndex(row => row[0] == id);
@@ -226,11 +226,11 @@ function deleteBeboerRecord(payload) {
         sheet.deleteRow(rowIndex + 1);
         return { ok: true };
     } else {
-      return { ok: false, error: `Record with ID ${id} not found in ${sheetName}.` };
+      return { ok: false, error: `Post med ID ${id} ble ikke funnet i ${sheetName}.` };
     }
   } catch (e) {
     Logger.log(e);
-    return { ok: false, error: `Server error: ${e.message}` };
+    return { ok: false, error: `Serverfeil: ${e.message}` };
   }
 }
 
@@ -360,7 +360,7 @@ function getMessageHistory() {
   try {
     _validateConfig();
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(MESSAGES_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${MESSAGES_SHEET_NAME}" not found.`);
+    if (!sheet) throw new Error(`Arket "${MESSAGES_SHEET_NAME}" ble ikke funnet.`);
 
     const data = sheet.getDataRange().getValues();
     const headers = data.shift() || [];
@@ -432,7 +432,7 @@ function getSuppliers() {
   try {
     _validateConfig();
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(SUPPLIERS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${SUPPLIERS_SHEET_NAME}" not found.`);
+    if (!sheet) throw new Error(`Arket "${SUPPLIERS_SHEET_NAME}" ble ikke funnet.`);
 
     const data = sheet.getDataRange().getValues();
     if (data.length < 2) return { ok: true, suppliers: [] }; // No data rows is a valid state
@@ -461,7 +461,7 @@ function saveSupplier(payload) {
   try {
     _validateConfig();
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(SUPPLIERS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${SUPPLIERS_SHEET_NAME}" not found.`);
+    if (!sheet) throw new Error(`Arket "${SUPPLIERS_SHEET_NAME}" ble ikke funnet.`);
 
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
@@ -475,7 +475,7 @@ function saveSupplier(payload) {
         const newRow = headers.map((header, i) => payload[header] !== undefined ? payload[header] : rowData[i]);
         sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([newRow]);
       } else {
-        throw new Error(`Supplier with ID ${payload.id} not found.`);
+        throw new Error(`Leverandør med ID ${payload.id} ble ikke funnet.`);
       }
     } else {
       // Create new supplier
@@ -486,7 +486,7 @@ function saveSupplier(payload) {
 
     return { ok: true, id: payload.id };
   } catch (e) {
-    return { ok: false, message: `Server error: ${e.message}` };
+    return { ok: false, message: `Serverfeil: ${e.message}` };
   }
 }
 
@@ -498,10 +498,10 @@ function saveSupplier(payload) {
 function deleteSupplier(id) {
   try {
     _validateConfig();
-    if (!id) throw new Error("Supplier ID is required for deletion.");
+    if (!id) throw new Error("Leverandør-ID er påkrevd for sletting.");
 
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(SUPPLIERS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${SUPPLIERS_SHEET_NAME}" not found.`);
+    if (!sheet) throw new Error(`Arket "${SUPPLIERS_SHEET_NAME}" ble ikke funnet.`);
 
     const data = sheet.getDataRange().getValues();
     const rowIndex = data.findIndex(row => row[0] == id); // Assumes ID is in the first column
@@ -510,10 +510,10 @@ function deleteSupplier(id) {
         sheet.deleteRow(rowIndex + 1); // sheet rows are 1-indexed, so rowIndex+1 is the correct row number
         return { ok: true };
     } else {
-      return { ok: false, message: `Supplier with ID ${id} not found.` };
+      return { ok: false, message: `Leverandør med ID ${id} ble ikke funnet.` };
     }
   } catch (e) {
-    return { ok: false, message: `Server error: ${e.message}` };
+    return { ok: false, message: `Serverfeil: ${e.message}` };
   }
 }
 
@@ -526,7 +526,7 @@ function gjoremalSave(payload) {
   try {
     _validateConfig();
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found. Please check sheet name.`);
+    if (!sheet) throw new Error(`Arket "${TASKS_SHEET_NAME}" ble ikke funnet. Vennligst sjekk arknavnet.`);
 
     // Handle attachment upload
     if (payload.attachment) {
@@ -553,7 +553,7 @@ function gjoremalSave(payload) {
         const row = headers.map((header, index) => payload[header] !== undefined ? payload[header] : rowData[index]);
         sheet.getRange(rowIndex + 1, 1, 1, headers.length).setValues([row]);
       } else {
-        throw new Error(`Task with ID ${payload.id} not found.`);
+        throw new Error(`Oppgave med ID ${payload.id} ble ikke funnet.`);
       }
     } else {
       // Create new task
@@ -572,7 +572,7 @@ function gjoremalSave(payload) {
 
     return { ok: true };
   } catch (e) {
-    return { ok: false, message: `Server error: ${e.message}` };
+    return { ok: false, message: `Serverfeil: ${e.message}` };
   }
 }
 
@@ -585,12 +585,12 @@ function gjoremalGetUsers() {
   try {
     _validateConfig();
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(USERS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${USERS_SHEET_NAME}" not found. Please check sheet name.`);
+    if (!sheet) throw new Error(`Arket "${USERS_SHEET_NAME}" ble ikke funnet. Vennligst sjekk arknavnet.`);
 
     const data = sheet.getDataRange().getValues();
     const headers = data.shift(); // Assumes headers: 'name', 'email'
     if (!headers || headers.length < 2) {
-      throw new Error(`Sheet "${USERS_SHEET_NAME}" must have at least 'name' and 'email' columns.`);
+      throw new Error(`Arket "${USERS_SHEET_NAME}" må ha minst kolonnene 'name' og 'email'.`);
     }
 
     const users = data.map(row => ({ name: row[0], email: row[1] }));

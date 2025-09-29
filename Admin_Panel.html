@@ -26,101 +26,101 @@
     </style>
 </head>
 <body>
-    <h1>Admin Panel</h1>
+    <h1>Adminpanel</h1>
 
     <div class="admin-section" id="site-initialization">
-        <h2>Site Setup</h2>
-        <p>If this is your first time, click here to set up the default pages.</p>
-        <button id="init-btn">Initialize Site</button>
+        <h2>Nettstedsoppsett</h2>
+        <p>Hvis dette er første gang du bruker siden, klikk her for å sette opp standardsidene.</p>
+        <button id="init-btn">Initialiser nettsted</button>
     </div>
 
     <div class="admin-section" id="page-management">
-        <h2>Manage Pages</h2>
+        <h2>Administrer sider</h2>
         <div id="create-page-form">
-            <input type="text" id="new-page-id" placeholder="New Page ID (e.g., 'gallery')">
-            <button id="create-page-btn">Create New Page</button>
+            <input type="text" id="new-page-id" placeholder="Ny side-ID (f.eks. 'galleri')">
+            <button id="create-page-btn">Opprett ny side</button>
         </div>
         <table id="pages-table" style="width: 100%; margin-top: 15px;">
             <thead>
                 <tr>
-                    <th>Page ID</th>
-                    <th>Title</th>
-                    <th>Actions</th>
+                    <th>Side-ID</th>
+                    <th>Tittel</th>
+                    <th>Handlinger</th>
                 </tr>
             </thead>
             <tbody id="pages-list">
-                <!-- Page list will be populated by script -->
+                <!-- Sideliste fylles ut av skript -->
             </tbody>
         </table>
     </div>
 
     <div class="admin-section" id="news-management">
-        <h2>Manage News</h2>
+        <h2>Administrer nyheter</h2>
         <div id="news-form" style="display: none;">
             <input type="hidden" id="news-id">
-            <input type="text" id="news-title" placeholder="Article Title" style="width: 98%; margin-bottom: 10px;">
-            <textarea id="news-content" placeholder="Article Content" style="width: 98%; height: 100px; margin-bottom: 10px;"></textarea>
-            <button id="save-news-btn">Save Article</button>
-            <button id="cancel-news-btn">Cancel</button>
+            <input type="text" id="news-title" placeholder="Artikkeltittel" style="width: 98%; margin-bottom: 10px;">
+            <textarea id="news-content" placeholder="Artikkelinnhold" style="width: 98%; height: 100px; margin-bottom: 10px;"></textarea>
+            <button id="save-news-btn">Lagre artikkel</button>
+            <button id="cancel-news-btn">Avbryt</button>
         </div>
-        <button id="add-news-btn">Add New Article</button>
+        <button id="add-news-btn">Legg til ny artikkel</button>
         <table id="news-table" style="width: 100%; margin-top: 15px;">
             <thead>
                 <tr>
-                    <th>Title</th>
-                    <th>Date</th>
-                    <th>Actions</th>
+                    <th>Tittel</th>
+                    <th>Dato</th>
+                    <th>Handlinger</th>
                 </tr>
             </thead>
             <tbody id="news-list">
-                <!-- News list will be populated by script -->
+                <!-- Nyhetsliste fylles ut av skript -->
             </tbody>
         </table>
     </div>
 
     <div class="admin-section" id="document-management">
-        <h2>Manage Documents</h2>
+        <h2>Administrer dokumenter</h2>
         <div id="doc-form">
-            <input type="text" id="doc-title" placeholder="Document Title" style="width: 98%; margin-bottom: 10px;">
-            <textarea id="doc-description" placeholder="Description (optional)" style="width: 98%; height: 60px; margin-bottom: 10px;"></textarea>
+            <input type="text" id="doc-title" placeholder="Dokumenttittel" style="width: 98%; margin-bottom: 10px;">
+            <textarea id="doc-description" placeholder="Beskrivelse (valgfritt)" style="width: 98%; height: 60px; margin-bottom: 10px;"></textarea>
             <input type="file" id="doc-file-input" style="margin-bottom: 10px;">
-            <button id="upload-doc-btn">Upload Document</button>
+            <button id="upload-doc-btn">Last opp dokument</button>
         </div>
         <table id="docs-table" style="width: 100%; margin-top: 15px;">
             <thead>
                 <tr>
-                    <th>Title</th>
-                    <th>Description</th>
-                    <th>Actions</th>
+                    <th>Tittel</th>
+                    <th>Beskrivelse</th>
+                    <th>Handlinger</th>
                 </tr>
             </thead>
             <tbody id="docs-list">
-                <!-- Document list will be populated by script -->
+                <!-- Dokumentliste fylles ut av skript -->
             </tbody>
         </table>
     </div>
 
     <div class="admin-section" id="resource-management">
-        <h2>Manage Common Resources</h2>
+        <h2>Administrer fellesressurser</h2>
         <div id="resource-form">
-            <input type="text" id="resource-name" placeholder="Resource Name" style="width: 98%; margin-bottom: 10px;">
-            <textarea id="resource-description" placeholder="Description" style="width: 98%; height: 60px; margin-bottom: 10px;"></textarea>
-            <input type="number" id="resource-max-hours" placeholder="Max Booking Hours (e.g., 8)" style="margin-bottom: 10px;">
-            <input type="number" id="resource-price" placeholder="Price (NOK)" style="margin-bottom: 10px;">
-            <input type="number" id="resource-cancel-deadline" placeholder="Cancellation Deadline (hours)" style="margin-bottom: 10px;">
-            <button id="add-resource-btn">Add Resource</button>
+            <input type="text" id="resource-name" placeholder="Ressursnavn" style="width: 98%; margin-bottom: 10px;">
+            <textarea id="resource-description" placeholder="Beskrivelse" style="width: 98%; height: 60px; margin-bottom: 10px;"></textarea>
+            <input type="number" id="resource-max-hours" placeholder="Maks bookingtimer (f.eks. 8)" style="margin-bottom: 10px;">
+            <input type="number" id="resource-price" placeholder="Pris (NOK)" style="margin-bottom: 10px;">
+            <input type="number" id="resource-cancel-deadline" placeholder="Avbestillingsfrist (timer)" style="margin-bottom: 10px;">
+            <button id="add-resource-btn">Legg til ressurs</button>
         </div>
         <table id="resources-table" style="width: 100%; margin-top: 15px;">
             <thead>
                 <tr>
-                    <th>Name</th>
-                    <th>Description</th>
-                    <th>Booking Rules</th>
-                    <th>Actions</th>
+                    <th>Navn</th>
+                    <th>Beskrivelse</th>
+                    <th>Bookingregler</th>
+                    <th>Handlinger</th>
                 </tr>
             </thead>
             <tbody id="resources-list">
-                <!-- Resource list will be populated by script -->
+                <!-- Ressursliste fylles ut av skript -->
             </tbody>
         </table>
     </div>
@@ -134,20 +134,20 @@
 
         function renderPages(response) {
             if (!response.ok) {
-                alert('Error loading pages: ' + response.message);
+                alert('Feil ved lasting av sider: ' + response.message);
                 return;
             }
             const pagesList = document.getElementById('pages-list');
-            pagesList.innerHTML = ''; // Clear existing list
+            pagesList.innerHTML = ''; // Tøm eksisterende liste
             response.pages.forEach(page => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${page.pageId}</td>
                     <td>${page.title}</td>
                     <td>
-                        <button onclick="editPage('${page.pageId}')">Edit</button>
-                        <button onclick="deletePage('${page.pageId}')">Delete</button>
-                        <button onclick="setPagePassword('${page.pageId}')">Set Password</button>
+                        <button onclick="editPage('${page.pageId}')">Rediger</button>
+                        <button onclick="deletePage('${page.pageId}')">Slett</button>
+                        <button onclick="setPagePassword('${page.pageId}')">Angi passord</button>
                     </td>
                 `;
                 pagesList.appendChild(row);
@@ -160,23 +160,23 @@
         }
 
         function deletePage(pageId) {
-            if (confirm(`Are you sure you want to delete the page '${pageId}'?`)) {
+            if (confirm(`Er du sikker på at du vil slette siden '${pageId}'?`)) {
                 google.script.run
                     .withSuccessHandler(() => {
-                        alert('Page deleted!');
-                        loadPages(); // Refresh the list
+                        alert('Siden er slettet!');
+                        loadPages(); // Oppdater listen
                     })
-                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .withFailureHandler(err => alert('Feil: ' + err.message))
                     .deletePage(pageId);
             }
         }
 
         function setPagePassword(pageId) {
-            const newPassword = prompt(`Enter a new password for '${pageId}'.\nLeave blank to remove the password.`);
-            if (newPassword !== null) { // Proceed if user didn't cancel
+            const newPassword = prompt(`Skriv inn et nytt passord for '${pageId}'.\nLa feltet stå tomt for å fjerne passordet.`);
+            if (newPassword !== null) { // Fortsett hvis brukeren ikke avbrøt
                 google.script.run
-                    .withSuccessHandler(() => alert('Password updated!'))
-                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .withSuccessHandler(() => alert('Passord oppdatert!'))
+                    .withFailureHandler(err => alert('Feil: ' + err.message))
                     .setPagePassword(pageId, newPassword);
             }
         }
@@ -186,21 +186,21 @@
             if (newPageId) {
                 editPage(newPageId);
             } else {
-                alert('Please enter a valid Page ID.');
+                alert('Vennligst skriv inn en gyldig side-ID.');
             }
         });
 
         document.getElementById('init-btn').addEventListener('click', () => {
             google.script.run
                 .withSuccessHandler((res) => {
-                    alert('Site initialization complete!');
-                    loadPages(); // Refresh page list
+                    alert('Initialisering av nettstedet er fullført!');
+                    loadPages(); // Oppdater sidelisten
                 })
-                .withFailureHandler(err => alert('Error: ' + err.message))
+                .withFailureHandler(err => alert('Feil: ' + err.message))
                 .initializeSite();
         });
 
-        // Load pages on initial load
+        // Last inn sider ved første lasting
         document.addEventListener('DOMContentLoaded', () => {
             loadPages();
             loadNews();
@@ -208,31 +208,31 @@
             loadResources();
         });
 
-        // --- Resource Management Script ---
+        // --- Skript for ressursadministrasjon ---
         function loadResources() {
             google.script.run.withSuccessHandler(renderResources).listResources();
         }
 
         function renderResources(response) {
             if (!response.ok) {
-                alert('Error loading resources: ' + response.message);
+                alert('Feil ved lasting av ressurser: ' + response.message);
                 return;
             }
             const resourcesList = document.getElementById('resources-list');
-            resourcesList.innerHTML = ''; // Clear existing list
+            resourcesList.innerHTML = ''; // Tøm eksisterende liste
             response.resources.forEach(resource => {
                 const row = document.createElement('tr');
                 const rules = `
-                    Max Hours: ${resource.maxBookingHours || 'N/A'}<br>
-                    Price: ${resource.price || 'Free'}<br>
-                    Cancel Deadline: ${resource.cancellationDeadline || 'N/A'} hours
+                    Maks timer: ${resource.maxBookingHours || 'Ikke angitt'}<br>
+                    Pris: ${resource.price || 'Gratis'}<br>
+                    Avbestillingsfrist: ${resource.cancellationDeadline || 'Ikke angitt'} timer
                 `;
                 row.innerHTML = `
                     <td>${resource.name}</td>
                     <td>${resource.description}</td>
                     <td>${rules}</td>
                     <td>
-                        <button onclick="deleteResource('${resource.id}')">Delete</button>
+                        <button onclick="deleteResource('${resource.id}')">Slett</button>
                     </td>
                 `;
                 resourcesList.appendChild(row);
@@ -240,13 +240,13 @@
         }
 
         function deleteResource(resourceId) {
-            if (confirm('Are you sure you want to delete this resource?')) {
+            if (confirm('Er du sikker på at du vil slette denne ressursen?')) {
                 google.script.run
                     .withSuccessHandler(() => {
-                        alert('Resource deleted!');
-                        loadResources(); // Refresh the list
+                        alert('Ressurs slettet!');
+                        loadResources(); // Oppdater listen
                     })
-                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .withFailureHandler(err => alert('Feil: ' + err.message))
                     .deleteResource(resourceId);
             }
         }
@@ -261,27 +261,27 @@
             };
 
             if (!resource.name) {
-                alert('Please enter a resource name.');
+                alert('Vennligst skriv inn et ressursnavn.');
                 return;
             }
 
             google.script.run
                 .withSuccessHandler(() => {
-                    alert('Resource added!');
-                    // Clear form
+                    alert('Ressurs lagt til!');
+                    // Tøm skjemaet
                     document.getElementById('resource-name').value = '';
                     document.getElementById('resource-description').value = '';
                     document.getElementById('resource-max-hours').value = '';
                     document.getElementById('resource-price').value = '';
                     document.getElementById('resource-cancel-deadline').value = '';
-                    loadResources(); // Refresh list
+                    loadResources(); // Oppdater listen
                 })
-                .withFailureHandler(err => alert('Error: ' + err.message))
+                .withFailureHandler(err => alert('Feil: ' + err.message))
                 .addResource(resource);
         });
 
 
-        // --- News Management Script ---
+        // --- Skript for nyhetsadministrasjon ---
 
         let allArticles = [];
 
@@ -291,7 +291,7 @@
 
         function renderNews(response) {
             if (!response.ok) {
-                alert('Error loading news: ' + response.message);
+                alert('Feil ved lasting av nyheter: ' + response.message);
                 return;
             }
             allArticles = response.articles;
@@ -303,8 +303,8 @@
                     <td>${article.title}</td>
                     <td>${new Date(article.publishedDate).toLocaleDateString()}</td>
                     <td>
-                        <button onclick="editNews('${article.id}')">Edit</button>
-                        <button onclick="deleteNews('${article.id}')">Delete</button>
+                        <button onclick="editNews('${article.id}')">Rediger</button>
+                        <button onclick="deleteNews('${article.id}')">Slett</button>
                     </td>
                 `;
                 newsList.appendChild(row);
@@ -330,13 +330,13 @@
         }
 
         function deleteNews(articleId) {
-            if (confirm('Are you sure you want to delete this news article?')) {
+            if (confirm('Er du sikker på at du vil slette denne nyhetsartikkelen?')) {
                 google.script.run
                     .withSuccessHandler(() => {
-                        alert('Article deleted!');
+                        alert('Artikkel slettet!');
                         loadNews();
                     })
-                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .withFailureHandler(err => alert('Feil: ' + err.message))
                     .deleteNewsArticle(articleId);
             }
         }
@@ -355,15 +355,15 @@
 
             google.script.run
                 .withSuccessHandler(() => {
-                    alert('Article saved!');
+                    alert('Artikkel lagret!');
                     hideNewsForm();
                     loadNews();
                 })
-                .withFailureHandler(err => alert('Error: ' + err.message))
+                .withFailureHandler(err => alert('Feil: ' + err.message))
                 [action](article);
         });
 
-        // --- Document Management Script ---
+        // --- Skript for dokumentadministrasjon ---
 
         function loadDocuments() {
             google.script.run.withSuccessHandler(renderDocuments).listDocuments();
@@ -371,7 +371,7 @@
 
         function renderDocuments(response) {
             if (!response.ok) {
-                alert('Error loading documents: ' + response.message);
+                alert('Feil ved lasting av dokumenter: ' + response.message);
                 return;
             }
             const docsList = document.getElementById('docs-list');
@@ -382,7 +382,7 @@
                     <td><a href="${doc.url}" target="_blank">${doc.title}</a></td>
                     <td>${doc.description || ''}</td>
                     <td>
-                        <button onclick="deleteDocument('${doc.id}')">Delete</button>
+                        <button onclick="deleteDocument('${doc.id}')">Slett</button>
                     </td>
                 `;
                 docsList.appendChild(row);
@@ -390,13 +390,13 @@
         }
 
         function deleteDocument(docId) {
-            if (confirm('Are you sure you want to delete this document? This will also remove the file from Google Drive.')) {
+            if (confirm('Er du sikker på at du vil slette dette dokumentet? Dette vil også fjerne filen fra Google Drive.')) {
                 google.script.run
                     .withSuccessHandler(() => {
-                        alert('Document deleted!');
+                        alert('Dokument slettet!');
                         loadDocuments();
                     })
-                    .withFailureHandler(err => alert('Error: ' + err.message))
+                    .withFailureHandler(err => alert('Feil: ' + err.message))
                     .deleteDocument(docId);
             }
         }
@@ -408,7 +408,7 @@
             const description = document.getElementById('doc-description').value.trim();
 
             if (!file || !title) {
-                alert('Please select a file and provide a title.');
+                alert('Vennligst velg en fil og oppgi en tittel.');
                 return;
             }
 
@@ -417,24 +417,24 @@
                 const fileObject = {
                     name: file.name,
                     mimeType: file.type,
-                    base64: e.target.result.split(',')[1] // Get base64 string
+                    base64: e.target.result.split(',')[1] // Få base64-strengen
                 };
 
-                document.getElementById('upload-doc-btn').innerText = 'Uploading...';
+                document.getElementById('upload-doc-btn').innerText = 'Laster opp...';
 
                 google.script.run
                     .withSuccessHandler(() => {
-                        alert('Document uploaded successfully!');
-                        // Clear form
+                        alert('Dokumentet ble lastet opp!');
+                        // Tøm skjemaet
                         fileInput.value = '';
                         document.getElementById('doc-title').value = '';
                         document.getElementById('doc-description').value = '';
-                        document.getElementById('upload-doc-btn').innerText = 'Upload Document';
-                        loadDocuments(); // Refresh list
+                        document.getElementById('upload-doc-btn').innerText = 'Last opp dokument';
+                        loadDocuments(); // Oppdater listen
                     })
                     .withFailureHandler(err => {
-                         alert('Upload failed: ' + err.message);
-                         document.getElementById('upload-doc-btn').innerText = 'Upload Document';
+                         alert('Opplasting feilet: ' + err.message);
+                         document.getElementById('upload-doc-btn').innerText = 'Last opp dokument';
                     })
                     .addDocument(fileObject, title, description);
             };

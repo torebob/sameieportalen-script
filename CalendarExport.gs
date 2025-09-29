@@ -35,7 +35,7 @@ function doGet(e) {
   } catch (err) {
     // Log the error for easier debugging from the Apps Script dashboard.
     console.error("Error in doGet for CalendarExport: " + err.toString());
-    return ContentService.createTextOutput("Error generating calendar feed: " + err.message)
+    return ContentService.createTextOutput("Feil ved generering av kalender-feed: " + err.message)
       .setMimeType(ContentService.MimeType.TEXT);
   }
 }
@@ -49,7 +49,7 @@ function getCalendarExportUrl() {
     // This will only work after the script has been deployed as a web app.
     const url = ScriptApp.getService().getUrl();
     if (!url) {
-      return { ok: false, message: "Script has not been deployed as a web app yet. See instructions in CalendarExport.gs." };
+      return { ok: false, message: "Skriptet er ikke deployet som en webapp enda. Se instruksjoner i CalendarExport.gs." };
     }
     return { ok: true, url: url };
   } catch (e) {

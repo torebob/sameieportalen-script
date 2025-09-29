@@ -61,7 +61,8 @@ globalThis.UI_FILES = Object.freeze({
   LEVERANDOR_ADMIN:      { file: '44_LeverandorAdmin.html',          title: 'Leverandøradmin',            w: 1200, h: 760 },
   AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 },
   SHARE_DOCUMENT:        { file: '41_ShareDocument.html',            title: 'Del Dokument',               w: 800,  h: 600 },
-  AVTALEBEHANDLER:       { file: '44_Avtalebehandler.html',          title: 'Avtalebehandler',            w: 1000, h: 760 }
+  AVTALEBEHANDLER:       { file: '44_Avtalebehandler.html',          title: 'Avtalebehandler',            w: 1000, h: 760 },
+  MIN_SIDE:              { file: '46_MinSide.html',                  title: 'Min Side',                   w: 800,  h: 600 }
 });
 
 /*
@@ -164,6 +165,7 @@ function onOpen(e) {
 
   // Hovedmeny (alle)
   addIf('Dashbord', 'openDashboardAuto');
+  addIf('Min Side', 'openMinSide');
   addIf('E-postassistent', 'openEmailAssistant');
   menu.addSeparator();
   addIf('Møteoversikt & Protokoller…', 'openMeetingsUI');
@@ -325,6 +327,19 @@ if (typeof globalThis.openLeverandorAdmin !== 'function') {
 if (typeof globalThis.openShareDocumentUI !== 'function') {
   globalThis.openShareDocumentUI = () => _openHtmlFromMap_('SHARE_DOCUMENT', 'modal');
 }
+if (typeof globalThis.openMinSide !== 'function') {
+  globalThis.openMinSide = () => {
+    const webAppUrl = ScriptApp.getService().getUrl();
+    if (!webAppUrl) {
+      return showAlert('Web-appens URL er ikke tilgjengelig. Kan ikke åpne Min Side.', 'Feil');
+    }
+    // Bygger en HTML-output som omdirigerer brukeren til web-appen.
+    const html = `<script>window.open('${webAppUrl}?page=minside', '_blank');google.script.host.close();</script>`;
+    HtmlService.createHtmlOutput(html).setHeight(50).setWidth(250);
+    // Viser en midlertidig dialogboks mens siden åpnes
+    getUi().showModalDialog(HtmlService.createHtmlOutput("<p>Åpner Min Side i en ny fane...</p>"), "Åpner...");
+  };
+}
 
 /* ---------- Utvikler-verktøy: valider at HTML-filer finnes ---------- */
 function validateUIFiles() {
@@ -380,6 +395,7 @@ function runSmokeCheck_() {
  * @returns {Object} Konfigurasjonsobjektet for appen.
  */
 const getAppConfig = () => ({
+  ADMIN_EMAIL: globalThis.getConfigValue ? globalThis.getConfigValue('ADMIN_EMAIL', 'styret@example.com') : 'styret@example.com',
   AI_ASSISTANT: {
     API_KEY: globalThis.getConfigValue ? globalThis.getConfigValue('AI_API_KEY', '') : '',
     GMAIL_LABEL: globalThis.getConfigValue ? globalThis.getConfigValue('AI_GMAIL_LABEL', 'Styre-innboks') : 'Styre-innboks',

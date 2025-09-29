@@ -1,0 +1,132 @@
+<? var FILE = '42_SosialtNaboskap.html'; var VERSION = '1.0.0'; var UPDATED = '2025-09-28'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportal — Sosialt Naboskap</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff}
+    .wrap{max-width:800px;margin:0 auto;padding:20px}
+    .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+    .title{font-size:22px;font-weight:700}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+    .post-author{font-weight:600;margin-bottom:4px}
+    .post-meta{font-size:12px;color:var(--muted);margin-bottom:10px}
+    .post-content{line-height:1.6}
+    .form-group textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:#0c1526;color:#fff;font-size:14px;min-height:80px;margin-bottom:10px}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:none;background:var(--primary);color:#fff;cursor:pointer}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
+    .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
+    .toast.ok{background:var(--success)}
+    .toast.err{background:var(--danger)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1 class="title">Sosialt Naboskap</h1>
+    </div>
+
+    <!-- New Post Form -->
+    <div class="card">
+      <h3>Nytt innlegg</h3>
+      <div class="form-group">
+        <textarea id="newPostContent" placeholder="Hva tenker du på?"></textarea>
+      </div>
+      <button id="submitPostBtn" class="btn">Publiser</button>
+    </div>
+
+    <!-- Feed Container -->
+    <div id="feedContainer">
+      <!-- Posts will be dynamically inserted here -->
+    </div>
+  </div>
+
+  <script>
+    // --- UI Elements ---
+    const feedContainer = document.getElementById('feedContainer');
+    const newPostContent = document.getElementById('newPostContent');
+    const submitPostBtn = document.getElementById('submitPostBtn');
+
+    // --- Toast Notification ---
+    function toast(msg, kind){
+      const t=document.createElement('div'); t.className='toast ' + (kind||'');
+      t.textContent=String(msg||''); document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2800);
+    }
+
+    // --- Render Posts ---
+    function renderPost(post) {
+      const postDiv = document.createElement('div');
+      postDiv.className = 'card';
+      postDiv.innerHTML = `
+        <div class="post-author">${post.author}</div>
+        <div class="post-meta">Publisert: ${new Date(post.timestamp).toLocaleString()}</div>
+        <div class="post-content">${post.content}</div>
+      `;
+      return postDiv;
+    }
+
+    // --- Load Posts ---
+    function loadPosts() {
+      submitPostBtn.disabled = true; // Disable while loading
+      google.script.run
+        .withSuccessHandler(response => {
+          submitPostBtn.disabled = false;
+          if (response.ok) {
+            feedContainer.innerHTML = ''; // Clear existing
+            response.posts.forEach(post => {
+              feedContainer.appendChild(renderPost(post));
+            });
+          } else {
+            toast(response.message, 'err');
+          }
+        })
+        .withFailureHandler(error => {
+          submitPostBtn.disabled = false;
+          toast(error.message, 'err');
+        })
+        .social_getPosts();
+    }
+
+    // --- Add New Post ---
+    function addNewPost() {
+      const content = newPostContent.value.trim();
+      if (!content) {
+        toast('Innlegget kan ikke være tomt.', 'err');
+        return;
+      }
+
+      submitPostBtn.disabled = true;
+      submitPostBtn.textContent = 'Publiserer...';
+
+      google.script.run
+        .withSuccessHandler(response => {
+          if (response.ok) {
+            const newPostElement = renderPost(response.newPost);
+            feedContainer.insertBefore(newPostElement, feedContainer.firstChild);
+            newPostContent.value = ''; // Clear textarea
+            toast('Innlegg publisert!', 'ok');
+          } else {
+            toast(response.message, 'err');
+          }
+          submitPostBtn.disabled = false;
+          submitPostBtn.textContent = 'Publiser';
+        })
+        .withFailureHandler(error => {
+          toast(error.message, 'err');
+          submitPostBtn.disabled = false;
+          submitPostBtn.textContent = 'Publiser';
+        })
+        .social_addPost({ content: content });
+    }
+
+    // --- Event Listeners ---
+    submitPostBtn.addEventListener('click', addNewPost);
+    document.addEventListener('DOMContentLoaded', loadPosts);
+  </script>
+</body>
+</html>

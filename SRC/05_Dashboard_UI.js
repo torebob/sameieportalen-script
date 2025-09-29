@@ -22,6 +22,7 @@
 
   const UI_MAP_DEFAULT = {
     DASHBOARD_HTML: { file: '37_Dashboard.html', title: 'Sameieportal — Dashbord', w: 1280, h: 840 },
+    SOSIALT_NABOSKAP: { file: '42_SosialtNaboskap.html', title: 'Sosialt Naboskap', w: 840, h: 760 },
     MOTEOVERSIKT: { file: '30_Moteoversikt.html', title: 'Møteoversikt & Protokoller', w: 1100, h: 760 },
     MOTE_SAK_EDITOR: { file: '31_MoteSakEditor.html', title: 'Møtesaker – Editor', w: 1100, h: 760 },
     EIERSKIFTE: { file: '34_EierskifteSkjema.html', title: 'Eierskifteskjema', w: 980, h: 760 },

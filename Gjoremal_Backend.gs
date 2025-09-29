@@ -10,6 +10,7 @@ const DB_SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with the actual ID of the G
 const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
 const SUPPLIERS_SHEET_NAME = 'Suppliers';
+const POSTS_SHEET_NAME = 'Posts';
 const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
 
 /**
@@ -46,6 +47,87 @@ function gjoremalGet() {
     return { ok: true, tasks: tasks };
   } catch (e) {
     return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Helper to get a sheet by name, or create it if it doesn't exist.
+ * @param {string} name The name of the sheet.
+ * @param {Array<string>} headers The headers to set if the sheet is created.
+ * @returns {GoogleAppsScript.Spreadsheet.Sheet} The sheet object.
+ */
+function _getOrCreateSheet(name, headers) {
+  const ss = SpreadsheetApp.openById(DB_SHEET_ID);
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+/**
+ * Retrieves social feed posts from the 'Posts' sheet.
+ * SN.10.1
+ * @returns {object} A response object with a list of posts.
+ */
+function social_getPosts() {
+  try {
+    _validateConfig();
+    const headers = ['id', 'author', 'content', 'timestamp'];
+    const sheet = _getOrCreateSheet(POSTS_SHEET_NAME, headers);
+
+    const data = sheet.getDataRange().getValues();
+    const headerRow = data.shift() || [];
+
+    // Create a map of header names to column indices for robustness
+    const headerMap = headerRow.reduce((map, header, i) => {
+      map[header] = i;
+      return map;
+    }, {});
+
+    const posts = data.map(row => ({
+      id: row[headerMap['id']],
+      author: row[headerMap['author']],
+      content: row[headerMap['content']],
+      timestamp: row[headerMap['timestamp']],
+    })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort newest first
+
+    return { ok: true, posts: posts };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Adds a new post to the 'Posts' sheet.
+ * SN.10.1
+ * @param {object} payload The post data from the client (e.g., { content: "..." }).
+ * @returns {object} A response object indicating success or failure.
+ */
+function social_addPost(payload) {
+  try {
+    _validateConfig();
+    const headers = ['id', 'author', 'content', 'timestamp'];
+    const sheet = _getOrCreateSheet(POSTS_SHEET_NAME, headers);
+
+    const userEmail = Session.getActiveUser().getEmail();
+
+    const newPost = {
+      id: Utilities.getUuid(),
+      author: userEmail,
+      content: payload.content,
+      timestamp: new Date().toISOString()
+    };
+
+    // Append the new post in the correct order based on headers
+    const newRow = headers.map(header => newPost[header]);
+    sheet.appendRow(newRow);
+
+    return { ok: true, newPost: newPost };
+  } catch (e) {
+    return { ok: false, message: `Server error: ${e.message}` };
   }
 }
 

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>Leverandørliste</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .container { max-width: 900px; margin: auto; }
+    h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    tr:hover { background-color: #f5f5f5; }
+    a { text-decoration: none; color: #0066cc; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Leverandørliste</h1>
+    <div id="loading">Laster leverandører...</div>
+    <table id="vendor-table" style="display:none;">
+      <thead>
+        <tr>
+          <th>Navn</th>
+          <th>Kategori</th>
+          <th>Telefon</th>
+          <th>Epost</th>
+          <th>Profil</th>
+        </tr>
+      </thead>
+      <tbody id="vendor-list">
+        <!-- Rader blir satt inn her av scriptet -->
+      </tbody>
+    </table>
+    <div id="error-message" style="color:red;"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      google.script.run
+        .withSuccessHandler(displayVendors)
+        .withFailureHandler(showError)
+        .getAlleLeverandorer();
+    });
+
+    function displayVendors(vendors) {
+      const list = document.getElementById('vendor-list');
+      const table = document.getElementById('vendor-table');
+      const loading = document.getElementById('loading');
+
+      if (vendors && vendors.length > 0) {
+        vendors.forEach(vendor => {
+          const row = list.insertRow();
+          row.innerHTML = `
+            <td>${vendor.Navn || ''}</td>
+            <td>${vendor.Kategori || ''}</td>
+            <td>${vendor.Telefon || ''}</td>
+            <td>${vendor.Epost || ''}</td>
+            <td><a href="?page=leverandor&id=${vendor.id}">Se profil</a></td>
+          `;
+        });
+        table.style.display = '';
+      } else {
+        document.getElementById('error-message').textContent = 'Ingen leverandører funnet.';
+      }
+      loading.style.display = 'none';
+    }
+
+    function showError(error) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error-message').textContent = 'Feil: ' + error.message;
+    }
+  </script>
+</body>
+</html>

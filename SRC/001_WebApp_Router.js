@@ -22,6 +22,8 @@ function doGet(e) {
       tracking: handleTrackingPixelRequest,
       budget: handleBudgetAppRequest,
       faq: handleFaqRequest, // Ny rute for FAQ-siden
+      leverandor: renderLeverandorProfilPage, // Rute for leverandørprofil
+      leverandorliste: renderLeverandorListePage, // Rute for leverandørliste
     };
 
     // Hvis ingen side er spesifisert, bruk 'budget' som standard.
@@ -60,4 +62,29 @@ function renderProtokollSigneringPage(e) {
   template.moteId = moteId;
 
   return template.evaluate().setTitle('Signer Protokoll');
+}
+
+/**
+ * Viser leverandørprofil-siden.
+ * Krever 'id' (radnummer) som URL-parameter.
+ */
+function renderLeverandorProfilPage(e) {
+  const vendorId = e?.parameter?.id;
+  if (!vendorId) {
+    return HtmlService.createHtmlOutput('<h1>Feil</h1><p>Leverandør-ID mangler.</p>').setTitle('Feil');
+  }
+
+  const template = HtmlService.createTemplateFromFile('44_Leverandor_Profil');
+  template.vendorId = vendorId;
+
+  return template.evaluate().setTitle('Leverandørprofil');
+}
+
+/**
+ * Viser leverandørliste-siden.
+ */
+function renderLeverandorListePage(e) {
+  return HtmlService.createTemplateFromFile('45_Leverandor_Liste')
+    .evaluate()
+    .setTitle('Leverandørliste');
 }

@@ -41,7 +41,8 @@ const PERMISSIONS = Object.freeze({
   'EXPORT_DATA':           ['Styremedlem', 'Kjernebruker', 'Admin'],
   'VIEW_VAKTMESTER_UI':    ['Vaktmester', 'Admin'],
   'OPEN_MEETINGS_UI':     ['Styremedlem', 'Kjernebruker', 'Admin'],
-  'GENERATE_REPORTS':     ['Styremedlem', 'Kjernebruker', 'Admin']
+  'GENERATE_REPORTS':     ['Styremedlem', 'Kjernebruker', 'Admin'],
+  'MANAGE_SUPPLIERS':     ['Styremedlem', 'Kjernebruker', 'Admin']
 });
 
 /* ---------- Lettvektscache for roller ---------- */

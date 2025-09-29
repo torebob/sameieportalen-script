@@ -26,6 +26,7 @@ const SHEETS = Object.freeze({
   VEDLEGG: 'Vedlegg',
   REPORT: 'Rapport',
   HMS: 'HMS_Egenkontroll',
+  LEVERANDORER: 'LEVERANDØRER',
   MOTER: 'Møter',
   MOTE_SAKER: 'MøteSaker',
   MOTE_KOMMENTARER: 'MøteSakKommentarer',

@@ -51,6 +51,13 @@ function searchContent(query) {
         idColumn: 'Godkjenning-ID',
         titleColumn: 'Møte-ID',
         linkColumn: 'Protokoll-URL'
+      },
+      {
+        sheetName: SHEETS.LEVERANDORER,
+        columns: ['Navn', 'Kategori/System', 'Epost', 'Notat'],
+        type: 'Leverandør',
+        idColumn: 'Navn',
+        titleColumn: 'Navn'
       }
     ];
 
@@ -139,3 +146,65 @@ function searchInSheet_(config, normalizedQuery) {
 
 // Expose the main search function to be callable from the client-side UI.
 globalThis.searchContent = searchContent;
+
+/**
+ * Filters suppliers by category.
+ *
+ * @param {string} category The category to filter by.
+ * @returns {object} An object with `ok` status and either `results` or `message`.
+ */
+function filterSuppliersByCategory(category) {
+  if (!category || typeof category !== 'string' || category.trim().length === 0) {
+    return { ok: false, message: 'Kategori må være en gyldig tekst.', results: [] };
+  }
+
+  const _log = typeof safeLog === 'function' ? safeLog : (topic, msg) => console.log(`${topic}: ${msg}`);
+
+  try {
+    const sheetName = SHEETS.LEVERANDORER;
+    const normalizedCategory = category.toLowerCase();
+
+    let sheet;
+    try {
+      sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+      if (!sheet || sheet.getLastRow() < 2) {
+        return { ok: true, results: [] }; // No suppliers or sheet is empty
+      }
+    } catch (e) {
+      throw new Error(`Kunne ikke hente arket '${sheetName}'.`);
+    }
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const categoryColIndex = headers.indexOf('Kategori/System');
+    const nameColIndex = headers.indexOf('Navn');
+    const phoneColIndex = headers.indexOf('Telefon');
+    const emailColIndex = headers.indexOf('Epost');
+    const noteColIndex = headers.indexOf('Notat');
+
+    if (categoryColIndex === -1 || nameColIndex === -1) {
+      throw new Error("Mangler påkrevde kolonner ('Kategori/System', 'Navn') i arket.");
+    }
+
+    const results = data.filter(row => {
+      const cellValue = row[categoryColIndex];
+      return cellValue && typeof cellValue === 'string' && cellValue.toLowerCase().includes(normalizedCategory);
+    }).map(row => ({
+      navn: row[nameColIndex],
+      kategori: row[categoryColIndex],
+      telefon: row[phoneColIndex] || '',
+      epost: row[emailColIndex] || '',
+      notat: row[noteColIndex] || ''
+    }));
+
+    _log('SupplierFilter', `Filtrering på "${category}" ga ${results.length} treff.`);
+    return { ok: true, results: results };
+
+  } catch (e) {
+    _log('SupplierFilter_Error', `Filtrering feilet: ${e.message}`);
+    return { ok: false, message: `Filtrering feilet: ${e.message}`, results: [] };
+  }
+}
+
+// Expose the filter function to be callable from the client-side UI.
+globalThis.filterSuppliersByCategory = filterSuppliersByCategory;

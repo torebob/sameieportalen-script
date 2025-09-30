@@ -22,6 +22,9 @@
     .task-card h3{margin:0 0 8px;font-size:16px;font-weight:600}
     .task-meta{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;gap:12px}
     .task-desc{font-size:14px;color:#cbd5e1;margin-bottom:16px;flex-grow:1}
+    .task-attachment{margin-bottom:12px;font-size:13px;}
+    .task-attachment a{color:var(--primary);text-decoration:none}
+    .task-attachment a:hover{text-decoration:underline}
     .task-footer{display:flex;justify-content:space-between;align-items:center}
     .task-status{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:500}
     .status-open{background-color:#3b82f620;color:#60a5fa}
@@ -75,7 +78,7 @@
     <div class="modal-content">
       <div class="modal-head">
         <div id="modalTitle" class="modal-title">Ny oppgave</div>
-        <button class="btn" onclick="closeModal()">✖</button>
+        <button id="btnCloseModal" class="btn">✖</button>
       </div>
       <form id="taskForm">
         <input type="hidden" id="taskId" />
@@ -100,7 +103,7 @@
           <input type="file" id="taskAttachment" />
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn" onclick="closeModal()">Avbryt</button>
+          <button type="button" id="btnCancelModal" class="btn">Avbryt</button>
           <button type="submit" class="btn primary">Lagre</button>
         </div>
       </form>
@@ -108,8 +111,25 @@
   </div>
 
   <script>
+    const CONFIG = {
+      MAX_FILE_SIZE: 5 * 1024 * 1024, // 5 MB
+      ALLOWED_MIMETYPES: ['image/jpeg', 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+    };
+
     let tasks = []; // Full dataset for client-side operations
     const modal = document.getElementById('taskModal');
+
+    /**
+     * Sanitizes a string to prevent XSS attacks by converting HTML special characters.
+     * @param {string} str The string to sanitize.
+     * @returns {string} The sanitized string.
+     */
+    function escapeHTML(str) {
+      if (str === null || str === undefined) return '';
+      const p = document.createElement('p');
+      p.textContent = str;
+      return p.innerHTML;
+    }
     const btnNewTask = document.getElementById('btnNewTask');
 
     function toast(msg, kind){
@@ -118,15 +138,26 @@
       setTimeout(()=>t.remove(), 2800);
     }
 
+    /**
+     * Generic error handler for google.script.run failures.
+     * @param {Error} err The error object from the backend.
+     */
+    function handleScriptFailure(err) {
+      toast(err.message || 'En uventet feil oppstod.', 'err');
+      document.getElementById('status').textContent = 'Feil';
+    }
+
     function openModal() {
       document.getElementById('taskForm').reset();
       document.getElementById('taskId').value = '';
       document.getElementById('modalTitle').textContent = 'Ny oppgave';
       modal.classList.add('open');
+      document.getElementById('taskTitle').focus(); // Set focus for accessibility
     }
 
     function closeModal() {
       modal.classList.remove('open');
+      btnNewTask.focus(); // Return focus for accessibility
     }
 
     btnNewTask.addEventListener('click', openModal);
@@ -150,15 +181,16 @@
         const card = document.createElement('div');
         card.className = 'task-card';
         card.innerHTML = `
-          <h3>${task.title}</h3>
+          <h3>${escapeHTML(task.title)}</h3>
           <div class="task-meta">
-            <span>Ansvarlig: <strong>${task.assignee}</strong></span>
-            <span>Frist: <strong>${task.dueDate || 'Ingen'}</strong></span>
+            <span>Ansvarlig: <strong>${escapeHTML(task.assignee)}</strong></span>
+            <span>Frist: <strong>${task.dueDate ? escapeHTML(task.dueDate) : 'Ingen'}</strong></span>
           </div>
-          <p class="task-desc">${task.description || 'Ingen beskrivelse.'}</p>
+          <p class="task-desc">${escapeHTML(task.description) || 'Ingen beskrivelse.'}</p>
+          ${task.attachmentUrl ? `<div class="task-attachment"><a href="${task.attachmentUrl}" target="_blank" rel="noopener noreferrer">📎 Vis vedlegg</a></div>` : ''}
           <div class="task-footer">
-            <span class="task-status ${task.status === 'Open' ? 'status-open' : 'status-completed'}">${task.status}</span>
-            <button class="btn" onclick="editTask('${task.id}')">Rediger</button>
+            <span class="task-status ${task.status === 'Open' ? 'status-open' : 'status-completed'}">${escapeHTML(task.status)}</span>
+            <button class="btn btn-edit" data-task-id="${task.id}">Rediger</button>
           </div>
         `;
         grid.appendChild(card);
@@ -171,17 +203,14 @@
         .withSuccessHandler(response => {
           if (response.ok) {
             tasks = response.tasks; // Populate global tasks array
-            renderTasks(tasks);
+            applyFilters(); // Re-apply filters to preserve user's view
             document.getElementById('status').textContent = 'Klar';
           } else {
             toast(response.message || 'Kunne ikke hente oppgaver.', 'err');
             document.getElementById('status').textContent = 'Feil';
           }
         })
-        .withFailureHandler(err => {
-          toast(err.message, 'err');
-          document.getElementById('status').textContent = 'Feil';
-        })
+        .withFailureHandler(handleScriptFailure)
         .gjoremalGet();
     }
 
@@ -198,14 +227,35 @@
       }
     }
 
+    function validateFile(file) {
+      if (!file) return true; // No file to validate
+
+      if (file.size > CONFIG.MAX_FILE_SIZE) {
+        toast(`Filen er for stor. Maksimal størrelse er ${CONFIG.MAX_FILE_SIZE / 1024 / 1024} MB.`, 'err');
+        return false;
+      }
+
+      if (!CONFIG.ALLOWED_MIMETYPES.includes(file.type)) {
+        toast('Ugyldig filtype. Tillatte typer er JPEG, PNG, PDF, DOCX, XLSX.', 'err');
+        return false;
+      }
+
+      return true;
+    }
+
     document.getElementById('taskForm').addEventListener('submit', function(e) {
       e.preventDefault();
       const submitBtn = this.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Lagrer...';
-
       const fileInput = document.getElementById('taskAttachment');
       const file = fileInput.files[0];
+
+      if (!validateFile(file)) {
+        fileInput.value = ''; // Clear the invalid file
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Lagrer...';
 
       const sendPayload = (payload) => {
         google.script.run
@@ -221,7 +271,7 @@
             submitBtn.textContent = 'Lagre';
           })
           .withFailureHandler(err => {
-            toast(err.message, 'err');
+            handleScriptFailure(err);
             submitBtn.disabled = false;
             submitBtn.textContent = 'Lagre';
           })
@@ -298,11 +348,30 @@
             toast('Kunne ikke laste brukere.', 'err');
           }
         })
+        .withFailureHandler(handleScriptFailure)
         .gjoremalGetUsers();
 
       document.getElementById('searchInput').addEventListener('input', applyFilters);
       document.getElementById('statusFilter').addEventListener('change', applyFilters);
-      document.getElementById('assigneeFilter').addEventListener('change', applyFilters);
+      document.getElementById('assigneeFilter').addEventListener('change',applyFilters);
+      document.getElementById('btnCloseModal').addEventListener('click', closeModal);
+      document.getElementById('btnCancelModal').addEventListener('click', closeModal);
+
+      // Close modal on Escape key press
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && modal.classList.contains('open')) {
+          closeModal();
+        }
+      });
+
+      // Event delegation for edit buttons
+      document.getElementById('taskGrid').addEventListener('click', e => {
+        const editButton = e.target.closest('.btn-edit');
+        if (editButton) {
+          const taskId = editButton.dataset.taskId;
+          editTask(taskId);
+        }
+      });
     });
   </script>
 </body>

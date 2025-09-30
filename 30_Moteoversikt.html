@@ -744,13 +744,14 @@
     }
 
     const today = new Date();
-    today.setHours(0,0,0,0);
+    const todayStr = today.toISOString().split('T')[0];
 
     const scope = DOM.scopePast.classList.contains(CONFIG.CSS_CLASSES.ACTIVE) ? 'past' : 'planned';
     const filteredList = list.filter(m => {
         if (!m.dato) return scope === 'planned';
         const meetingDate = m.dato instanceof Date ? m.dato : new Date(m.dato);
-        return scope === 'past' ? meetingDate < today : meetingDate >= today;
+        const meetingStr = meetingDate.toISOString().split('T')[0];
+        return scope === 'past' ? meetingStr < todayStr : meetingStr >= todayStr;
     });
 
     if (filteredList.length === 0) {
@@ -803,6 +804,7 @@
     applyLockUI(isLocked(state.meetingStatus));
     DOM.btnViewProtocol.style.display = CONFIG.VIEWABLE_PROTOCOL_STATUSES.includes(state.meetingStatus) ? 'inline-block' : 'none';
     DOM.btnSendInnkalling.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
+    DOM.btnGenerateProtocol.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
 
     // Show/hide video actions
     if (isValidHttpUrl(m.sted)) {
@@ -939,45 +941,7 @@
     DOM.linkedTask.classList.remove(CONFIG.CSS_CLASSES.VISIBLE); // MM.4.6: Skjul oppgavelenke
   }
 
-  function initEventListeners() {
-    // Video/Chat Actions
-    DOM.sted.addEventListener('input', function(e) {
-      const url = e.target.value.trim();
-      if (isValidHttpUrl(url)) {
-        DOM.videoActions.style.display = 'flex';
-      } else {
-        DOM.videoActions.style.display = 'none';
-      }
-    });
-
-    DOM.btnJoinVideo.addEventListener('click', function() {
-      const url = DOM.sted.value.trim();
-      if (isValidHttpUrl(url)) {
-        window.open(url, '_blank');
-      }
-    });
-
-    DOM.btnGoToChat.addEventListener('click', function() {
-      DOM.innspillList.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      DOM.innspillText.focus();
-    });
-
-    DOM.btnGenerateProtocol.addEventListener('click', function(){
-        if (!state.moteId) return;
-        setStatus('Genererer protokoll...');
-        google.script.run
-            .withSuccessHandler(res => {
-                if (res.ok) {
-                    setStatus('Protokoll generert.');
-                    refreshCurrentMeeting();
-                } else {
-                    setStatus(res.message || 'Kunne ikke generere protokoll.');
-                }
-            })
-            .withFailureHandler(handleScriptFailure)
-            .generateProtocol(state.moteId);
-    });
-  }
+  // All event handlers are now in initEventListeners()
 
   // ------- NESTEN-SANNTID POLLING -------
   function startPolling(){

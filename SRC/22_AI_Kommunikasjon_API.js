@@ -38,6 +38,25 @@ function getEmailsForProcessing() {
 }
 
 /**
+ * Henter body-teksten til den første e-posten i en tråd.
+ * @param {string} threadId ID-en til e-posttråden.
+ * @returns {string} E-postens innhold som ren tekst.
+ */
+function getEmailBody(threadId) {
+  try {
+    const thread = GmailApp.getThreadById(threadId);
+    if (!thread) {
+      throw new Error("Fant ikke e-posttråden.");
+    }
+    const message = thread.getMessages()[0];
+    return message.getPlainBody();
+  } catch (e) {
+    safeLog('AI_Assistent_Feil', `getEmailBody: ${e.message}`);
+    throw new Error(`Kunne ikke hente e-postinnhold: ${e.message}`);
+  }
+}
+
+/**
  * Sender e-postinnhold til en AI-tjeneste for analyse.
  * @param {string} threadId ID-en til e-posttråden som skal analyseres.
  * @returns {Object} Et objekt med klassifisering, oppsummering og svarforslag.

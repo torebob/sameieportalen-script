@@ -7,9 +7,18 @@
 
 // --- CONFIGURATION ---
 const DB_SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with the actual ID of the Google Sheet
+const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
+
+// Sheet Names
 const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
-const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
+const POSTS_SHEET_NAME = 'Posts';
+const MESSAGES_SHEET_NAME = 'Messages';
+const SECTIONS_SHEET_NAME = 'Sections';
+const OWNERS_SHEET_NAME = 'Owners';
+const TENANTS_SHEET_NAME = 'Tenants';
+const SUPPLIERS_SHEET_NAME = 'Suppliers';
+
 
 /**
  * Validates that the script has been configured.
@@ -19,6 +28,8 @@ function _validateConfig() {
   if (DB_SHEET_ID.startsWith('YOUR_') || ATTACHMENTS_FOLDER_ID.startsWith('YOUR_')) {
     throw new Error('Script not configured. Please follow SETUP_INSTRUCTIONS.md.');
   }
+  // The following function is not implemented and was causing errors.
+  // _createHmsSheetsIfNotExist();
 }
 
 /**
@@ -68,16 +79,16 @@ function gjoremalSave(payload) {
       const folder = DriveApp.getFolderById(ATTACHMENTS_FOLDER_ID);
       const file = folder.createFile(blob);
 
-      payload.attachmentUrl = file.getUrl(); // Add URL to payload for sheet storage
+      payload.attachmentUrl = file.getUrl();
     }
-    delete payload.attachment; // Remove base64 data before saving to sheet
+    delete payload.attachment;
 
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     if (payload.id) {
       // Update existing task
       const data = sheet.getDataRange().getValues();
-      const rowIndex = data.findIndex(row => row[0] == payload.id); // Assuming ID is in the first column
+      const rowIndex = data.findIndex(row => row[0] == payload.id);
 
       if (rowIndex > 0) {
         const rowData = data[rowIndex];
@@ -88,16 +99,8 @@ function gjoremalSave(payload) {
       }
     } else {
       // Create new task
-      const newId = Utilities.getUuid();
-      payload.id = newId;
-      payload.status = 'Open';
-
-      const newRow = headers.map(header => {
-        // Use the value from the payload if it exists, otherwise use an empty string.
-        // This is more robust than `|| ''` as it correctly handles `false` or `0` values.
-        return payload[header] !== undefined ? payload[header] : '';
-      });
-
+      payload.id = Utilities.getUuid();
+      const newRow = headers.map(header => payload[header] !== undefined ? payload[header] : '');
       sheet.appendRow(newRow);
     }
 
@@ -108,8 +111,62 @@ function gjoremalSave(payload) {
 }
 
 /**
+ * Deletes a task from the sheet.
+ * @param {string} taskId The ID of the task to delete.
+ * @returns {object} A response object.
+ */
+function gjoremalDeleteTask(taskId) {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    const rowIndex = data.findIndex(row => row[0] == taskId);
+
+    if (rowIndex > 0) {
+      sheet.deleteRow(rowIndex + 1);
+      return { ok: true };
+    } else {
+      throw new Error(`Task with ID ${taskId} not found for deletion.`);
+    }
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+}
+
+/**
+ * Updates the status of a single task.
+ * @param {string} taskId The ID of the task to update.
+ * @param {string} newStatus The new status ('Open' or 'Completed').
+ * @returns {object} A response object.
+ */
+function gjoremalUpdateStatus(taskId, newStatus) {
+  try {
+    _validateConfig();
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
+    if (!sheet) throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found.`);
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const statusColIndex = headers.indexOf('status');
+    if (statusColIndex === -1) throw new Error('Column "status" not found in Tasks sheet.');
+
+    const rowIndex = data.findIndex(row => row[0] == taskId);
+
+    if (rowIndex > 0) {
+      sheet.getRange(rowIndex + 1, statusColIndex + 1).setValue(newStatus);
+      return { ok: true };
+    } else {
+      throw new Error(`Task with ID ${taskId} not found for status update.`);
+    }
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+}
+
+/**
  * Retrieves the list of users.
- * For this example, we'll use a sheet. In a real scenario, this could come from another source.
  * @returns {object} A response object with the list of users.
  */
 function gjoremalGetUsers() {
@@ -119,7 +176,7 @@ function gjoremalGetUsers() {
     if (!sheet) throw new Error(`Sheet "${USERS_SHEET_NAME}" not found. Please check sheet name.`);
 
     const data = sheet.getDataRange().getValues();
-    const headers = data.shift(); // Assumes headers: 'name', 'email'
+    const headers = data.shift();
     if (!headers || headers.length < 2) {
       throw new Error(`Sheet "${USERS_SHEET_NAME}" must have at least 'name' and 'email' columns.`);
     }

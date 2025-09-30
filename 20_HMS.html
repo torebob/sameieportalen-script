@@ -118,10 +118,10 @@
 
     <!-- Tabs -->
     <div class="hms-tabs">
-        <div class="hms-tab-item active" onclick="showTab('risk')">Risikovurdering</div>
-        <div class="hms-tab-item" onclick="showTab('checklists')">Sjekklister</div>
-        <div class="hms-tab-item" onclick="showTab('deviation')">Registrer Avvik</div>
-        <div class="hms-tab-item" onclick="showTab('history')">Historikk & Rapportering</div>
+        <div class="hms-tab-item active" data-tab="risk">Risikovurdering</div>
+        <div class="hms-tab-item" data-tab="checklists">Sjekklister</div>
+        <div class="hms-tab-item" data-tab="deviation">Registrer Avvik</div>
+        <div class="hms-tab-item" data-tab="history">Historikk & Rapportering</div>
     </div>
 
     <!-- Tab Content: Risk Assessment -->
@@ -224,7 +224,7 @@
 <!-- Modal for creating/editing a checklist -->
 <div id="checklist-modal" class="hms-modal">
     <div class="hms-modal-content">
-        <span class="hms-modal-close" onclick="closeModal('checklist-modal')">&times;</span>
+        <span class="hms-modal-close">&times;</span>
         <h3 id="checklist-modal-title">Ny Sjekkliste</h3>
         <form id="checklist-form">
             <input type="hidden" id="checklist-id">
@@ -238,7 +238,7 @@
             <div id="checklist-items-container">
                 <!-- Checklist items will be added here -->
             </div>
-            <button type="button" onclick="addChecklistItem()">Legg til punkt</button>
+            <button type="button" id="add-checklist-item-btn">Legg til punkt</button>
             <hr>
             <button type="submit" class="hms-button">Lagre Sjekkliste</button>
         </form>
@@ -246,33 +246,65 @@
 </div>
 
 <script>
-    // --- UTILITY FUNCTIONS ---
-    function toBase64(file) {
+document.addEventListener('DOMContentLoaded', () => {
+
+    // --- UTILITY & HELPER FUNCTIONS ---
+    const toBase64 = file => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = error => reject(error);
+    });
+
+    const showSpinner = () => console.log("Loading...");
+    const hideSpinner = () => console.log("Done.");
+    const showAlert = (message, type = 'info') => alert(message);
+
+    /**
+     * A wrapper for google.script.run calls to handle spinners, errors, and responses.
+     * @param {string} functionName - The name of the backend function to call.
+     * @param {...any} args - Arguments to pass to the backend function.
+     * @returns {Promise<object>} A promise that resolves with the successful response data.
+     */
+    function runServerFn(functionName, ...args) {
+        showSpinner();
         return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = error => reject(error);
+            google.script.run
+                .withSuccessHandler(response => {
+                    hideSpinner();
+                    if (response.ok) {
+                        resolve(response);
+                    } else {
+                        const errorMessage = `Feil: ${response.error || 'En ukjent feil oppstod.'}`;
+                        showAlert(errorMessage, 'error');
+                        reject(new Error(errorMessage));
+                    }
+                })
+                .withFailureHandler(err => {
+                    hideSpinner();
+                    const errorMessage = `Serverfeil: ${err.message}`;
+                    showAlert(errorMessage, 'error');
+                    reject(err);
+                })
+                [functionName](...args);
         });
     }
 
-    function showSpinner() { /* Implement spinner logic if needed */ console.log("Loading..."); }
-    function hideSpinner() { /* Implement spinner logic if needed */ console.log("Done."); }
-    function showAlert(message, type = 'info') { alert(message); }
-
     // --- TAB HANDLING ---
+    const hmsTabs = document.querySelector('.hms-tabs');
+    hmsTabs.addEventListener('click', (e) => {
+        if (e.target && e.target.matches('.hms-tab-item')) {
+            showTab(e.target.dataset.tab);
+        }
+    });
+
     function showTab(tabId) {
-        // Hide all tab contents
         document.querySelectorAll('.hms-tab-content').forEach(content => content.classList.remove('active'));
-        // Deactivate all tab items
         document.querySelectorAll('.hms-tab-item').forEach(item => item.classList.remove('active'));
 
-        // Show the selected tab content
         document.getElementById(tabId).classList.add('active');
-        // Activate the selected tab item
-        document.querySelector(`.hms-tab-item[onclick="showTab('${tabId}')"]`).classList.add('active');
+        hmsTabs.querySelector(`[data-tab='${tabId}']`).classList.add('active');
 
-        // Load data for the activated tab
         loadTabData(tabId);
     }
 
@@ -292,108 +324,132 @@
     }
 
     // --- MODAL HANDLING ---
-    function openModal(modalId) { document.getElementById(modalId).style.display = 'block'; }
-    function closeModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+    const checklistModal = document.getElementById('checklist-modal');
+    const openModal = () => checklistModal.style.display = 'block';
+    const closeModal = () => checklistModal.style.display = 'none';
+    checklistModal.querySelector('.hms-modal-close').addEventListener('click', closeModal);
 
-    // --- RISK ASSESSMENT ---
-    function loadRiskAssessmentTemplates() {
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    const select = document.getElementById('risk-template-select');
-                    select.innerHTML = '<option value="">Velg en mal...</option>';
-                    response.templates.forEach(t => {
-                        select.innerHTML += `<option value="${t.id}">${t.name}</option>`;
-                    });
-                } else {
-                    showAlert('Feil ved lasting av maler: ' + response.error, 'error');
-                }
-            })
-            .withFailureHandler(err => {
-                hideSpinner();
-                showAlert('Serverfeil: ' + err.message, 'error');
-            })
-            .hmsGetRiskAssessmentTemplates();
+    // --- DOM RENDERING (XSS Safe) ---
+    function renderChecklists(checklists) {
+        const tbody = document.getElementById('checklists-table').querySelector('tbody');
+        tbody.innerHTML = ''; // Clear existing rows
+        checklists.forEach(c => {
+            const tr = tbody.insertRow();
+
+            tr.insertCell().textContent = c.name || '';
+            tr.insertCell().textContent = c.description || '';
+            tr.insertCell().textContent = c.frequency || '';
+
+            const actionsCell = tr.insertCell();
+            const editButton = document.createElement('button');
+            editButton.textContent = 'Rediger';
+            editButton.dataset.id = c.id;
+            editButton.classList.add('edit-checklist');
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = 'Slett';
+            deleteButton.dataset.id = c.id;
+            deleteButton.classList.add('delete-checklist', 'delete');
+
+            actionsCell.append(editButton, deleteButton);
+        });
     }
 
-    function loadRiskAssessments() { /* Placeholder */ }
+    function renderHistory(history) {
+        const tbody = document.getElementById('history-table').querySelector('tbody');
+        tbody.innerHTML = ''; // Clear existing rows
+        history.forEach(h => {
+            const tr = tbody.insertRow();
+            tr.insertCell().textContent = new Date(h.timestamp).toLocaleString();
+            tr.insertCell().textContent = h.user || '';
+            tr.insertCell().textContent = h.activityType || '';
+            tr.insertCell().textContent = h.description || '';
+        });
+    }
 
-    document.getElementById('start-risk-form').addEventListener('submit', e => {
+    // --- RISK ASSESSMENT ---
+    async function loadRiskAssessmentTemplates() {
+        try {
+            const response = await runServerFn('hmsGetRiskAssessmentTemplates');
+            const select = document.getElementById('risk-template-select');
+            select.innerHTML = '<option value="">Velg en mal...</option>';
+            response.templates.forEach(t => {
+                const option = document.createElement('option');
+                option.value = t.id;
+                option.textContent = t.name;
+                select.appendChild(option);
+            });
+        } catch (e) {
+            console.error("Failed to load risk assessment templates:", e);
+        }
+    }
+
+    function loadRiskAssessments() { /* Placeholder for future implementation */ }
+
+    document.getElementById('start-risk-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const templateId = document.getElementById('risk-template-select').value;
         const areaName = document.getElementById('risk-area-name').value;
         if (!templateId || !areaName) {
-            showAlert('Vennligst velg en mal og angi et områdenavn.', 'warning');
-            return;
+            return showAlert('Vennligst velg en mal og angi et områdenavn.', 'warning');
         }
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    showAlert('Risikovurdering startet!', 'success');
-                    document.getElementById('start-risk-form').reset();
-                    loadRiskAssessments(); // Refresh list
-                } else {
-                    showAlert('Kunne ikke starte vurdering: ' + response.error, 'error');
-                }
-            })
-            .hmsStartRiskAssessment(templateId, areaName);
+        try {
+            await runServerFn('hmsStartRiskAssessment', templateId, areaName);
+            showAlert('Risikovurdering startet!', 'success');
+            e.target.reset();
+            loadRiskAssessments(); // Refresh list
+        } catch (e) {
+            console.error("Could not start risk assessment:", e);
+        }
     });
 
     // --- CHECKLISTS ---
-    function loadChecklists() {
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    const tbody = document.getElementById('checklists-table').querySelector('tbody');
-                    tbody.innerHTML = '';
-                    response.checklists.forEach(c => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${c.name}</td>
-                                <td>${c.description}</td>
-                                <td>${c.frequency}</td>
-                                <td>
-                                    <button onclick="editChecklist('${c.id}')">Rediger</button>
-                                    <button class="delete" onclick="deleteChecklist('${c.id}')">Slett</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                } else {
-                    showAlert('Feil ved lasting av sjekklister: ' + response.error, 'error');
-                }
-            })
-            .hmsGetChecklists();
+    async function loadChecklists() {
+        try {
+            const response = await runServerFn('hmsGetChecklists');
+            renderChecklists(response.checklists);
+        } catch (e) {
+            console.error("Failed to load checklists:", e);
+        }
     }
 
     document.getElementById('new-checklist-btn').addEventListener('click', () => {
         document.getElementById('checklist-form').reset();
         document.getElementById('checklist-id').value = '';
-        document.getElementById('checklist-modal-title').innerText = 'Ny Sjekkliste';
+        document.getElementById('checklist-modal-title').textContent = 'Ny Sjekkliste';
         document.getElementById('checklist-items-container').innerHTML = '';
         addChecklistItem(); // Add one empty item to start
-        openModal('checklist-modal');
+        openModal();
     });
 
     function addChecklistItem(text = '') {
         const container = document.getElementById('checklist-items-container');
         const itemDiv = document.createElement('div');
-        itemDiv.innerHTML = `<input type="text" class="checklist-item-input" value="${text}" placeholder="Sjekkpunktbeskrivelse"> <button type="button" onclick="this.parentElement.remove()">Fjern</button>`;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'checklist-item-input';
+        input.value = text;
+        input.placeholder = 'Sjekkpunktbeskrivelse';
+
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.textContent = 'Fjern';
+        removeButton.addEventListener('click', () => itemDiv.remove());
+
+        itemDiv.append(input, removeButton);
         container.appendChild(itemDiv);
     }
 
-    document.getElementById('checklist-form').addEventListener('submit', e => {
+    document.getElementById('add-checklist-item-btn').addEventListener('click', () => addChecklistItem());
+
+    document.getElementById('checklist-form').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const items = [];
-        document.querySelectorAll('.checklist-item-input').forEach(input => {
-            if (input.value) items.push({ text: input.value });
-        });
+        const items = Array.from(document.querySelectorAll('.checklist-item-input'))
+            .map(input => input.value.trim())
+            .filter(Boolean)
+            .map(text => ({ text }));
+
         const payload = {
             id: document.getElementById('checklist-id').value,
             name: document.getElementById('checklist-name').value,
@@ -402,39 +458,39 @@
             itemsJson: JSON.stringify(items)
         };
 
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    showAlert('Sjekkliste lagret!', 'success');
-                    closeModal('checklist-modal');
-                    loadChecklists();
-                } else {
-                    showAlert('Lagring feilet: ' + response.error, 'error');
-                }
-            })
-            .hmsSaveChecklist(payload);
+        try {
+            await runServerFn('hmsSaveChecklist', payload);
+            showAlert('Sjekkliste lagret!', 'success');
+            closeModal();
+            loadChecklists();
+        } catch (e) {
+            console.error("Failed to save checklist:", e);
+        }
     });
 
-    function deleteChecklist(id) {
-        if (!confirm('Er du sikker på at du vil slette denne sjekklisten?')) return;
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    showAlert('Sjekkliste slettet.', 'success');
-                    loadChecklists();
-                } else {
-                    showAlert('Sletting feilet: ' + response.error, 'error');
-                }
-            })
-            .hmsDeleteChecklist(id);
-    }
+    document.getElementById('checklists-table').addEventListener('click', async (e) => {
+        const target = e.target;
+        const checklistId = target.dataset.id;
+
+        if (!checklistId) return;
+
+        if (target.matches('.delete-checklist')) {
+            if (!confirm('Er du sikker på at du vil slette denne sjekklisten?')) return;
+            try {
+                await runServerFn('hmsDeleteChecklist', checklistId);
+                showAlert('Sjekkliste slettet.', 'success');
+                loadChecklists();
+            } catch (e) {
+                console.error("Failed to delete checklist:", e);
+            }
+        } else if (target.matches('.edit-checklist')) {
+            // Future implementation: Fetch single checklist data and populate modal
+            showAlert(`Redigering av sjekkliste ${checklistId} er ikke implementert ennå.`);
+        }
+    });
 
     // --- DEVIATIONS ---
-    document.getElementById('deviation-form').addEventListener('submit', async e => {
+    document.getElementById('deviation-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const fileInput = document.getElementById('deviation-attachment');
         let attachment = null;
@@ -454,81 +510,49 @@
             attachment: attachment
         };
 
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    showAlert(`Avvik registrert! En oppgave med ID ${response.linkedTaskId} er opprettet.`, 'success');
-                    document.getElementById('deviation-form').reset();
-                } else {
-                    showAlert('Registrering feilet: ' + response.error, 'error');
-                }
-            })
-            .hmsRegisterDeviation(payload);
+        try {
+            const response = await runServerFn('hmsRegisterDeviation', payload);
+            showAlert(`Avvik registrert! En oppgave med ID ${response.linkedTaskId} er opprettet.`, 'success');
+            e.target.reset();
+        } catch (e) {
+            console.error("Failed to register deviation:", e);
+        }
     });
 
     // --- HISTORY & REPORTING ---
-    function loadHistory() {
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    const tbody = document.getElementById('history-table').querySelector('tbody');
-                    tbody.innerHTML = '';
-                    response.history.forEach(h => {
-                        tbody.innerHTML += `
-                            <tr>
-                                <td>${new Date(h.timestamp).toLocaleString()}</td>
-                                <td>${h.user}</td>
-                                <td>${h.activityType}</td>
-                                <td>${h.description}</td>
-                            </tr>
-                        `;
-                    });
-                } else {
-                    showAlert('Feil ved lasting av historikk: ' + response.error, 'error');
-                }
-            })
-            .hmsGetHistory(null); // Pass null for no filters for now
+    async function loadHistory() {
+        try {
+            const response = await runServerFn('hmsGetHistory', null);
+            renderHistory(response.history);
+        } catch (e) {
+            console.error("Failed to load history:", e);
+        }
     }
 
-    document.getElementById('generate-report-btn').addEventListener('click', () => {
-        // This is a simplified client-side report generation for demonstration.
-        // A more complex implementation would call a backend function.
-        showSpinner();
-        google.script.run
-            .withSuccessHandler(response => {
-                hideSpinner();
-                if (response.ok) {
-                    const reportOutput = document.getElementById('report-output');
-                    let reportText = `HMS Årsrapport - Generert ${new Date().toLocaleDateString()}\n\n`;
-                    reportText += "========================================\n\n";
+    document.getElementById('generate-report-btn').addEventListener('click', async () => {
+        try {
+            const response = await runServerFn('hmsGenerateReport');
+            const reportOutput = document.getElementById('report-output');
 
-                    const deviations = response.report.deviations.length;
-                    const assessments = response.report.assessments.length;
+            const { deviations, assessments, log } = response.report;
 
-                    reportText += `Oppsummering:\n`;
-                    reportText += `- Antall registrerte avvik: ${deviations}\n`;
-                    reportText += `- Antall gjennomførte risikovurderinger: ${assessments}\n\n`;
+            let reportText = `HMS Årsrapport - Generert ${new Date().toLocaleDateString()}\n\n`;
+            reportText += "========================================\n\n";
+            reportText += `Oppsummering:\n`;
+            reportText += `- Antall registrerte avvik: ${deviations.length}\n`;
+            reportText += `- Antall gjennomførte risikovurderinger: ${assessments.length}\n\n`;
+            reportText += "Fullført HMS-arbeid:\n";
+            log.forEach(item => {
+                reportText += `- [${new Date(item.timestamp).toLocaleString()}] ${item.activityType}: ${item.description}\n`;
+            });
 
-                    reportText += "Fullført HMS-arbeid:\n";
-                    response.report.log.forEach(item => {
-                       reportText += `- [${new Date(item.timestamp).toLocaleString()}] ${item.activityType}: ${item.description}\n`;
-                    });
-
-                    reportOutput.textContent = reportText;
-
-                } else {
-                    showAlert('Kunne ikke generere rapport: ' + response.error, 'error');
-                }
-            })
-            .hmsGenerateReport();
+            reportOutput.textContent = reportText;
+        } catch (e) {
+            console.error("Failed to generate report:", e);
+        }
     });
 
     // --- INITIAL LOAD ---
-    document.addEventListener('DOMContentLoaded', () => {
-        showTab('risk'); // Show the first tab by default
-    });
+    showTab('risk');
+});
 </script>

@@ -14,7 +14,7 @@
     .title{font-size:22px;font-weight:700}
     .muted{color:var(--muted);font-size:13px}
     .controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
-    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer;font-size:14px}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer;font-size:13px}
     .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
     .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
     .btn:disabled{cursor:not-allowed;opacity:0.6}
@@ -120,16 +120,19 @@
   </div>
 
   <script>
+    // --- CONFIGURATION ---
     const CONFIG = {
       MAX_FILE_SIZE: 5 * 1024 * 1024, // 5 MB
       ALLOWED_MIMETYPES: ['image/jpeg', 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
     };
     const TASK_STATUS = { OPEN: 'Open', COMPLETED: 'Completed' };
 
-    let tasks = []; // Full dataset for client-side operations
+    // --- STATE ---
+    let tasks = [];
     const modal = document.getElementById('taskModal');
     const btnNewTask = document.getElementById('btnNewTask');
 
+    // --- UTILITIES ---
     function escapeHTML(str) {
       if (str === null || str === undefined) return '';
       const p = document.createElement('p');
@@ -138,8 +141,10 @@
     }
 
     function toast(msg, kind){
-      const t=document.createElement('div'); t.className='toast ' + (kind||'');
-      t.textContent=String(msg||''); document.body.appendChild(t);
+      const t=document.createElement('div');
+      t.className='toast ' + (kind||'');
+      t.textContent=String(msg||'');
+      document.body.appendChild(t);
       setTimeout(()=>t.remove(), 2800);
     }
 
@@ -148,6 +153,20 @@
       document.getElementById('status').textContent = 'Feil';
     }
 
+    function validateFile(file) {
+      if (!file) return true;
+      if (file.size > CONFIG.MAX_FILE_SIZE) {
+        toast(`Filen er for stor. Maksimal størrelse er ${CONFIG.MAX_FILE_SIZE / 1024 / 1024} MB.`, 'err');
+        return false;
+      }
+      if (!CONFIG.ALLOWED_MIMETYPES.includes(file.type)) {
+        toast('Ugyldig filtype. Tillatte typer er JPEG, PNG, PDF, DOCX, XLSX.', 'err');
+        return false;
+      }
+      return true;
+    }
+
+    // --- MODAL MANAGEMENT ---
     function openModal() {
       document.getElementById('taskForm').reset();
       document.getElementById('taskId').value = '';
@@ -161,6 +180,7 @@
       btnNewTask.focus(); // Return focus for accessibility
     }
 
+    // --- RENDERING ---
     function renderTasks(displayTasks) {
       const grid = document.getElementById('taskGrid');
       grid.innerHTML = '';
@@ -199,6 +219,7 @@
       });
     }
 
+    // --- DATA FETCHING & ACTIONS ---
     function fetchTasks() {
       document.getElementById('status').textContent = 'Laster oppgaver...';
       google.script.run
@@ -267,86 +288,23 @@
                     fetchTasks();
                 } else {
                     handleScriptFailure({ message: response.message || 'Kunne ikke oppdatere status.' });
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Bytt Status';
+                    }
                 }
             })
-            .withFailureHandler(handleScriptFailure)
+            .withFailureHandler(err => {
+                handleScriptFailure(err);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Bytt Status';
+                }
+            })
             .gjoremalUpdateStatus(id, newStatus);
     }
 
-    function validateFile(file) {
-      if (!file) return true;
-      if (file.size > CONFIG.MAX_FILE_SIZE) {
-        toast(`Filen er for stor. Maksimal størrelse er ${CONFIG.MAX_FILE_SIZE / 1024 / 1024} MB.`, 'err');
-        return false;
-      }
-      if (!CONFIG.ALLOWED_MIMETYPES.includes(file.type)) {
-        toast('Ugyldig filtype. Tillatte typer er JPEG, PNG, PDF, DOCX, XLSX.', 'err');
-        return false;
-      }
-      return true;
-    }
-
-    document.getElementById('taskForm').addEventListener('submit', function(e) {
-      e.preventDefault();
-      const submitBtn = this.querySelector('button[type="submit"]');
-      const fileInput = document.getElementById('taskAttachment');
-      const file = fileInput.files[0];
-
-      if (!validateFile(file)) {
-        fileInput.value = '';
-        return;
-      }
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Lagrer...';
-
-      const sendPayload = (payload) => {
-        google.script.run
-          .withSuccessHandler(response => {
-            if (response.ok) {
-              toast('Oppgave lagret!', 'ok');
-              closeModal();
-              fetchTasks();
-            } else {
-              handleScriptFailure({ message: response.message || 'Kunne ikke lagre oppgaven.' });
-            }
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Lagre';
-          })
-          .withFailureHandler(err => {
-            handleScriptFailure(err);
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Lagre';
-          })
-          .gjoremalSave(payload);
-      };
-
-      const payload = {
-        id: document.getElementById('taskId').value,
-        title: document.getElementById('taskTitle').value,
-        description: document.getElementById('taskDesc').value,
-        assignee: document.getElementById('taskAssignee').value,
-        dueDate: document.getElementById('taskDueDate').value,
-        status: document.getElementById('taskStatus').value,
-      };
-
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          payload.attachment = {
-            base64: e.target.result.split(',')[1],
-            mimeType: file.type,
-            name: file.name
-          };
-          sendPayload(payload);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        payload.attachment = null;
-        sendPayload(payload);
-      }
-    });
-
+    // --- FILTERS & USER POPULATION ---
     function applyFilters() {
       const searchTerm = document.getElementById('searchInput').value.toLowerCase();
       const status = document.getElementById('statusFilter').value;
@@ -381,7 +339,9 @@
       });
     }
 
+    // --- EVENT LISTENERS ---
     document.addEventListener('DOMContentLoaded', () => {
+      // Initial data load
       fetchTasks();
       google.script.run
         .withSuccessHandler(response => {
@@ -394,13 +354,78 @@
         .withFailureHandler(handleScriptFailure)
         .gjoremalGetUsers();
 
+      // Control event listeners
       btnNewTask.addEventListener('click', openModal);
       document.getElementById('searchInput').addEventListener('input', applyFilters);
       document.getElementById('statusFilter').addEventListener('change', applyFilters);
       document.getElementById('assigneeFilter').addEventListener('change', applyFilters);
+
+      // Modal event listeners
       document.getElementById('btnCloseModal').addEventListener('click', closeModal);
       document.getElementById('btnCancelModal').addEventListener('click', closeModal);
 
+      document.getElementById('taskForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const fileInput = document.getElementById('taskAttachment');
+        const file = fileInput.files[0];
+
+        if (!validateFile(file)) {
+          fileInput.value = '';
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Lagrer...';
+
+        const sendPayload = (payload) => {
+          google.script.run
+            .withSuccessHandler(response => {
+              if (response.ok) {
+                toast('Oppgave lagret!', 'ok');
+                closeModal();
+                fetchTasks();
+              } else {
+                handleScriptFailure({ message: response.message || 'Kunne ikke lagre oppgaven.' });
+              }
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Lagre';
+            })
+            .withFailureHandler(err => {
+              handleScriptFailure(err);
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Lagre';
+            })
+            .gjoremalSave(payload);
+        };
+
+        const payload = {
+          id: document.getElementById('taskId').value,
+          title: document.getElementById('taskTitle').value,
+          description: document.getElementById('taskDesc').value,
+          assignee: document.getElementById('taskAssignee').value,
+          dueDate: document.getElementById('taskDueDate').value,
+          status: document.getElementById('taskStatus').value,
+        };
+
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            payload.attachment = {
+              base64: e.target.result.split(',')[1],
+              mimeType: file.type,
+              name: file.name
+            };
+            sendPayload(payload);
+          };
+          reader.readAsDataURL(file);
+        } else {
+          payload.attachment = null;
+          sendPayload(payload);
+        }
+      });
+
+      // Global event listeners
       window.addEventListener('click', e => {
         if (e.target === modal) closeModal();
       });
@@ -409,6 +434,7 @@
         if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
       });
 
+      // Event delegation for all task actions
       document.getElementById('taskGrid').addEventListener('click', e => {
         const card = e.target.closest('.task-card');
         if (!card) return;

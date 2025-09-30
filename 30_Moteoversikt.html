@@ -414,6 +414,19 @@
     DOM.instanceNotice.style.display = isInstance ? 'block' : 'none';
   }
 
+  function applyInstanceLockUI(isInstance) {
+    const fieldsToLock = [
+        DOM.type, DOM.dato, DOM.start, DOM.slutt, DOM.sted, DOM.tittel,
+        DOM.chkRecurrence, DOM.recurrenceFrequency, DOM.recurrenceDay, DOM.recurrenceOccurrence
+    ];
+    fieldsToLock.forEach(el => {
+        if (el) el.disabled = isInstance;
+    });
+
+    DOM.btnSaveMeeting.style.display = isInstance ? 'none' : 'inline-block';
+    DOM.instanceNotice.style.display = isInstance ? 'block' : 'none';
+  }
+
   function updateStatusBadge(){
     if (!state.meetingStatus){
         DOM.statusBadge.style.display='none';

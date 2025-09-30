@@ -75,9 +75,9 @@
           <span class="pill ver" title="Versjon"><?= VERSION ?></span>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <span id="statusBadge" class="pill" style="display:none"></span>
+          <span id="statusBadge" class="pill" style="display:none" role="status" aria-live="polite"></span>
           <button id="btnUnlock" class="btn danger" style="display:none">Lås opp</button>
-          <span id="liveBadge" class="pill" style="display:none">Oppdateringer</span>
+          <span id="liveBadge" class="pill" style="display:none" role="status" aria-live="polite">Oppdateringer</span>
         </div>
       </div>
 
@@ -244,14 +244,73 @@
 <script src="SRC/calendar.js"></script>
 <script>
   const $ = s => document.querySelector(s);
-  const LOCKED_STATUSES = ['Protokoll under godkjenning','Protokoll godkjent','Arkivert'];
+
+  const CONFIG = {
+    LOCKED_STATUSES: ['Protokoll under godkjenning', 'Protokoll godkjent', 'Arkivert'],
+    VIEWABLE_PROTOCOL_STATUSES: ['Protokoll godkjent', 'Arkivert'],
+    CSS_CLASSES: {
+        ACTIVE: 'active',
+        LOCKED: 'locked',
+        VISIBLE: 'visible'
+    },
+    ELEMENT_IDS: {
+        MEETING_CARD: '#meetingCard',
+        AGENDA_CARD: '#agendaCard',
+        DOCUMENTS_CARD: '#documentsCard',
+    },
+    FILE_CONFIG: {
+        MAX_SIZE: 10 * 1024 * 1024, // 10MB
+        ALLOWED_TYPES: [
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'image/jpeg',
+            'image/png'
+        ]
+    }
+  };
+
   let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, calendarInstance: null };
+  const DOM = {};
+
+  function initDOMCache() {
+    const ids = [
+        'meetingCard', 'agendaCard', 'documentsCard', 'mote-id', 'type', 'dato', 'start',
+        'slutt', 'sted', 'tittel', 'participants-list', 'conflictBanner', 'saveStatus',
+        'planned', 'calendar-container', 'list-container', 'export-container', 'export-url',
+        'statusBadge', 'btnUnlock', 'liveBadge', 'moveWrap', 'moveTo', 'saksnr', 'sakTittel',
+        'linkedTask', 'innspillFrom', 'innspillText', 'innspillList', 'forslagText',
+        'vedtakText', 'documentList', 'video-actions', 'scopePast', 'scopePlanned',
+        'viewToggleList', 'viewToggleCalendar', 'btnGoToChat', 'btnJoinVideo',
+        'btnSaveMeeting', 'btnSendInnkalling', 'btnNewMeeting', 'btnRefresh',
+        'btnExportCalendar', 'btnViewProtocol', 'btnReload', 'btnNewSak', 'btnLagreSak',
+        'btnNyttInnspill', 'btnMoveSak', 'btnUpload', 'fileUpload'
+    ];
+    ids.forEach(id => {
+        const key = id.replace(/-([a-z])/g, g => g[1].toUpperCase());
+        DOM[key] = $(`#${id}`);
+    });
+  }
+
+  function handleScriptFailure(err) {
+    setStatus(`Feil: ${err.message || 'En ukjent serverfeil oppstod.'}`);
+  }
+
+  function validateFile(file) {
+    if (file.size > CONFIG.FILE_CONFIG.MAX_SIZE) {
+        throw new Error(`Filen er for stor. Maks ${CONFIG.FILE_CONFIG.MAX_SIZE / 1024 / 1024}MB.`);
+    }
+    if (!CONFIG.FILE_CONFIG.ALLOWED_TYPES.includes(file.type)) {
+        throw new Error('Filtype ikke støttet. Kun PDF, Word, Excel og bilder er tillatt.');
+    }
+    return true;
+  }
 
   function escapeHtml(unsafe) {
     if (typeof unsafe !== 'string') return '';
     return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
-  function setStatus(msg){ $('#saveStatus').textContent = msg||''; }
+  function setStatus(msg){ DOM.saveStatus.textContent = msg||''; }
   function fmtDate(d){ try{ return new Date(d).toLocaleDateString('no-NO'); }catch(_){ return ''; } }
   function toIsoDate(val){
     const s = String(val||'').trim();
@@ -261,60 +320,385 @@
     if (m){ return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`; }
     return s;
   }
-  const isLocked = st => !!st && LOCKED_STATUSES.includes(String(st).trim());
+  const isLocked = st => !!st && CONFIG.LOCKED_STATUSES.includes(String(st).trim());
 
   function isValidHttpUrl(string) {
+    if (!string || typeof string !== 'string') return false;
+
     let url;
     try {
-      url = new URL(string);
+        url = new URL(string.trim());
     } catch (_) {
-      return false;
+        return false;
     }
-    return url.protocol === "http:" || url.protocol === "https:";
+
+    // Only allow safe protocols to prevent XSS via javascript: links
+    const safeProtocols = ['http:', 'https:'];
+    return safeProtocols.includes(url.protocol);
   }
 
   function applyLockUI(locked){
-    const rootA = $('#agendaCard'), rootM = $('#meetingCard'), rootD = $('#documentsCard');
-    [rootA, rootM, rootD].forEach(root=>{
+    [DOM.agendaCard, DOM.meetingCard, DOM.documentsCard].forEach(root => {
       if (!root) return;
-      root.classList.toggle('locked', !!locked);
+      root.classList.toggle(CONFIG.CSS_CLASSES.LOCKED, !!locked);
       root.querySelectorAll('input,textarea,select').forEach(el => {
         if (el.id === 'saksnr') return;
         el.disabled = !!locked;
       });
-      root.querySelectorAll('button').forEach(btn=>{
+      root.querySelectorAll('button').forEach(btn => {
         const id = btn.id || '';
-        const whitelist = ['btnUnlock','btnReload','btnRefresh'];
+        const whitelist = ['btnUnlock','btnReload','btnRefresh', 'btnExportCalendar'];
         btn.disabled = !!locked && !whitelist.includes(id);
       });
     });
-    $('#moveWrap').style.display = (state.sakId && !locked) ? 'inline-flex' : 'none';
+    DOM.moveWrap.style.display = (state.sakId && !locked) ? 'inline-flex' : 'none';
   }
 
   function updateStatusBadge(){
-    const b = $('#statusBadge');
-    if (!state.meetingStatus){ b.style.display='none'; return; }
-    b.textContent = state.meetingStatus;
-    b.className = 'pill' + (isLocked(state.meetingStatus)?' lock':'');
-    b.style.display='inline-block';
-    $('#btnUnlock').style.display = (isLocked(state.meetingStatus) && state.canUnlock) ? 'inline-flex' : 'none';
+    if (!state.meetingStatus){
+        DOM.statusBadge.style.display='none';
+        return;
+    }
+    DOM.statusBadge.textContent = state.meetingStatus;
+    DOM.statusBadge.className = 'pill' + (isLocked(state.meetingStatus) ? ' ' + CONFIG.CSS_CLASSES.LOCKED : '');
+    DOM.statusBadge.style.display='inline-block';
+    DOM.btnUnlock.style.display = (isLocked(state.meetingStatus) && state.canUnlock) ? 'inline-flex' : 'none';
   }
 
   // init
   google.script.run.withSuccessHandler(res => {
     state.user = res?.user || null;
-    $('#innspillFrom').textContent = 'Fra: ' + (state.user?.email || '—');
+    initDOMCache(); // Initialize the DOM cache first
+    DOM.innspillFrom.textContent = 'Fra: ' + (state.user?.email || '—');
     initializeCalendar();
     refreshMeetings();
+    initEventListeners(); // Set up all event listeners
     // Load board members for participant selection
     if (google.script.run.getBoardMembers) {
       google.script.run.withSuccessHandler(drawParticipants).getBoardMembers();
     }
   }).uiBootstrap();
 
+  function initEventListeners() {
+    // Video/Chat Actions
+    DOM.sted.addEventListener('input', function(e) {
+      const url = e.target.value.trim();
+      if (isValidHttpUrl(url)) {
+        DOM.videoActions.style.display = 'flex';
+      } else {
+        DOM.videoActions.style.display = 'none';
+      }
+    });
+
+    DOM.btnJoinVideo.addEventListener('click', function() {
+      const url = DOM.sted.value.trim();
+      if (isValidHttpUrl(url)) {
+        window.open(url, '_blank');
+      }
+    });
+
+    DOM.btnGoToChat.addEventListener('click', function() {
+      DOM.innspillList.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      DOM.innspillText.focus();
+    });
+
+    // SAVE meeting
+    DOM.btnSaveMeeting.addEventListener('click', function(){
+        const participants = Array.from(DOM.participantsList.querySelectorAll('input:checked')).map(cb => cb.value);
+        const form = {
+            moteId: DOM.moteId.value || state.moteId || '',
+            type:   DOM.type.value,
+            datoISO:  toIsoDate(DOM.dato.value),
+            start:  DOM.start.value,
+            slutt:  DOM.slutt.value,
+            sted:   DOM.sted.value,
+            tittel: DOM.tittel.value,
+            agenda: '',
+            participants: participants
+        };
+        if (!form.tittel.trim()){ setStatus('Møtetittel er påkrevd.'); return; }
+        if (!form.datoISO){ setStatus('Velg dato.'); return; }
+
+        setStatus('Lagrer …');
+        google.script.run
+            .withSuccessHandler((res)=>{
+                if (res && res.ok){
+                state.moteId = res.id || state.moteId;
+                DOM.moteId.value = state.moteId||'';
+                setStatus(res.message || 'Lagret.');
+                refreshMeetings();
+                } else {
+                setStatus(res?.message || 'Kunne ikke lagre.');
+                }
+            })
+            .withFailureHandler(handleScriptFailure)
+            .upsertMeeting(form);
+    });
+
+    DOM.btnSendInnkalling.addEventListener('click', function() {
+        if (!state.moteId) {
+        setStatus('Velg et møte først.');
+        return;
+        }
+        if (!confirm('Er du sikker på at du vil sende innkalling til alle eiere?')) {
+        return;
+        }
+        setStatus('Sender innkalling...');
+        google.script.run
+        .withSuccessHandler(res => {
+            setStatus(res.message || (res.ok ? 'Innkalling sendt.' : 'En ukjent feil oppstod.'));
+        })
+        .withFailureHandler(handleScriptFailure)
+        .sendInnkalling(state.moteId);
+    });
+
+    // Other top-level buttons
+    DOM.btnNewMeeting.addEventListener('click', clearMeeting);
+    DOM.btnRefresh.addEventListener('click', refreshMeetings);
+
+    DOM.btnExportCalendar.addEventListener('click', function() {
+        setStatus('Henter eksport-URL...');
+        if (typeof google.script.run.getCalendarExportUrl !== 'function') {
+            setStatus('Feil: Funksjonen getCalendarExportUrl er ikke tilgjengelig. Sjekk at CalendarExport.gs er inkludert.');
+            DOM.exportUrl.value = 'Funksjonen for eksport er ikke lastet inn.';
+            DOM.exportContainer.style.display = 'block';
+            return;
+        }
+
+        google.script.run
+        .withSuccessHandler(res => {
+            if (res.ok) {
+            DOM.exportUrl.value = res.url;
+            DOM.exportContainer.style.display = 'block';
+            setStatus('URL for kalendereksport er klar.');
+            } else {
+            DOM.exportUrl.value = res.message || 'Kunne ikke hente URL.';
+            DOM.exportContainer.style.display = 'block';
+            setStatus(res.message || 'En feil oppstod.');
+            }
+        })
+        .withFailureHandler(handleScriptFailure)
+        .getCalendarExportUrl();
+    });
+
+    DOM.btnViewProtocol.addEventListener('click', function(){
+        if (!state.moteId) return;
+        setStatus('Henter forhåndsvisning...');
+        if (!google.script.run.getProtocolPreviewUrl){
+        return setStatus('Funksjonen getProtocolPreviewUrl er ikke tilgjengelig.');
+        }
+        google.script.run
+        .withSuccessHandler(res => {
+            if (res && res.url) {
+            window.open(res.url, '_blank');
+            setStatus('Forhåndsvisning åpnet i ny fane.');
+            } else {
+            setStatus('Kunne ikke hente forhåndsvisning.');
+            }
+        })
+        .withFailureHandler(handleScriptFailure)
+        .getProtocolPreviewUrl(state.moteId);
+    });
+
+    DOM.btnReload.addEventListener('click', ()=> { if (state.moteId) refreshCurrentMeeting(); });
+
+    // View toggles
+    DOM.scopePlanned.addEventListener('click', ()=>{
+        DOM.scopePlanned.classList.add(CONFIG.CSS_CLASSES.ACTIVE);
+        DOM.scopePast.classList.remove(CONFIG.CSS_CLASSES.ACTIVE);
+        refreshMeetings();
+    });
+    DOM.scopePast.addEventListener('click', ()=>{
+        DOM.scopePast.classList.add(CONFIG.CSS_CLASSES.ACTIVE);
+        DOM.scopePlanned.classList.remove(CONFIG.CSS_CLASSES.ACTIVE);
+        refreshMeetings();
+    });
+    DOM.viewToggleList.addEventListener('click', () => {
+        DOM.listContainer.style.display = 'block';
+        DOM.calendarContainer.style.display = 'none';
+        DOM.viewToggleList.classList.add(CONFIG.CSS_CLASSES.ACTIVE);
+        DOM.viewToggleCalendar.classList.remove(CONFIG.CSS_CLASSES.ACTIVE);
+    });
+    DOM.viewToggleCalendar.addEventListener('click', () => {
+        DOM.listContainer.style.display = 'none';
+        DOM.calendarContainer.style.display = 'block';
+        DOM.viewToggleCalendar.classList.add(CONFIG.CSS_CLASSES.ACTIVE);
+        DOM.viewToggleList.classList.remove(CONFIG.CSS_CLASSES.ACTIVE);
+    });
+
+    // Unlock meeting
+    DOM.btnUnlock.addEventListener('click', function(){
+        if (!state.moteId) return;
+        setStatus('Låser opp …');
+        if (!google.script.run.unlockMeeting){
+        setStatus('Server mangler funksjonen unlockMeeting(moteId).');
+        return;
+        }
+        google.script.run.withSuccessHandler(res=>{
+        if (res && res.ok){
+            state.meetingStatus = res.status || 'Planlagt';
+            updateStatusBadge();
+            applyLockUI(false);
+            setStatus('Møtet er låst opp.');
+        } else {
+            setStatus(res?.message || 'Kunne ikke låse opp.');
+        }
+        }).withFailureHandler(handleScriptFailure).unlockMeeting(state.moteId);
+    });
+
+    // Agenda/Sak actions
+    DOM.btnNewSak.addEventListener('click', function(){
+        if (!state.moteId){ setStatus('Lagre eller velg et møte først.'); return; }
+        setStatus('Oppretter ny sak...');
+        google.script.run.withSuccessHandler(res=>{
+        if (!res || !res.ok) { setStatus(res?.message||'Kunne ikke opprette sak.'); return; }
+        state.sakId = res.sakId; DOM.saksnr.value=res.saksnr; DOM.sakTittel.value='';
+        DOM.innspillText.value=''; DOM.forslagText.value=''; DOM.vedtakText.value='';
+        setStatus('Ny sak opprettet. Du kan nå skrive inn tittel og detaljer.');
+        loadMoveTargets();
+        }).newAgendaItem(state.moteId);
+    });
+
+    DOM.btnLagreSak.addEventListener('click', function(){
+        if (!state.sakId){ setStatus('Opprett eller velg en sak først.'); return; }
+        setStatus('Lagrer sak...');
+        const payload = {
+            sakId: state.sakId,
+            tittel: DOM.sakTittel.value,
+            forslag: DOM.forslagText.value,
+            vedtak:  DOM.vedtakText.value
+        };
+        google.script.run
+            .withSuccessHandler(_=> setStatus('Sak lagret.'))
+            .withFailureHandler(handleScriptFailure)
+            .saveAgenda(payload);
+    });
+
+    DOM.btnNyttInnspill.addEventListener('click', function(){
+        if (!state.sakId){ setStatus('Opprett eller velg en sak først.'); return; }
+        const txt = (DOM.innspillText.value||'').trim();
+        if (!txt){ setStatus('Skriv et innspill først.'); return; }
+        setStatus('Sender innspill...');
+        google.script.run
+            .withSuccessHandler(_=>{
+                DOM.innspillText.value='';
+                setStatus('Innspill lagret.');
+            })
+            .withFailureHandler(handleScriptFailure)
+            .appendInnspill(state.sakId, txt);
+    });
+
+    DOM.btnMoveSak.addEventListener('click', function(){
+        if (!state.sakId){ setStatus('Velg en sak først.'); return; }
+        const toId = DOM.moveTo.value;
+        if (!toId){ setStatus('Velg mål-møte.'); return; }
+        if (!google.script.run.moveAgendaToMeeting){
+        setStatus('Server mangler funksjonen moveAgendaToMeeting(sakId, toMoteId).');
+        return;
+        }
+        setStatus('Flytter sak …');
+        google.script.run.withSuccessHandler(res=>{
+        if (res && res.ok){
+            setStatus('Sak flyttet.');
+            clearSak();
+            DOM.innspillList.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
+        } else {
+            setStatus(res?.message || 'Kunne ikke flytte sak.');
+        }
+        }).withFailureHandler(handleScriptFailure).moveAgendaToMeeting(state.sakId, toId);
+    });
+
+    function loadMoveTargets(){
+        if (!state.moteId) return;
+        google.script.run
+            .withSuccessHandler(meetings => {
+            DOM.moveTo.innerHTML = '<option value="">-- Velg møte --</option>';
+            (meetings || []).forEach(m => {
+                if (m.id !== state.moteId && !isLocked(m.status)) {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = `${m.tittel || m.type} - ${fmtDate(m.dato)}`;
+                DOM.moveTo.appendChild(opt);
+                }
+            });
+            DOM.moveWrap.style.display = state.sakId ? 'inline-flex' : 'none';
+            })
+            .listMeetings_({scope: 'all'});
+    }
+
+    // File upload
+    DOM.btnUpload.addEventListener('click', () => {
+        if (!state.moteId) {
+        setStatus('Lagre eller velg et møte først.');
+        return;
+        }
+        DOM.fileUpload.click();
+    });
+
+    DOM.fileUpload.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        try {
+            validateFile(file);
+        } catch (err) {
+            setStatus(err.message);
+            e.target.value = '';
+            return;
+        }
+
+        setStatus('Laster opp fil...');
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const fileData = event.target.result;
+            google.script.run
+                .withSuccessHandler(res => {
+                    if (res.ok) {
+                        setStatus('Dokument lastet opp.');
+                        if (state.moteId) {
+                            google.script.run.withSuccessHandler(drawDocuments).listMeetingDocuments(state.moteId);
+                        }
+                    } else {
+                        setStatus(res.message || 'Kunne ikke laste opp fil.');
+                    }
+                })
+                .withFailureHandler(handleScriptFailure)
+                .addMeetingDocument(state.moteId, fileData, file.name);
+        };
+        reader.readAsDataURL(file);
+        e.target.value = ''; // Clear input
+    });
+
+    // Optimize polling by pausing when the tab is not visible
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            stopPolling();
+        } else {
+            if (state.moteId) {
+                startPolling();
+            }
+        }
+    });
+
+    DOM.btnGenerateProtocol.addEventListener('click', function(){
+        if (!state.moteId) return;
+        setStatus('Genererer protokoll...');
+        google.script.run
+            .withSuccessHandler(res => {
+                if (res.ok) {
+                    setStatus('Protokoll generert.');
+                    refreshCurrentMeeting();
+                } else {
+                    setStatus(res.message || 'Kunne ikke generere protokoll.');
+                }
+            })
+            .withFailureHandler(handleScriptFailure)
+            .generateProtocol(state.moteId);
+    });
+  }
+
   function initializeCalendar() {
-    const calendarEl = $('#calendar-container');
-    state.calendarInstance = new calendar(calendarEl, {
+    state.calendarInstance = new calendar(DOM.calendarContainer, {
       abbrDay: true,
       onEventClick: (evt) => {
         loadMeeting(evt.meetingData);
@@ -328,27 +712,26 @@
   }
 
   function drawParticipants(members) {
-    const list = $('#participants-list');
-    list.innerHTML = '';
+    DOM.participantsList.innerHTML = '';
     if (!members || !members.length) {
-      list.innerHTML = '<div class="hint">Ingen styremedlemmer funnet.</div>';
+      DOM.participantsList.innerHTML = '<div class="hint">Ingen styremedlemmer funnet.</div>';
       return;
     }
     members.forEach(p => {
       const item = document.createElement('div');
       item.className = 'participant-item';
       item.innerHTML = `<label><input type="checkbox" name="participants" value="${escapeHtml(p.email)}"> ${escapeHtml(p.name)}</label>`;
-      list.appendChild(item);
+      DOM.participantsList.appendChild(item);
     });
   }
 
   function refreshMeetings(){
-    $('#planned').innerHTML = '<li class="hint">Laster…</li>';
+    DOM.planned.innerHTML = '<li class="hint">Laster…</li>';
     google.script.run.withSuccessHandler(drawMeetings).listMeetings_({scope: 'all'});
   }
 
   function drawMeetings(list){
-    const ul = $('#planned');
+    const ul = DOM.planned;
     ul.innerHTML='';
 
     // Clear existing events from calendar
@@ -363,7 +746,7 @@
     const today = new Date();
     today.setHours(0,0,0,0);
 
-    const scope = $('#scopePast').classList.contains('active') ? 'past' : 'planned';
+    const scope = DOM.scopePast.classList.contains(CONFIG.CSS_CLASSES.ACTIVE) ? 'past' : 'planned';
     const filteredList = list.filter(m => {
         if (!m.dato) return scope === 'planned';
         const meetingDate = m.dato instanceof Date ? m.dato : new Date(m.dato);
@@ -378,7 +761,7 @@
       const li = document.createElement('li');
       li.innerHTML = `<strong>${escapeHtml(m.tittel||m.type)}</strong><br>${escapeHtml(m.type)} • ${m.dato?fmtDate(m.dato):''} • ${escapeHtml(m.start||'')} • ${escapeHtml(m.sted||'')}`;
       li.style.cursor='pointer';
-      li.onclick = () => loadMeeting(m);
+      li.addEventListener('click', () => loadMeeting(m));
       ul.appendChild(li);
     });
 
@@ -395,38 +778,37 @@
   function loadMeeting(m){
     state.moteId = m.id;
     state.meetingStatus = m.status || 'Planlagt';
-    $('#mote-id').value = state.moteId;
-    $('#type').value  = m.type||'Styremøte';
-    $('#dato').value  = m.dato ? new Date(m.dato).toISOString().slice(0,10) : '';
-    $('#start').value = m.start||'';
-    $('#slutt').value = m.slutt||'';
-    $('#sted').value  = m.sted||'';
-    $('#tittel').value= m.tittel||'';
+    DOM.moteId.value = state.moteId;
+    DOM.type.value  = m.type||'Styremøte';
+    DOM.dato.value  = m.dato ? new Date(m.dato).toISOString().slice(0,10) : '';
+    DOM.start.value = m.start||'';
+    DOM.slutt.value = m.slutt||'';
+    DOM.sted.value  = m.sted||'';
+    DOM.tittel.value= m.tittel||'';
 
     // Clear and set participants
-    document.querySelectorAll('#participants-list input').forEach(box => box.checked = false);
+    DOM.participantsList.querySelectorAll('input').forEach(box => box.checked = false);
     if (m.participants && m.participants.length) {
       m.participants.forEach(email => {
-        const cb = document.querySelector(`#participants-list input[value="${escapeHtml(email)}"]`);
+        const cb = DOM.participantsList.querySelector(`input[value="${escapeHtml(email)}"]`);
         if (cb) cb.checked = true;
       });
     }
 
     setStatus('Møte lastet.');
-    $('#conflictBanner').style.display = 'none';
-    $('#liveBadge').style.display = 'none';
-    $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
+    DOM.conflictBanner.style.display = 'none';
+    DOM.liveBadge.style.display = 'none';
+    DOM.innspillList.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
-    $('#btnViewProtocol').style.display = ['Protokoll godkjent', 'Arkivert'].includes(state.meetingStatus) ? 'inline-block' : 'none';
-    $('#btnSendInnkalling').style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
+    DOM.btnViewProtocol.style.display = CONFIG.VIEWABLE_PROTOCOL_STATUSES.includes(state.meetingStatus) ? 'inline-block' : 'none';
+    DOM.btnSendInnkalling.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
 
     // Show/hide video actions
-    const videoActions = $('#video-actions');
     if (isValidHttpUrl(m.sted)) {
-      videoActions.style.display = 'flex';
+      DOM.videoActions.style.display = 'flex';
     } else {
-      videoActions.style.display = 'none';
+      DOM.videoActions.style.display = 'none';
     }
 
     // RBAC: kan låse opp?
@@ -442,21 +824,20 @@
       if (!saker || !saker.length){ clearSak(); startPolling(); return; }
       const s = saker[0];
       state.sakId = s.sakId;
-      $('#saksnr').value = s.saksnr||'';
-      $('#sakTittel').value = s.tittel||'';
-      $('#innspillText').value = '';
-      $('#forslagText').value = s.forslag||'';
-      $('#vedtakText').value = s.vedtak||'';
+      DOM.saksnr.value = s.saksnr||'';
+      DOM.sakTittel.value = s.tittel||'';
+      DOM.innspillText.value = '';
+      DOM.forslagText.value = s.forslag||'';
+      DOM.vedtakText.value = s.vedtak||'';
 
       // MM.4.6: Vis koblet oppgave hvis den finnes
-      const taskDiv = $('#linkedTask');
       if (s.kobletOppgave && s.kobletOppgave.id) {
-        const link = taskDiv.querySelector('a');
+        const link = DOM.linkedTask.querySelector('a');
         link.href = s.kobletOppgave.link || '#';
         link.textContent = escapeHtml(s.kobletOppgave.tittel || `Oppgave #${s.kobletOppgave.id}`);
-        taskDiv.classList.add('visible');
+        DOM.linkedTask.classList.add(CONFIG.CSS_CLASSES.VISIBLE);
       } else {
-        taskDiv.classList.remove('visible');
+        DOM.linkedTask.classList.remove(CONFIG.CSS_CLASSES.VISIBLE);
       }
 
       startPolling();
@@ -475,7 +856,7 @@
   }
 
   function drawDocuments(docs) {
-    const ul = $('#documentList');
+    const ul = DOM.documentList;
     ul.innerHTML = '';
     if (!docs || !docs.length) {
       ul.innerHTML = '<li class="hint">Ingen dokumenter lastet opp.</li>';
@@ -484,8 +865,15 @@
     const isMeetLocked = isLocked(state.meetingStatus);
     docs.forEach(doc => {
       const li = document.createElement('li');
-      li.innerHTML = `<a href="${doc.drive_url}" target="_blank">${escapeHtml(doc.dokumentnavn)}</a>
-                      <button class="btn danger small" ${isMeetLocked ? 'disabled' : ''} onclick="deleteDocument('${doc.id}')">Slett</button>`;
+      li.innerHTML = `<a href="${doc.drive_url}" target="_blank">${escapeHtml(doc.dokumentnavn)}</a>`;
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn danger small';
+      deleteBtn.textContent = 'Slett';
+      deleteBtn.disabled = isMeetLocked;
+      deleteBtn.addEventListener('click', () => deleteDocument(doc.id));
+
+      li.appendChild(deleteBtn);
       ul.appendChild(li);
     });
   }
@@ -509,19 +897,23 @@
       .deleteMeetingDocument(docId);
   }
 
+  function createInnspillElement(item) {
+    const el = document.createElement('div');
+    el.className = 'innspill-item';
+    const ts = item.ts ? new Date(item.ts).toLocaleString('no-NO') : '';
+    el.innerHTML = `<div class="hint">${ts} • ${item.from || 'ukjent'}</div><div>${escapeHtml(item.text || '')}</div>`;
+    return el;
+  }
+
   function drawInnspill(items){
-    const box = $('#innspillList');
+    const box = DOM.innspillList;
+    box.innerHTML = ''; // Always clear first
     if (!items || !items.length) {
-        if(box.children.length === 0) box.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
+        box.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
         return; 
     }
-    if(box.children.length === 1 && box.querySelector('.hint')) box.innerHTML = '';
-    items.forEach(x=>{
-      const el = document.createElement('div');
-      el.className = 'innspill-item';
-      const ts = x.ts ? new Date(x.ts).toLocaleString('no-NO') : '';
-      el.innerHTML = `<div class="hint">${ts} • ${x.from||'ukjent'}</div><div>${escapeHtml(x.text||'')}</div>`;
-      box.appendChild(el);
+    items.forEach(x => {
+      box.appendChild(createInnspillElement(x));
     });
     box.scrollTop = box.scrollHeight;
   }
@@ -529,320 +921,63 @@
   function clearMeeting(){
     stopPolling();
     state.moteId=null; state.meetingStatus=null; state.canUnlock=false;
-    $('#mote-id').value='';
-    $('#type').value='Styremøte'; $('#dato').value=''; $('#start').value='18:00'; $('#slutt').value='20:00';
-    $('#sted').value=''; $('#tittel').value='';
+    DOM.moteId.value='';
+    DOM.type.value='Styremøte'; DOM.dato.value=''; DOM.start.value='18:00'; DOM.slutt.value='20:00';
+    DOM.sted.value=''; DOM.tittel.value='';
     setStatus('');
     clearSak();
     updateStatusBadge();
     applyLockUI(false);
-    $('#btnViewProtocol').style.display = 'none';
-    $('#btnSendInnkalling').style.display = 'none';
-    $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
+    DOM.btnViewProtocol.style.display = 'none';
+    DOM.btnSendInnkalling.style.display = 'none';
+    DOM.innspillList.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){
-    state.sakId=null; $('#saksnr').value=''; $('#sakTittel').value='';
-    $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
-    $('#moveWrap').style.display='none';
-    $('#linkedTask').classList.remove('visible'); // MM.4.6: Skjul oppgavelenke
+    state.sakId=null; DOM.saksnr.value=''; DOM.sakTittel.value='';
+    DOM.innspillText.value=''; DOM.forslagText.value=''; DOM.vedtakText.value='';
+    DOM.moveWrap.style.display='none';
+    DOM.linkedTask.classList.remove(CONFIG.CSS_CLASSES.VISIBLE); // MM.4.6: Skjul oppgavelenke
   }
 
-  // Video/Chat Actions
-  $('#sted').addEventListener('input', function(e) {
-    const url = e.target.value.trim();
-    const actions = $('#video-actions');
-    if (isValidHttpUrl(url)) {
-      actions.style.display = 'flex';
-    } else {
-      actions.style.display = 'none';
-    }
-  });
-
-  $('#btnJoinVideo').onclick = function() {
-    const url = $('#sted').value.trim();
-    if (isValidHttpUrl(url)) {
-      window.open(url, '_blank');
-    }
-  };
-
-  $('#btnGoToChat').onclick = function() {
-    $('#innspillList').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    $('#innspillText').focus();
-  };
-
-  // SAVE meeting
-  $('#btnSaveMeeting').onclick = function(){
-    const participants = Array.from(document.querySelectorAll('#participants-list input:checked')).map(cb => cb.value);
-    const form = {
-      moteId: $('#mote-id').value || state.moteId || '',
-      type:   $('#type').value,
-      datoISO:  toIsoDate($('#dato').value),
-      start:  $('#start').value,
-      slutt:  $('#slutt').value,
-      sted:   $('#sted').value,
-      tittel: $('#tittel').value,
-      agenda: '',
-      participants: participants
-    };
-    if (!form.tittel.trim()){ setStatus('Møtetittel er påkrevd.'); return; }
-    if (!form.datoISO){ setStatus('Velg dato.'); return; }
-
-    setStatus('Lagrer …');
-    google.script.run
-        .withSuccessHandler((res)=>{
-            if (res && res.ok){
-              state.moteId = res.id || state.moteId;
-              $('#mote-id').value = state.moteId||'';
-              setStatus(res.message || 'Lagret.');
-              refreshMeetings();
-            } else {
-              setStatus(res?.message || 'Kunne ikke lagre.');
-            }
-        })
-        .withFailureHandler(err => setStatus(err?.message || 'En feil oppstod.'))
-        .upsertMeeting(form);
-  };
-
-  $('#btnSendInnkalling').onclick = function() {
-    if (!state.moteId) {
-      setStatus('Velg et møte først.');
-      return;
-    }
-    if (!confirm('Er du sikker på at du vil sende innkalling til alle eiere?')) {
-      return;
-    }
-    setStatus('Sender innkalling...');
-    google.script.run
-      .withSuccessHandler(res => {
-        setStatus(res.message || (res.ok ? 'Innkalling sendt.' : 'En ukjent feil oppstod.'));
-      })
-      .withFailureHandler(err => {
-        setStatus(`Feil: ${err.message}`);
-      })
-      .sendInnkalling(state.moteI d);
-  };
-
-  // Øvrig
-  $('#btnNewMeeting').onclick = clearMeeting;
-  $('#btnRefresh').onclick = refreshMeetings;
-
-  $('#btnExportCalendar').onclick = function() {
-    setStatus('Henter eksport-URL...');
-    const container = $('#export-container');
-    const urlInput = $('#export-url');
-
-    // Check if the function exists on the server-side proxy
-    if (typeof google.script.run.getCalendarExportUrl !== 'function') {
-        setStatus('Feil: Funksjonen getCalendarExportUrl er ikke tilgjengelig. Sjekk at CalendarExport.gs er inkludert.');
-        urlInput.value = 'Funksjonen for eksport er ikke lastet inn.';
-        container.style.display = 'block';
-        return;
-    }
-
-    google.script.run
-      .withSuccessHandler(res => {
-        if (res.ok) {
-          urlInput.value = res.url;
-          container.style.display = 'block';
-          setStatus('URL for kalendereksport er klar.');
-        } else {
-          urlInput.value = res.message || 'Kunne ikke hente URL.';
-          container.style.display = 'block';
-          setStatus(res.message || 'En feil oppstod.');
-        }
-      })
-      .withFailureHandler(err => {
-        setStatus(`Feil: ${err.message}`);
-        urlInput.value = `En feil oppstod: ${err.message}`;
-        container.style.display = 'block';
-      })
-      .getCalendarExportUrl();
-  };
-  $('#btnViewProtocol').onclick = function(){
-    if (!state.moteId) return;
-    setStatus('Henter forhåndsvisning...');
-    if (!google.script.run.getProtocolPreviewUrl){
-      return setStatus('Funksjonen getProtocolPreviewUrl er ikke tilgjengelig.');
-    }
-    google.script.run
-      .withSuccessHandler(res => {
-        if (res && res.url) {
-          window.open(res.url, '_blank');
-          setStatus('Forhåndsvisning åpnet i ny fane.');
-        } else {
-          setStatus('Kunne ikke hente forhåndsvisning.');
-        }
-      })
-      .withFailureHandler(err => {
-        setStatus(err.message || 'En feil oppstod ved henting av forhåndsvisning.');
-      })
-      .getProtocolPreviewUrl(state.moteId);
-  };
-  $('#btnReload').onclick = ()=> { if (state.moteId) refreshCurrentMeeting(); };
-
-  $('#scopePlanned').onclick = ()=>{
-    $('#scopePlanned').classList.add('active');
-    $('#scopePast').classList.remove('active');
-    refreshMeetings();
-  };
-  $('#scopePast').onclick = ()=>{
-    $('#scopePast').classList.add('active');
-    $('#scopePlanned').classList.remove('active');
-    refreshMeetings();
-  };
-
-  $('#viewToggleList').onclick = () => {
-    $('#list-container').style.display = 'block';
-    $('#calendar-container').style.display = 'none';
-    $('#viewToggleList').classList.add('active');
-    $('#viewToggleCalendar').classList.remove('active');
-  };
-
-  $('#viewToggleCalendar').onclick = () => {
-    $('#list-container').style.display = 'none';
-    $('#calendar-container').style.display = 'block';
-    $('#viewToggleCalendar').classList.add('active');
-    $('#viewToggleList').classList.remove('active');
-  };
-
-  // Lås opp (kun for autoriserte + når låst)
-  $('#btnUnlock').onclick = function(){
-    if (!state.moteId) return;
-    setStatus('Låser opp …');
-    if (!google.script.run.unlockMeeting){
-      setStatus('Server mangler funksjonen unlockMeeting(moteId).');
-      return;
-    }
-    google.script.run.withSuccessHandler(res=>{
-      if (res && res.ok){
-        state.meetingStatus = res.status || 'Planlagt';
-        updateStatusBadge();
-        applyLockUI(false);
-        setStatus('Møtet er låst opp.');
+  function initEventListeners() {
+    // Video/Chat Actions
+    DOM.sted.addEventListener('input', function(e) {
+      const url = e.target.value.trim();
+      if (isValidHttpUrl(url)) {
+        DOM.videoActions.style.display = 'flex';
       } else {
-        setStatus(res?.message || 'Kunne ikke låse opp.');
+        DOM.videoActions.style.display = 'none';
       }
-    }).withFailureHandler(e=>{
-      setStatus(e?.message || 'Feil ved ulåsing.');
-    }).unlockMeeting(state.moteId);
-  };
+    });
 
-  // Saker
-  $('#btnNewSak').onclick = function(){
-    if (!state.moteId){ setStatus('Lagre eller velg et møte først.'); return; }
-    setStatus('Oppretter ny sak...');
-    google.script.run.withSuccessHandler(res=>{
-      if (!res || !res.ok) { setStatus(res?.message||'Kunne ikke opprette sak.'); return; }
-      state.sakId = res.sakId; $('#saksnr').value=res.saksnr; $('#sakTittel').value='';
-      $('#innspillText').value=''; $('#forslagText').value=''; $('#vedtakText').value='';
-      setStatus('Ny sak opprettet. Du kan nå skrive inn tittel og detaljer.');
-      loadMoveTargets();
-    }).newAgendaItem(state.moteId);
-  };
+    DOM.btnJoinVideo.addEventListener('click', function() {
+      const url = DOM.sted.value.trim();
+      if (isValidHttpUrl(url)) {
+        window.open(url, '_blank');
+      }
+    });
 
-  $('#btnLagreSak').onclick = function(){
-    if (!state.sakId){ setStatus('Opprett eller velg en sak først.'); return; }
-    setStatus('Lagrer sak...');
-    const payload = {
-      sakId: state.sakId,
-      tittel: $('#sakTittel').value,
-      forslag: $('#forslagText').value,
-      vedtak:  $('#vedtakText').value
-    };
-    google.script.run
-        .withSuccessHandler(_=> setStatus('Sak lagret.'))
-        .withFailureHandler(err => setStatus(err?.message || 'Feil ved lagring.'))
-        .saveAgenda(payload);
-  };
+    DOM.btnGoToChat.addEventListener('click', function() {
+      DOM.innspillList.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      DOM.innspillText.focus();
+    });
 
-  $('#btnNyttInnspill').onclick = function(){
-    if (!state.sakId){ setStatus('Opprett eller velg en sak først.'); return; }
-    const txt = ($('#innspillText').value||'').trim();
-    if (!txt){ setStatus('Skriv et innspill først.'); return; }
-    setStatus('Sender innspill...');
-    google.script.run
-        .withSuccessHandler(_=>{
-            $('#innspillText').value='';
-            setStatus('Innspill lagret.');
-        })
-        .withFailureHandler(err => setStatus(err?.message || 'Feil ved lagring.'))
-        .appendInnspill(state.sakId, txt);
-  };
-
-  // Flytt sak til annet møte
-  function loadMoveTargets(){
-    if (!state.moteId) return;
-    google.script.run.withSuccessHandler(list=>{
-      const sel = $('#moveTo');
-      const wrap = $('#moveWrap');
-      sel.innerHTML = '';
-      const options = (list||[]).filter(m => m.id !== state.moteId);
-      if (!state.sakId || options.length === 0){ wrap.style.display='none'; return; }
-      options.forEach(m=>{
-        const opt = document.createElement('option');
-        const d = m.dato ? new Date(m.dato).toLocaleDateString('no-NO') : '';
-        opt.value = m.id; opt.textContent = `${m.tittel||m.type||'Møte'} • ${d} ${m.start||''}`;
-        sel.appendChild(opt);
-      });
-      wrap.style.display = isLocked(state.meetingStatus) ? 'none' : 'inline-flex';
-    }).listMeetings_({scope:'planned'});
+    DOM.btnGenerateProtocol.addEventListener('click', function(){
+        if (!state.moteId) return;
+        setStatus('Genererer protokoll...');
+        google.script.run
+            .withSuccessHandler(res => {
+                if (res.ok) {
+                    setStatus('Protokoll generert.');
+                    refreshCurrentMeeting();
+                } else {
+                    setStatus(res.message || 'Kunne ikke generere protokoll.');
+                }
+            })
+            .withFailureHandler(handleScriptFailure)
+            .generateProtocol(state.moteId);
+    });
   }
-  $('#btnMoveSak').onclick = function(){
-    if (!state.sakId){ setStatus('Velg en sak først.'); return; }
-    const toId = $('#moveTo').value;
-    if (!toId){ setStatus('Velg mål-møte.'); return; }
-    if (!google.script.run.moveAgendaToMeeting){
-      setStatus('Server mangler funksjonen moveAgendaToMeeting(sakId, toMoteId).');
-      return;
-    }
-    setStatus('Flytter sak …');
-    google.script.run.withSuccessHandler(res=>{
-      if (res && res.ok){
-        setStatus('Sak flyttet.');
-        clearSak();
-        $('#innspillList').innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
-      } else {
-        setStatus(res?.message || 'Kunne ikke flytte sak.');
-      }
-    }).withFailureHandler(e=>{
-      setStatus(e?.message || 'Feil ved flytting.');
-    }).moveAgendaToMeeting(state.sakId, toId);
-  };
-
-  // File upload
-  $('#btnUpload').onclick = () => {
-    if (!state.moteId) {
-      setStatus('Lagre eller velg et møte først.');
-      return;
-    }
-    $('#fileUpload').click();
-  };
-
-  $('#fileUpload').onchange = function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    setStatus('Laster opp fil...');
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const fileData = event.target.result;
-      google.script.run
-        .withSuccessHandler(res => {
-          if (res.ok) {
-            setStatus('Dokument lastet opp.');
-            if (state.moteId) {
-              google.script.run.withSuccessHandler(drawDocuments).listMeetingDocuments(state.moteId);
-            }
-          } else {
-            setStatus(res.message || 'Kunne ikke laste opp fil.');
-          }
-        })
-        .withFailureHandler(err => setStatus(err.message || 'En feil oppstod.'))
-        .addMeetingDocument(state.moteId, fileData, file.name);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = ''; // Clear input
-  };
 
   // ------- NESTEN-SANNTID POLLING -------
   function startPolling(){
@@ -867,66 +1002,71 @@
   }
   function doPoll(){
     if (!state.moteId || !google.script.run.rtGetChanges) return;
-    google.script.run.withSuccessHandler(ch=>{
-      if (!ch) return;
-      let activity = false;
-      if (ch.meetingUpdated){
-        $('#conflictBanner').style.display='block'; $('#liveBadge').style.display='inline-block'; activity = true;
-        if (ch.meetingStatus){
-          state.meetingStatus = ch.meetingStatus;
-          updateStatusBadge();
-          applyLockUI(isLocked(state.meetingStatus));
-        }
-      }
-      if (ch.updatedSaker && ch.updatedSaker.length){
-        const hit = ch.updatedSaker.find(s => s.sakId === state.sakId);
-        if (hit){
-          const ae = document.activeElement || {};
-          const typing = (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
-          if (!typing){
-            $('#sakTittel').value = hit.tittel ?? $('#sakTittel').value;
-            $('#forslagText').value = hit.forslag ?? $('#forslagText').value;
-            $('#vedtakText').value  = hit.vedtak  ?? $('#vedtakText').value;
-          } else {
-            $('#conflictBanner').style.display='block';
-          }
-          $('#liveBadge').style.display='inline-block';
-          activity = true;
-        }
-      }
-      if (ch.newInnspill && ch.newInnspill.length){
-        if (state.sakId){
-          const relevant = ch.newInnspill.filter(x => x.sakId === state.sakId);
-          if (relevant.length){
-            appendInnspillToList(relevant);
-            $('#liveBadge').style.display='inline-block';
-            activity = true;
-          }
-        }
-      }
-      state.lastTick = ch.serverNow || new Date().toISOString();
-      adjustPolling(activity);
-    }).rtGetChanges(state.moteId, state.lastTick);
+    google.script.run
+        .withSuccessHandler(ch=>{
+            if (!ch) return;
+            let activity = false;
+            if (ch.meetingUpdated){
+                DOM.conflictBanner.style.display='block'; DOM.liveBadge.style.display='inline-block'; activity = true;
+                if (ch.meetingStatus){
+                state.meetingStatus = ch.meetingStatus;
+                updateStatusBadge();
+                applyLockUI(isLocked(state.meetingStatus));
+                }
+            }
+            if (ch.updatedSaker && ch.updatedSaker.length){
+                const hit = ch.updatedSaker.find(s => s.sakId === state.sakId);
+                if (hit){
+                const ae = document.activeElement || {};
+                const typing = (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
+                if (!typing){
+                    DOM.sakTittel.value = hit.tittel ?? DOM.sakTittel.value;
+                    DOM.forslagText.value = hit.forslag ?? DOM.forslagText.value;
+                    DOM.vedtakText.value  = hit.vedtak  ?? DOM.vedtakText.value;
+                } else {
+                    DOM.conflictBanner.style.display='block';
+                }
+                DOM.liveBadge.style.display='inline-block';
+                activity = true;
+                }
+            }
+            if (ch.newInnspill && ch.newInnspill.length){
+                if (state.sakId){
+                const relevant = ch.newInnspill.filter(x => x.sakId === state.sakId);
+                if (relevant.length){
+                    appendInnspillToList(relevant);
+                    DOM.liveBadge.style.display='inline-block';
+                    activity = true;
+                }
+                }
+            }
+            state.lastTick = ch.serverNow || new Date().toISOString();
+            adjustPolling(activity);
+        })
+        .withFailureHandler(err => {
+            console.error('Polling error:', err);
+            // Don't stop polling on transient errors, just slow it down.
+            adjustPolling(false);
+        })
+        .rtGetChanges(state.moteId, state.lastTick);
   }
 
   function refreshCurrentMeeting(){
     google.script.run.withSuccessHandler(list=>{
       const m = (list||[]).find(x => x.id === state.moteId);
       if (m){ loadMeeting(m); }
-      $('#conflictBanner').style.display = 'none';
-      $('#liveBadge').style.display = 'none';
-    }).listMeetings_({scope: $('#scopePast').classList.contains('active') ? 'past' : 'planned'});
+      DOM.conflictBanner.style.display = 'none';
+      DOM.liveBadge.style.display = 'none';
+    }).listMeetings_({scope: DOM.scopePast.classList.contains('active') ? 'past' : 'planned'});
   }
 
   function appendInnspillToList(items){
-    const box = $('#innspillList');
-    if (box.children.length === 1 && box.querySelector('.hint')) box.innerHTML = '';
-    items.forEach(x=>{
-      const el = document.createElement('div');
-      el.className = 'innspill-item';
-      const ts = x.ts ? new Date(x.ts).toLocaleString('no-NO') : '';
-      el.innerHTML = `<div class="hint">${ts} • ${x.from||'ukjent'}</div><div>${escapeHtml(x.text||'')}</div>`;
-      box.appendChild(el);
+    const box = DOM.innspillList;
+    if (box.children.length === 1 && box.querySelector('.hint')) {
+        box.innerHTML = '';
+    }
+    items.forEach(x => {
+        box.appendChild(createInnspillElement(x));
     });
     box.scrollTop = box.scrollHeight;
   }

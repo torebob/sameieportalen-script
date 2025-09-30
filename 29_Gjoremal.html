@@ -1,4 +1,4 @@
-<? var FILE = '29_Gjoremal.html'; var VERSION = '1.1.0'; var UPDATED = '2025-09-30'; ?>
+<? var FILE = '29_Gjoremal.html'; var VERSION = '1.2.0'; var UPDATED = '2025-09-30'; ?>
 <?!= include && include('AppMetaPartial') ?>
 <!doctype html>
 <html lang="no">
@@ -23,7 +23,7 @@
     .task-card h3{margin:0 0 8px;font-size:16px;font-weight:600}
     .task-meta{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;gap:12px}
     .task-desc{font-size:14px;color:#cbd5e1;margin-bottom:16px;flex-grow:1}
-    .task-attachment{margin-bottom:12px;font-size:13px;}
+    .task-attachment{margin-bottom:12px;font-size:13px;padding: 6px 8px;background: rgba(59, 130, 246, 0.1);border-radius: 4px;border-left: 2px solid var(--primary);}
     .task-attachment a{color:var(--primary);text-decoration:none}
     .task-attachment a:hover{text-decoration:underline}
     .task-footer{display:flex;justify-content:space-between;align-items:center}
@@ -153,12 +153,12 @@
       document.getElementById('taskId').value = '';
       document.getElementById('modalTitle').textContent = 'Ny oppgave';
       modal.classList.add('open');
-      document.getElementById('taskTitle').focus();
+      document.getElementById('taskTitle').focus(); // Set focus for accessibility
     }
 
     function closeModal() {
       modal.classList.remove('open');
-      btnNewTask.focus();
+      btnNewTask.focus(); // Return focus for accessibility
     }
 
     function renderTasks(displayTasks) {
@@ -267,19 +267,9 @@
                     fetchTasks();
                 } else {
                     handleScriptFailure({ message: response.message || 'Kunne ikke oppdatere status.' });
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = 'Bytt Status';
-                    }
                 }
             })
-            .withFailureHandler(err => {
-                handleScriptFailure(err);
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Bytt Status';
-                }
-            })
+            .withFailureHandler(handleScriptFailure)
             .gjoremalUpdateStatus(id, newStatus);
     }
 

@@ -25,6 +25,17 @@
     .task-desc{font-size:14px;color:#cbd5e1;margin-bottom:16px;flex-grow:1}
     .task-footer{display:flex;justify-content:space-between;align-items:center}
     .task-actions{display:flex;gap:8px}
+    .task-attachment {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 8px 0;
+      padding: 6px 8px;
+      background: rgba(59, 130, 246, 0.1);
+      border-radius: 4px;
+      border-left: 2px solid var(--primary);
+    }
+    .task-attachment a { color: var(--muted); text-decoration: none; }
+    .task-attachment a:hover { text-decoration: underline; }
     .task-status{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:500}
     .status-open{background-color:#3b82f620;color:#60a5fa}
     .status-completed{background-color:#10b98120;color:#34d399}
@@ -98,6 +109,13 @@
           <input type="date" id="taskDueDate" />
         </div>
         <div class="form-group">
+          <label for="taskStatus">Status</label>
+          <select id="taskStatus" required>
+            <option value="Open">Åpen</option>
+            <option value="Completed">Fullført</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label for="taskAttachment">Vedlegg</label>
           <input type="file" id="taskAttachment" />
         </div>
@@ -114,10 +132,39 @@
     const modal = document.getElementById('taskModal');
     const btnNewTask = document.getElementById('btnNewTask');
 
+    function escapeHTML(str) {
+        if (typeof str !== 'string') return '';
+        const el = document.createElement('div');
+        el.textContent = str;
+        return el.innerHTML;
+    }
+
     function toast(msg, kind){
       const t=document.createElement('div'); t.className='toast ' + (kind||'');
       t.textContent=String(msg||''); document.body.appendChild(t);
       setTimeout(()=>t.remove(), 2800);
+    }
+
+    function handleScriptFailure(err) {
+        toast(err.message || 'En uventet feil oppstod.', 'err');
+        document.getElementById('status').textContent = 'Feil';
+    }
+
+    const TASK_STATUS = {
+        OPEN: 'Open',
+        COMPLETED: 'Completed'
+    };
+
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const ALLOWED_MIMETYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+
+    function validateFile(file) {
+        if (file.size > MAX_FILE_SIZE) {
+            throw new Error('Filen er for stor (maks 10MB).');
+        }
+        if (!ALLOWED_MIMETYPES.includes(file.type)) {
+            throw new Error('Ugyldig filtype. Tillatte typer er JPEG, PNG, og PDF.');
+        }
     }
 
     function openModal() {
@@ -125,10 +172,12 @@
       document.getElementById('taskId').value = '';
       document.getElementById('modalTitle').textContent = 'Ny oppgave';
       modal.classList.add('open');
+      document.getElementById('taskTitle').focus();
     }
 
     function closeModal() {
       modal.classList.remove('open');
+      btnNewTask.focus();
     }
 
     btnNewTask.addEventListener('click', openModal);
@@ -138,6 +187,13 @@
       if (e.target === modal) {
         closeModal();
       }
+    });
+
+    // Close modal on Escape key press
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && modal.classList.contains('open')) {
+            closeModal();
+        }
     });
 
     function renderTasks(displayTasks) {
@@ -151,18 +207,26 @@
       displayTasks.forEach(task => {
         const card = document.createElement('div');
         card.className = 'task-card';
+        card.dataset.taskId = task.id; // Add task id to dataset for secure access
+
+        const attachmentHtml = task.attachmentUrl
+            ? `<div class="task-attachment"><a href="${task.attachmentUrl}" target="_blank" rel="noopener noreferrer">📎 Vis vedlegg</a></div>`
+            : '';
+
         card.innerHTML = `
-          <h3>${task.title}</h3>
+          <h3>${escapeHTML(task.title)}</h3>
           <div class="task-meta">
-            <span>Ansvarlig: <strong>${task.assignee}</strong></span>
-            <span>Frist: <strong>${task.dueDate || 'Ingen'}</strong></span>
+            <span>Ansvarlig: <strong>${escapeHTML(task.assignee)}</strong></span>
+            <span>Frist: <strong>${escapeHTML(task.dueDate) || 'Ingen'}</strong></span>
           </div>
-          <p class="task-desc">${task.description || 'Ingen beskrivelse.'}</p>
+          <p class="task-desc">${escapeHTML(task.description) || 'Ingen beskrivelse.'}</p>
+          ${attachmentHtml}
           <div class="task-footer">
-            <span class="task-status ${task.status === 'Open' ? 'status-open' : 'status-completed'}">${task.status}</span>
+            <span class="task-status ${task.status === TASK_STATUS.OPEN ? 'status-open' : 'status-completed'}">${task.status}</span>
             <div class="task-actions">
-              <button class="btn" onclick="editTask('${task.id}')">Rediger</button>
-              <button class="btn danger" onclick="deleteTask('${task.id}')">Slett</button>
+              <button class="btn btn-toggle-status">Bytt Status</button>
+              <button class="btn btn-edit">Rediger</button>
+              <button class="btn danger btn-delete">Slett</button>
             </div>
           </div>
         `;
@@ -176,17 +240,14 @@
         .withSuccessHandler(response => {
           if (response.ok) {
             tasks = response.tasks; // Populate global tasks array
-            renderTasks(tasks);
             document.getElementById('status').textContent = 'Klar';
+            applyFilters(); // Apply current filters instead of renderTasks
           } else {
             toast(response.message || 'Kunne ikke hente oppgaver.', 'err');
             document.getElementById('status').textContent = 'Feil';
           }
         })
-        .withFailureHandler(err => {
-          toast(err.message, 'err');
-          document.getElementById('status').textContent = 'Feil';
-        })
+        .withFailureHandler(handleScriptFailure)
         .gjoremalGet();
     }
 
@@ -199,7 +260,9 @@
         document.getElementById('taskDesc').value = task.description;
         document.getElementById('taskAssignee').value = task.assignee;
         document.getElementById('taskDueDate').value = task.dueDate;
+        document.getElementById('taskStatus').value = task.status; // Set status
         modal.classList.add('open');
+        document.getElementById('taskTitle').focus();
       }
     }
 
@@ -216,12 +279,46 @@
               document.getElementById('status').textContent = 'Feil';
             }
           })
-          .withFailureHandler(err => {
-            toast(err.message, 'err');
-            document.getElementById('status').textContent = 'Feil';
-          })
+          .withFailureHandler(handleScriptFailure)
           .gjoremalDeleteTask(id);
       }
+    }
+
+    function toggleTaskStatus(id) {
+        const card = document.querySelector(`[data-task-id="${id}"]`);
+        const btn = card?.querySelector('.btn-toggle-status');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Oppdaterer...';
+        }
+
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        const newStatus = task.status === TASK_STATUS.OPEN ? TASK_STATUS.COMPLETED : TASK_STATUS.OPEN;
+
+        google.script.run
+            .withSuccessHandler(response => {
+                if (response.ok) {
+                    toast('Status oppdatert!', 'ok');
+                    task.status = newStatus; // Update local data
+                    applyFilters(); // This will re-render the grid
+                } else {
+                    handleScriptFailure({ message: response.message || 'Kunne ikke oppdatere status.' });
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Bytt Status';
+                    }
+                }
+            })
+            .withFailureHandler(err => {
+                handleScriptFailure(err);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Bytt Status';
+                }
+            })
+            .gjoremalUpdateStatus(id, newStatus);
     }
 
     document.getElementById('taskForm').addEventListener('submit', function(e) {
@@ -247,7 +344,7 @@
             submitBtn.textContent = 'Lagre';
           })
           .withFailureHandler(err => {
-            toast(err.message, 'err');
+            handleScriptFailure(err);
             submitBtn.disabled = false;
             submitBtn.textContent = 'Lagre';
           })
@@ -260,19 +357,28 @@
         description: document.getElementById('taskDesc').value,
         assignee: document.getElementById('taskAssignee').value,
         dueDate: document.getElementById('taskDueDate').value,
+        status: document.getElementById('taskStatus').value,
       };
 
       if (file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          payload.attachment = {
-            base64: e.target.result.split(',')[1],
-            mimeType: file.type,
-            name: file.name
+        try {
+          validateFile(file);
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            payload.attachment = {
+              base64: e.target.result.split(',')[1],
+              mimeType: file.type,
+              name: file.name
+            };
+            sendPayload(payload);
           };
-          sendPayload(payload);
-        };
-        reader.readAsDataURL(file);
+          reader.readAsDataURL(file);
+        } catch (err) {
+          toast(err.message, 'err');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Lagre';
+          fileInput.value = ''; // Clear the invalid file
+        }
       } else {
         payload.attachment = null;
         sendPayload(payload);
@@ -324,11 +430,29 @@
             toast('Kunne ikke laste brukere.', 'err');
           }
         })
+        .withFailureHandler(handleScriptFailure)
         .gjoremalGetUsers();
 
       document.getElementById('searchInput').addEventListener('input', applyFilters);
       document.getElementById('statusFilter').addEventListener('change', applyFilters);
       document.getElementById('assigneeFilter').addEventListener('change', applyFilters);
+
+      // Event delegation for task actions
+      document.getElementById('taskGrid').addEventListener('click', e => {
+        const card = e.target.closest('.task-card');
+        if (!card) return;
+
+        const taskId = card.dataset.taskId;
+        if (e.target.classList.contains('btn-edit')) {
+          editTask(taskId);
+        }
+        if (e.target.classList.contains('btn-delete')) {
+          deleteTask(taskId);
+        }
+        if (e.target.classList.contains('btn-toggle-status')) {
+            toggleTaskStatus(taskId);
+        }
+      });
     });
   </script>
 </body>

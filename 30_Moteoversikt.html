@@ -81,6 +81,10 @@
         </div>
       </div>
 
+      <div id="instanceNotice" class="banner info" style="display:none; margin-top: 10px;">
+        Dette er en repeterende forekomst. Endringer må gjøres på hovedhendelsen.
+      </div>
+
       <input type="hidden" id="mote-id" />
 
       <div class="row">
@@ -123,6 +127,47 @@
       <div>
         <label>Tittel <span class="hint">(påkrevd)</span></label>
         <input id="tittel" placeholder="Styremøte september 2025" required />
+      </div>
+
+      <div id="recurrence-section" style="margin-top: 12px; padding: 10px; background-color: #f9f9f9; border-radius: 6px;">
+        <label style="display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" id="chkRecurrence">
+          <strong>Repeterende hendelse</strong>
+        </label>
+        <div id="recurrence-options" style="display: none; margin-top: 8px; padding-left: 28px;">
+          <div class="row">
+            <div>
+              <label>Frekvens</label>
+              <select id="recurrence-frequency">
+                <option value="monthly">Månedlig</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Dag</label>
+              <select id="recurrence-day">
+                <option value="1">Mandag</option>
+                <option value="2">Tirsdag</option>
+                <option value="3">Onsdag</option>
+                <option value="4">Torsdag</option>
+                <option value="5">Fredag</option>
+                <option value="6">Lørdag</option>
+                <option value="0">Søndag</option>
+              </select>
+            </div>
+            <div>
+              <label>Uke i måneden</label>
+              <select id="recurrence-occurrence">
+                <option value="1">Første</option>
+                <option value="2">Andre</option>
+                <option value="3">Tredje</option>
+                <option value="4">Fjerde</option>
+                <option value="-1">Siste</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div>
@@ -270,7 +315,7 @@
     }
   };
 
-  let state = { user:null, moteId:null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, calendarInstance: null };
+  let state = { user:null, moteId:null, instanceId: null, sakId:null, lastTick:null, pollTimer:null, pollMs:5000, meetingStatus:null, canUnlock:false, calendarInstance: null };
   const DOM = {};
 
   function initDOMCache() {
@@ -284,7 +329,9 @@
         'viewToggleList', 'viewToggleCalendar', 'btnGoToChat', 'btnJoinVideo',
         'btnSaveMeeting', 'btnSendInnkalling', 'btnNewMeeting', 'btnRefresh',
         'btnExportCalendar', 'btnViewProtocol', 'btnReload', 'btnNewSak', 'btnLagreSak',
-        'btnNyttInnspill', 'btnMoveSak', 'btnUpload', 'fileUpload'
+        'btnNyttInnspill', 'btnMoveSak', 'btnUpload', 'fileUpload',
+        'instanceNotice', 'recurrence-section', 'chkRecurrence', 'recurrence-options',
+        'recurrence-frequency', 'recurrence-day', 'recurrence-occurrence'
     ];
     ids.forEach(id => {
         const key = id.replace(/-([a-z])/g, g => g[1].toUpperCase());
@@ -354,6 +401,19 @@
     DOM.moveWrap.style.display = (state.sakId && !locked) ? 'inline-flex' : 'none';
   }
 
+  function applyInstanceLockUI(isInstance) {
+    const fieldsToLock = [
+        DOM.type, DOM.dato, DOM.start, DOM.slutt, DOM.sted, DOM.tittel,
+        DOM.chkRecurrence, DOM.recurrenceFrequency, DOM.recurrenceDay, DOM.recurrenceOccurrence
+    ];
+    fieldsToLock.forEach(el => {
+        if (el) el.disabled = isInstance;
+    });
+
+    DOM.btnSaveMeeting.style.display = isInstance ? 'none' : 'inline-block';
+    DOM.instanceNotice.style.display = isInstance ? 'block' : 'none';
+  }
+
   function updateStatusBadge(){
     if (!state.meetingStatus){
         DOM.statusBadge.style.display='none';
@@ -414,8 +474,18 @@
             sted:   DOM.sted.value,
             tittel: DOM.tittel.value,
             agenda: '',
-            participants: participants
+            participants: participants,
+            recurrence_rule: null
         };
+
+        if (DOM.chkRecurrence.checked) {
+            form.recurrence_rule = {
+                frequency: DOM.recurrenceFrequency.value,
+                day: parseInt(DOM.recurrenceDay.value, 10),
+                occurrence: parseInt(DOM.recurrenceOccurrence.value, 10)
+            };
+        }
+
         if (!form.tittel.trim()){ setStatus('Møtetittel er påkrevd.'); return; }
         if (!form.datoISO){ setStatus('Velg dato.'); return; }
 
@@ -701,11 +771,20 @@
     state.calendarInstance = new calendar(DOM.calendarContainer, {
       abbrDay: true,
       onEventClick: (evt) => {
+        if (evt.type === 'task') {
+          // Could potentially link to the task view in the future.
+          // For now, just log it and do nothing.
+          console.log('Task event clicked:', evt);
+          return;
+        }
         loadMeeting(evt.meetingData);
       },
       onDayClick: (date, evts) => {
         if (evts.length > 0) {
-          loadMeeting(evts[0].meetingData);
+          const firstMeeting = evts.find(e => e.type !== 'task');
+          if (firstMeeting) {
+            loadMeeting(firstMeeting.meetingData);
+          }
         }
       }
     });
@@ -725,20 +804,31 @@
     });
   }
 
-  function refreshMeetings(){
+  function refreshMeetings() {
     DOM.planned.innerHTML = '<li class="hint">Laster…</li>';
-    google.script.run.withSuccessHandler(drawMeetings).listMeetings_({scope: 'all'});
+    google.script.run.withSuccessHandler(meetingsResponse => {
+      // Etter at møter er hentet, hent oppgaver
+      if (google.script.run.gjoremalGet) {
+        google.script.run.withSuccessHandler(tasksResponse => {
+          const meetings = (meetingsResponse && meetingsResponse.length) ? meetingsResponse : [];
+          const tasks = (tasksResponse && tasksResponse.ok) ? tasksResponse.tasks : [];
+          drawCalendarEvents(meetings, tasks);
+        }).gjoremalGet();
+      } else {
+        drawCalendarEvents(meetingsResponse || [], []);
+      }
+    }).listMeetings_({scope: 'all'});
   }
 
-  function drawMeetings(list){
+  function drawCalendarEvents(list, tasks){
     const ul = DOM.planned;
     ul.innerHTML='';
 
     // Clear existing events from calendar
     state.calendarInstance.events = [];
 
-    if (!list || !list.length){
-      ul.innerHTML = '<li class="hint">Ingen møter i listen.</li>';
+    if ((!list || !list.length) && (!tasks || !tasks.length)) {
+      ul.innerHTML = '<li class="hint">Ingen møter eller oppgaver i listen.</li>';
       state.calendarInstance.drawCalendar();
       return;
     }
@@ -767,17 +857,39 @@
     });
 
     // Populate calendar
-    const events = list.map(m => ({
-      date: new Date(m.dato),
-      desc: m.tittel,
-      meetingData: m
-    }));
+    let events = [];
+    if (list && list.length) {
+      events = events.concat(list.map(m => ({
+        date: new Date(m.dato),
+        desc: m.tittel,
+        meetingData: m,
+        type: 'meeting' // Å.5.3
+      })));
+    }
+
+    if (tasks && tasks.length) {
+      const taskEvents = tasks.filter(t => t.dueDate).map(t => ({
+        date: new Date(t.dueDate),
+        desc: `Frist: ${t.title}`,
+        meetingData: { id: `task-${t.id}`, tittel: `Frist: ${t.title}` }, // Mock meeting data
+        type: 'task', // Å.5.3
+        className: 'event-task' // Custom class for styling
+      }));
+      events = events.concat(taskEvents);
+    }
+
     state.calendarInstance.events = events;
     state.calendarInstance.drawCalendar();
   }
 
   function loadMeeting(m){
-    state.moteId = m.id;
+    if (m.isRecurringInstance) {
+      state.instanceId = m.id;
+      state.moteId = m.baseId;
+    } else {
+      state.instanceId = null;
+      state.moteId = m.id;
+    }
     state.meetingStatus = m.status || 'Planlagt';
     DOM.moteId.value = state.moteId;
     DOM.type.value  = m.type||'Styremøte';
@@ -786,6 +898,19 @@
     DOM.slutt.value = m.slutt||'';
     DOM.sted.value  = m.sted||'';
     DOM.tittel.value= m.tittel||'';
+
+    // Recurrence
+    const recurrenceRule = m.recurrence_rule;
+    if (recurrenceRule && typeof recurrenceRule === 'object') {
+      DOM.chkRecurrence.checked = true;
+      DOM.recurrenceOptions.style.display = 'block';
+      DOM.recurrenceFrequency.value = recurrenceRule.frequency || 'monthly';
+      DOM.recurrenceDay.value = recurrenceRule.day || '1';
+      DOM.recurrenceOccurrence.value = recurrenceRule.occurrence || '1';
+    } else {
+      DOM.chkRecurrence.checked = false;
+      DOM.recurrenceOptions.style.display = 'none';
+    }
 
     // Clear and set participants
     DOM.participantsList.querySelectorAll('input').forEach(box => box.checked = false);
@@ -802,6 +927,7 @@
     DOM.innspillList.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
+    applyInstanceLockUI(m.isRecurringInstance);
     DOM.btnViewProtocol.style.display = CONFIG.VIEWABLE_PROTOCOL_STATUSES.includes(state.meetingStatus) ? 'inline-block' : 'none';
     DOM.btnSendInnkalling.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
     DOM.btnGenerateProtocol.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
@@ -922,14 +1048,23 @@
 
   function clearMeeting(){
     stopPolling();
-    state.moteId=null; state.meetingStatus=null; state.canUnlock=false;
+    state.moteId=null; state.instanceId=null; state.meetingStatus=null; state.canUnlock=false;
     DOM.moteId.value='';
     DOM.type.value='Styremøte'; DOM.dato.value=''; DOM.start.value='18:00'; DOM.slutt.value='20:00';
     DOM.sted.value=''; DOM.tittel.value='';
+
+    // Clear recurrence
+    DOM.chkRecurrence.checked = false;
+    DOM.recurrenceOptions.style.display = 'none';
+    DOM.recurrenceFrequency.value = 'monthly';
+    DOM.recurrenceDay.value = '1';
+    DOM.recurrenceOccurrence.value = '1';
+
     setStatus('');
     clearSak();
     updateStatusBadge();
     applyLockUI(false);
+    applyInstanceLockUI(false);
     DOM.btnViewProtocol.style.display = 'none';
     DOM.btnSendInnkalling.style.display = 'none';
     DOM.innspillList.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';

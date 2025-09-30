@@ -34,20 +34,28 @@
     <main>
         <p>Innlogget som: <b><?= userInfo.email || 'Ukjent' ?></b></p>
 
-        <? if (isAdmin) { ?>
-            <div class="btn-group">
-                <a href="<?= webAppUrl ?>?page=leverandorliste" class="btn">Leverandører</a>
-                <? if (adminButtons && adminButtons.length > 0) { ?>
-                    <? adminButtons.forEach(button => { ?>
-                        <button class="btn admin-btn <?= button.class || '' ?>" data-action="<?= button.action ?>">
-                            <?= button.label ?>
-                        </button>
-                    <? }) ?>
-                <? } ?>
-                <button class="btn admin-btn" data-action="runRiskAnalysis">Start Risikoanalyse</button>
-            </div>
-        <? } else { ?>
-            <span class="badge">Ingen admin-tilgang.</span>
+        <div class="btn-group">
+          <? if (canViewArchive) { ?>
+              <button class="btn" onclick="window.open('<?= ScriptApp.getService().getUrl() ?>?page=dokumentarkiv', '_blank');">
+                  Dokumentarkiv
+              </button>
+          <? } ?>
+
+          <? if (isAdmin) { ?>
+              <a href="<?= webAppUrl ?>?page=leverandorliste" class="btn">Leverandører</a>
+              <? if (adminButtons && adminButtons.length > 0) { ?>
+                  <? adminButtons.forEach(button => { ?>
+                      <button class="btn admin-btn <?= button.class || '' ?>" data-action="<?= button.action ?>">
+                          <?= button.label ?>
+                      </button>
+                  <? }) ?>
+              <? } ?>
+              <button class="btn admin-btn" data-action="runRiskAnalysis">Start Risikoanalyse</button>
+          <? } ?>
+        </div>
+
+        <? if (!isAdmin && !canViewArchive) { ?>
+            <span class="badge">Ingen tilgjengelige handlinger.</span>
         <? } ?>
 
         <div id="risk-analysis-modal" class="modal">

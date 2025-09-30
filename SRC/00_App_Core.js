@@ -3,9 +3,9 @@
  * FORMÅL: App-oppstart, konstanter, meny, generiske UI-åpnere.
  *
  * ENDRINGER v2.0.0:
- *  - Modernisert til `let`/`const` og arrow functions.
- *  - Forbedret `validateUIFiles` med `for...of` og optional chaining.
- *  - Tydeliggjort kommentarer og logikk i UI-åpner og menybygger.
+ * - Modernisert til `let`/`const` og arrow functions.
+ * - Forbedret `validateUIFiles` med `for...of` og optional chaining.
+ * - Tydeliggjort kommentarer og logikk i UI-åpner og menybygger.
  * ================================================================== */
 
 const APP = Object.freeze({
@@ -51,18 +51,19 @@ const PROP_KEYS = Object.freeze({
 
 /* ---------- Felles mapping til alle UI-filer (nummerert) ---------- */
 globalThis.UI_FILES = Object.freeze({
-  DASHBOARD_HTML:        { file: '37_Dashboard.html',                title: 'Sameieportal — Dashbord',   w: 1280, h: 840 },
-  MOTEOVERSIKT:          { file: '30_Moteoversikt.html',             title: 'Møteoversikt & Protokoller', w: 1100, h: 760 },
-  MOTE_SAK_EDITOR:       { file: '31_MoteSakEditor.html',            title: 'Møtesaker – Editor',         w: 1100, h: 760 },
-  EIERSKIFTE:            { file: '34_EierskifteSkjema.html',         title: 'Eierskifteskjema',           w: 980,  h: 760 },
-  PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html', title: 'Protokoll-godkjenning',   w: 980,  h: 760 },
-  SEKSJON_HISTORIKK:     { file: '32_SeksjonHistorikk.html',         title: 'Seksjonshistorikk',          w: 1100, h: 760 },
-  VAKTMESTER:            { file: '33_VaktmesterVisning.html',        title: 'Vaktmester',                 w: 1100, h: 800 },
-  LEVERANDOR_ADMIN:      { file: '44_LeverandorAdmin.html',          title: 'Leverandøradmin',            w: 1200, h: 760 },
-  AI_ASSISTENT:          { file: '40_AI_Assistent.html',             title: 'AI-assistent for e-post',    w: 1200, h: 800 },
-  SHARE_DOCUMENT:        { file: '41_ShareDocument.html',            title: 'Del Dokument',               w: 800,  h: 600 },
-  AVTALEBEHANDLER:       { file: '44_Avtalebehandler.html',          title: 'Avtalebehandler',            w: 1000, h: 760 },
-  MIN_SIDE:              { file: '46_MinSide.html',                  title: 'Min Side',                   w: 800,  h: 600 }
+  DASHBOARD_HTML:        { file: '37_Dashboard.html',                   title: 'Sameieportal — Dashbord',      w: 1280, h: 840 },
+  MOTEOVERSIKT:          { file: '30_Moteoversikt.html',                title: 'Møteoversikt & Protokoller',    w: 1100, h: 760 },
+  MOTE_SAK_EDITOR:       { file: '31_MoteSakEditor.html',               title: 'Møtesaker – Editor',            w: 1100, h: 760 },
+  EIERSKIFTE:            { file: '34_EierskifteSkjema.html',            title: 'Eierskifteskjema',              w: 980,  h: 760 },
+  PROTOKOLL_GODKJENNING: { file: '35_ProtokollGodkjenningSkjema.html',  title: 'Protokoll-godkjenning',      w: 980,  h: 760 },
+  SEKSJON_HISTORIKK:     { file: '32_SeksjonHistorikk.html',            title: 'Seksjonshistorikk',             w: 1100, h: 760 },
+  VAKTMESTER:            { file: '33_VaktmesterVisning.html',           title: 'Vaktmester',                    w: 1100, h: 800 },
+  LEVERANDOR_ADMIN:      { file: '44_LeverandorAdmin.html',             title: 'Leverandøradmin',               w: 1200, h: 760 },
+  AI_ASSISTENT:          { file: '40_AI_Assistent.html',                title: 'AI-assistent for e-post',       w: 1200, h: 800 },
+  SHARE_DOCUMENT:        { file: '41_ShareDocument.html',               title: 'Del Dokument',                  w: 800,  h: 600 },
+  AVTALEBEHANDLER:       { file: '44_Avtalebehandler.html',             title: 'Avtalebehandler',               w: 1000, h: 760 },
+  MIN_SIDE:              { file: '46_MinSide.html',                     title: 'Min Side',                      w: 800,  h: 600 },
+  DOKUMENTARKIV:         { file: '41_Dokumentarkiv.html',               title: 'Dokumentarkiv',                 w: 1200, h: 800 }
 });
 
 /*
@@ -174,6 +175,12 @@ function onOpen(e) {
   addIf('Søk i seksjonshistorikk…', 'openSectionHistory');
   menu.addSeparator();
   addIf('🤖 AI-assistent for e-post', 'openAiAssistant');
+
+  // Dokumentarkiv (rollebasert)
+  if (typeof hasPermission === 'function' && hasPermission('VIEW_DOCUMENT_ARCHIVE')) {
+    menu.addSeparator();
+    addIf('Dokumentarkiv', 'openDocumentArchive');
+  }
 
   // Vaktmester (rollebasert)
   if (typeof hasPermission === 'function' && hasPermission('VIEW_VAKTMESTER_UI')) {
@@ -339,6 +346,9 @@ if (typeof globalThis.openMinSide !== 'function') {
     // Viser en midlertidig dialogboks mens siden åpnes
     getUi().showModalDialog(HtmlService.createHtmlOutput("<p>Åpner Min Side i en ny fane...</p>"), "Åpner...");
   };
+}
+if (typeof globalThis.openDocumentArchive !== 'function') {
+  globalThis.openDocumentArchive = () => _openHtmlFromMap_('DOKUMENTARKIV', 'modal');
 }
 
 /* ---------- Utvikler-verktøy: valider at HTML-filer finnes ---------- */

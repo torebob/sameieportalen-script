@@ -2,13 +2,13 @@
  * FILE: 05_Dashboard_UI.gs  |  VERSION: 3.0.0  |  UPDATED: 2025-09-26
  *
  * FORMÅL:
- *  - Sentralisert logikk for å bygge og vise dashboard-UI.
- *  - Bruker moderne JavaScript (let/const, arrow functions) og sentraliserte hjelpere.
+ * - Sentralisert logikk for å bygge og vise dashboard-UI.
+ * - Bruker moderne JavaScript (let/const, arrow functions) og sentraliserte hjelpere.
  *
  * ENDRINGER v3.0.0:
- *  - Modernisert til let/const og arrow functions.
- *  - Fjernet lokale hjelpefunksjoner; bruker nå 000_Utils.js og Config_Service Dashbord.js.
- *  - Forbedret kodestruktur for lesbarhet og vedlikehold.
+ * - Modernisert til let/const og arrow functions.
+ * - Fjernet lokale hjelpefunksjoner; bruker nå 000_Utils.js og Config_Service Dashbord.js.
+ * - Forbedret kodestruktur for lesbarhet og vedlikehold.
  * ============================================================================================ */
 
 (() => {
@@ -117,12 +117,15 @@
         };
     }).filter(Boolean);
 
+    const canViewArchive = globalThis.hasPermission?.('VIEW_DOCUMENT_ARCHIVE');
+
     const template = HtmlService.createTemplateFromFile('SRC/37_Dashboard.html');
     template.userInfo = userInfo;
     template.isAdmin = isAdmin;
     template.appName = appName;
     template.adminButtons = adminButtons;
     template.webAppUrl = ScriptApp.getService().getUrl();
+    template.canViewArchive = canViewArchive;
 
     const output = template.evaluate()
       .setTitle(`${appName} – Dashboard`)

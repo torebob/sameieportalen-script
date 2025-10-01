@@ -26,9 +26,12 @@
  */
 function doGet(e) {
   try {
-    // This calls the existing listMeetings_ function from the main backend script.
+    // Fetch both meetings and tasks
     const meetings = listMeetings_({ scope: 'all' });
-    const cal = generateICal(meetings);
+    const tasks = listTasks_(); // Using the new function from Gjoremal_Backend.gs
+
+    // Generate the calendar with both data sources
+    const cal = generateICal(meetings, tasks);
 
     return ContentService.createTextOutput(cal)
       .setMimeType(ContentService.MimeType.ICAL);
@@ -58,13 +61,24 @@ function getCalendarExportUrl() {
 }
 
 /**
- * Generates an iCalendar (.ics) formatted string from a list of meetings.
- * @param {Array<object>} meetings - The list of meeting objects from listMeetings_.
+ * Generates an iCalendar (.ics) formatted string from meetings and tasks.
+ * @param {Array<object>} meetings - The list of meeting objects.
+ * @param {Array<object>} tasks - The list of task objects.
  * @returns {string} The iCalendar data as a string.
  */
-function generateICal(meetings) {
+function generateICal(meetings, tasks) {
   const calName = "Styrekalender";
   const timeZone = Session.getScriptTimeZone();
+
+  // Helper to format dates for iCal (YYYYMMDDTHHMMSSZ or YYYYMMDD for all-day)
+  const toICalDate = (date, allDay = false) => {
+    if (allDay) {
+      // Format as YYYYMMDD for all-day events
+      return date.toISOString().slice(0, 10).replace(/-/g, '');
+    }
+    // Format as YYYYMMDDTHHMMSSZ for timed events
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
 
   let icalString = `BEGIN:VCALENDAR
 PRODID:-//Styre-App//NONSGML v1.0//EN
@@ -75,53 +89,56 @@ X-WR-CALNAME:${calName}
 X-WR-TIMEZONE:${timeZone}
 `;
 
+  // Process Meetings
   (meetings || []).forEach(m => {
-    if (!m.dato || !m.tittel) {
-      return; // Skip meetings without a date or title.
-    }
+    if (!m.dato || !m.tittel) return;
 
-    // Ensure 'dato' is a Date object.
-    const startDate = m.dato instanceof Date ? new Date(m.dato.getTime()) : new Date(m.dato);
-    const endDate = m.dato instanceof Date ? new Date(m.dato.getTime()) : new Date(m.dato);
+    const startDate = new Date(m.dato);
+    const endDate = new Date(m.dato);
 
-    // Handle time. Assumes m.start and m.slutt are "HH:mm" strings.
     if (m.start && typeof m.start === 'string' && m.start.includes(':')) {
       const [startHour, startMinute] = m.start.split(':');
       startDate.setHours(startHour, startMinute, 0, 0);
     } else {
-      // If no start time, it's an all-day event. We'll handle this by not including time in the DTSTART/DTEND.
-      // However, for simplicity and compatibility, we'll set a default time.
-      // A true all-day event would format the date as VALUE=DATE:YYYYMMDD.
-      startDate.setHours(0, 0, 0, 0);
+      startDate.setHours(0, 0, 0, 0); // Default to start of the day
     }
 
     if (m.slutt && typeof m.slutt === 'string' && m.slutt.includes(':')) {
       const [endHour, endMinute] = m.slutt.split(':');
       endDate.setHours(endHour, endMinute, 0, 0);
     } else {
-      // If no end time, default to a 1-hour duration from the start time.
-      endDate.setHours(startDate.getHours() + 1, startDate.getMinutes(), 0, 0);
+      endDate.setHours(startDate.getHours() + 1, startDate.getMinutes(), 0, 0); // Default 1h duration
     }
-
-    // Format dates to the required iCal UTC format (YYYYMMDDTHHMMSSZ).
-    const toUTC = (date) => {
-      return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    }
-
-    const uid = `${m.id || Utilities.getUuid()}@styreapp.dev`; // Generate a UUID if id is missing.
-    const summary = m.tittel;
-    const location = m.sted || '';
-    const description = `Møtetype: ${m.type || 'Ikke spesifisert'}. Status: ${m.status || 'Planlagt'}.`;
-    const dtstamp = toUTC(new Date()); // Timestamp for when the event was created/modified.
 
     icalString += `BEGIN:VEVENT
-UID:${uid}
-DTSTAMP:${dtstamp}
-DTSTART:${toUTC(startDate)}
-DTEND:${toUTC(endDate)}
-SUMMARY:${summary}
-LOCATION:${location}
-DESCRIPTION:${description}
+UID:${m.id || Utilities.getUuid()}@styreapp.dev
+DTSTAMP:${toICalDate(new Date())}
+DTSTART:${toICalDate(startDate)}
+DTEND:${toICalDate(endDate)}
+SUMMARY:${m.tittel}
+LOCATION:${m.sted || ''}
+DESCRIPTION:Møtetype: ${m.type || 'Ikke spesifisert'}. Status: ${m.status || 'Planlagt'}.
+END:VEVENT
+`;
+  });
+
+  // Process Tasks as all-day events
+  (tasks || []).forEach(task => {
+    if (!task.dueDate || !task.title) return;
+
+    const dueDate = new Date(task.dueDate);
+
+    // For all-day events, DTSTART is the date, and DTEND is the next day.
+    const nextDay = new Date(dueDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    icalString += `BEGIN:VEVENT
+UID:${task.id || Utilities.getUuid()}@styreapp.dev
+DTSTAMP:${toICalDate(new Date())}
+DTSTART;VALUE=DATE:${toICalDate(dueDate, true)}
+DTEND;VALUE=DATE:${toICalDate(nextDay, true)}
+SUMMARY:${task.title}
+DESCRIPTION:Oppgave tildelt: ${task.assignee || 'N/A'}. Status: ${task.status || 'Open'}. \\n${task.description || ''}
 END:VEVENT
 `;
   });

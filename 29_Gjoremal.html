@@ -63,7 +63,10 @@
           <option value="all">Alle ansvarlige</option>
         </select>
       </div>
-      <button class="btn primary" id="btnNewTask">➕ Ny oppgave</button>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn" id="btnExportCalendar">🗓️ Eksporter Kalender</button>
+        <button class="btn primary" id="btnNewTask">➕ Ny oppgave</button>
+      </div>
     </div>
 
     <div id="taskGrid" class="task-grid">
@@ -107,10 +110,32 @@
     </div>
   </div>
 
+  <div id="exportModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <div class="modal-title">Eksporter Kalender</div>
+        <button class="btn" onclick="closeExportModal()">✖</button>
+      </div>
+      <p class="muted" style="margin-top: -10px; margin-bottom: 20px;">
+        Bruk denne lenken for å abonnere på kalenderen i Google Calendar, Outlook, eller andre kalendertjenester.
+      </p>
+      <div class="form-group">
+        <label for="calendarUrl">Kalender-URL</label>
+        <input type="text" id="calendarUrl" readonly style="cursor: copy;" />
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn" onclick="closeExportModal()">Lukk</button>
+        <button type="button" class="btn primary" id="btnCopyUrl">Kopier lenke</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let tasks = []; // Full dataset for client-side operations
     const modal = document.getElementById('taskModal');
     const btnNewTask = document.getElementById('btnNewTask');
+    const exportModal = document.getElementById('exportModal');
+    const btnExportCalendar = document.getElementById('btnExportCalendar');
 
     function toast(msg, kind){
       const t=document.createElement('div'); t.className='toast ' + (kind||'');
@@ -131,11 +156,48 @@
 
     btnNewTask.addEventListener('click', openModal);
 
+    // --- Calendar Export Modal Logic ---
+    function openExportModal() {
+      exportModal.classList.add('open');
+      const urlInput = document.getElementById('calendarUrl');
+      urlInput.value = 'Laster inn...';
+
+      google.script.run
+        .withSuccessHandler(response => {
+          if (response.ok) {
+            urlInput.value = response.url;
+          } else {
+            urlInput.value = 'Feil: ' + response.message;
+            toast(response.message, 'err');
+          }
+        })
+        .withFailureHandler(err => {
+          urlInput.value = 'Feil: ' + err.message;
+          toast(err.message, 'err');
+        })
+        .getCalendarExportUrl();
+    }
+
+    function closeExportModal() {
+      exportModal.classList.remove('open');
+    }
+
+    btnExportCalendar.addEventListener('click', openExportModal);
+
+    document.getElementById('btnCopyUrl').addEventListener('click', () => {
+      const urlInput = document.getElementById('calendarUrl');
+      navigator.clipboard.writeText(urlInput.value).then(() => {
+        toast('Lenke kopiert!', 'ok');
+      }, () => {
+        toast('Kunne ikke kopiere lenken.', 'err');
+      });
+    });
+
+
     // Close modal if user clicks outside of it
     window.addEventListener('click', e => {
-      if (e.target === modal) {
-        closeModal();
-      }
+      if (e.target === modal) closeModal();
+      if (e.target === exportModal) closeExportModal();
     });
 
     function renderTasks(displayTasks) {

@@ -22,26 +22,39 @@ function _validateConfig() {
 }
 
 /**
- * Retrieves the list of tasks.
+ * Retrieves the list of tasks from the spreadsheet.
+ * This is an internal function, not exposed to the client-side directly.
+ * @returns {Array<object>} A list of task objects.
+ * @private
+ */
+function listTasks_() {
+  _validateConfig();
+  const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
+  if (!sheet) {
+    throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found. Please check sheet name.`);
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data.shift(); // Remove header row
+
+  const tasks = data.map(row => {
+    const task = {};
+    headers.forEach((header, i) => {
+      task[header] = row[i];
+    });
+    return task;
+  });
+
+  return tasks;
+}
+
+/**
+ * Retrieves the list of tasks for the client-side UI.
  * @returns {object} A response object with the list of tasks.
  */
 function gjoremalGet() {
   try {
-    _validateConfig();
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName(TASKS_SHEET_NAME);
-    if (!sheet) throw new Error(`Sheet "${TASKS_SHEET_NAME}" not found. Please check sheet name.`);
-
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift(); // Remove header row
-
-    const tasks = data.map(row => {
-      const task = {};
-      headers.forEach((header, i) => {
-        task[header] = row[i];
-      });
-      return task;
-    });
-
+    const tasks = listTasks_();
     return { ok: true, tasks: tasks };
   } catch (e) {
     return { ok: false, message: e.message };

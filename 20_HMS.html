@@ -60,7 +60,17 @@
         background-color: #f2f2f2;
     }
 
-    .hms-button {
+    .form-group {
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-group label {
+        margin-bottom: 0.5rem;
+    }
+
+    .hms-button, button {
         background-color: #4CAF50;
         color: white;
         padding: 10px 15px;
@@ -68,16 +78,17 @@
         border-radius: 4px;
         cursor: pointer;
         font-size: 16px;
+        margin-right: 5px;
     }
 
     .hms-button:hover {
         background-color: #45a049;
     }
 
-    .hms-button.delete {
+    .hms-button.delete, button.delete {
         background-color: #f44336;
     }
-    .hms-button.delete:hover {
+    .hms-button.delete:hover, button.delete:hover {
         background-color: #da190b;
     }
 
@@ -111,7 +122,65 @@
       font-weight: bold;
       cursor: pointer;
     }
+
+    /* Spinner Overlay */
+    #spinner-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 2000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    .spinner {
+        border: 8px solid #f3f3f3;
+        border-top: 8px solid #3498db;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .hidden {
+        display: none;
+    }
+
+    /* Toast Notifications */
+    #toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 3000;
+    }
+    .toast {
+        padding: 15px;
+        color: white;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        opacity: 0;
+        transition: opacity 0.5s;
+    }
+    .toast.show {
+        opacity: 1;
+    }
+    .toast.success { background-color: #4CAF50; }
+    .toast.error { background-color: #f44336; }
+    .toast.info { background-color: #2196F3; }
+    .toast.confirm { background-color: #ff9800; }
 </style>
+
+<div id="spinner-overlay" class="hidden">
+    <div class="spinner"></div>
+</div>
+
+<div id="toast-container"></div>
 
 <div class="hms-container">
     <h2>HMS-Modul</h2>
@@ -130,10 +199,14 @@
             <h3>Start ny risikovurdering</h3>
             <p>Velg en mal for å starte en ny risikovurdering for et spesifikt område.</p>
             <form id="start-risk-form">
-                <label for="risk-template-select">Velg mal:</label>
-                <select id="risk-template-select" required></select>
-                <label for="risk-area-name">Navn på område (f.eks. "Lekeplass ved Blokk A"):</label>
-                <input type="text" id="risk-area-name" required>
+                <div class="form-group">
+                    <label for="risk-template-select">Velg mal:</label>
+                    <select id="risk-template-select" required></select>
+                </div>
+                <div class="form-group">
+                    <label for="risk-area-name">Navn på område (f.eks. "Lekeplass ved Blokk A"):</label>
+                    <input type="text" id="risk-area-name" required>
+                </div>
                 <button type="submit" class="hms-button">Start Vurdering</button>
             </form>
         </div>
@@ -183,12 +256,18 @@
     <div id="deviation" class="hms-tab-content">
         <h3>Registrer avvik eller uønsket hendelse</h3>
         <form id="deviation-form">
-            <label for="deviation-location">Lokasjon:</label>
-            <input type="text" id="deviation-location" required><br><br>
-            <label for="deviation-description">Beskrivelse av avvik:</label>
-            <textarea id="deviation-description" rows="4" required></textarea><br><br>
-            <label for="deviation-attachment">Legg ved bilde (valgfritt):</label>
-            <input type="file" id="deviation-attachment" accept="image/*"><br><br>
+            <div class="form-group">
+                <label for="deviation-location">Lokasjon:</label>
+                <input type="text" id="deviation-location" required>
+            </div>
+            <div class="form-group">
+                <label for="deviation-description">Beskrivelse av avvik:</label>
+                <textarea id="deviation-description" rows="4" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="deviation-attachment">Legg ved bilde (valgfritt):</label>
+                <input type="file" id="deviation-attachment" accept="image/*">
+            </div>
             <button type="submit" class="hms-button">Registrer Avvik</button>
         </form>
     </div>
@@ -228,12 +307,18 @@
         <h3 id="checklist-modal-title">Ny Sjekkliste</h3>
         <form id="checklist-form">
             <input type="hidden" id="checklist-id">
-            <label for="checklist-name">Navn:</label>
-            <input type="text" id="checklist-name" required><br><br>
-            <label for="checklist-description">Beskrivelse:</label>
-            <input type="text" id="checklist-description"><br><br>
-            <label for="checklist-frequency">Frekvens (f.eks. Månedlig, Kvartalsvis):</label>
-            <input type="text" id="checklist-frequency"><br><br>
+            <div class="form-group">
+                <label for="checklist-name">Navn:</label>
+                <input type="text" id="checklist-name" required>
+            </div>
+            <div class="form-group">
+                <label for="checklist-description">Beskrivelse:</label>
+                <input type="text" id="checklist-description">
+            </div>
+            <div class="form-group">
+                <label for="checklist-frequency">Frekvens (f.eks. Månedlig, Kvartalsvis):</label>
+                <input type="text" id="checklist-frequency">
+            </div>
             <h4>Sjekkpunkter</h4>
             <div id="checklist-items-container">
                 <!-- Checklist items will be added here -->
@@ -256,16 +341,61 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onerror = error => reject(error);
     });
 
-    const showSpinner = () => console.log("Loading...");
-    const hideSpinner = () => console.log("Done.");
-    const showAlert = (message, type = 'info') => alert(message);
+    const spinner = document.getElementById('spinner-overlay');
+    const showSpinner = () => spinner.classList.remove('hidden');
+    const hideSpinner = () => spinner.classList.add('hidden');
 
-    /**
-     * A wrapper for google.script.run calls to handle spinners, errors, and responses.
-     * @param {string} functionName - The name of the backend function to call.
-     * @param {...any} args - Arguments to pass to the backend function.
-     * @returns {Promise<object>} A promise that resolves with the successful response data.
-     */
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+
+        // Show the toast
+        setTimeout(() => toast.classList.add('show'), 100);
+
+        // Hide the toast after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            // Remove the element from the DOM after the transition
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
+    async function showConfirm(message) {
+        return new Promise(resolve => {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast confirm';
+
+            const msgSpan = document.createElement('span');
+            msgSpan.textContent = message;
+
+            const btnGroup = document.createElement('div');
+            btnGroup.style.marginTop = '10px';
+
+            const yesButton = document.createElement('button');
+            yesButton.textContent = 'Yes';
+            yesButton.onclick = () => {
+                toast.remove();
+                resolve(true);
+            };
+
+            const noButton = document.createElement('button');
+            noButton.textContent = 'No';
+            noButton.onclick = () => {
+                toast.remove();
+                resolve(false);
+            };
+
+            btnGroup.append(yesButton, noButton);
+            toast.append(msgSpan, btnGroup);
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 100);
+        });
+    }
+
     function runServerFn(functionName, ...args) {
         showSpinner();
         return new Promise((resolve, reject) => {
@@ -276,19 +406,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         resolve(response);
                     } else {
                         const errorMessage = `Feil: ${response.error || 'En ukjent feil oppstod.'}`;
-                        showAlert(errorMessage, 'error');
+                        showToast(errorMessage, 'error');
                         reject(new Error(errorMessage));
                     }
                 })
                 .withFailureHandler(err => {
                     hideSpinner();
                     const errorMessage = `Serverfeil: ${err.message}`;
-                    showAlert(errorMessage, 'error');
+                    showToast(errorMessage, 'error');
                     reject(err);
                 })
                 [functionName](...args);
         });
     }
+
+    // --- DATA CACHING ---
+    const loadedTabs = new Set();
 
     // --- TAB HANDLING ---
     const hmsTabs = document.querySelector('.hms-tabs');
@@ -305,7 +438,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(tabId).classList.add('active');
         hmsTabs.querySelector(`[data-tab='${tabId}']`).classList.add('active');
 
-        loadTabData(tabId);
+        if (!loadedTabs.has(tabId)) {
+            loadTabData(tabId);
+            loadedTabs.add(tabId);
+        }
     }
 
     function loadTabData(tabId) {
@@ -344,12 +480,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const editButton = document.createElement('button');
             editButton.textContent = 'Rediger';
             editButton.dataset.id = c.id;
-            editButton.classList.add('edit-checklist');
+            editButton.className = 'hms-button edit-checklist';
 
             const deleteButton = document.createElement('button');
             deleteButton.textContent = 'Slett';
             deleteButton.dataset.id = c.id;
-            deleteButton.classList.add('delete-checklist', 'delete');
+            deleteButton.className = 'hms-button delete delete-checklist';
 
             actionsCell.append(editButton, deleteButton);
         });
@@ -391,11 +527,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const templateId = document.getElementById('risk-template-select').value;
         const areaName = document.getElementById('risk-area-name').value;
         if (!templateId || !areaName) {
-            return showAlert('Vennligst velg en mal og angi et områdenavn.', 'warning');
+            return showToast('Vennligst velg en mal og angi et områdenavn.', 'info');
         }
         try {
             await runServerFn('hmsStartRiskAssessment', templateId, areaName);
-            showAlert('Risikovurdering startet!', 'success');
+            showToast('Risikovurdering startet!', 'success');
             e.target.reset();
             loadRiskAssessments(); // Refresh list
         } catch (e) {
@@ -460,8 +596,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             await runServerFn('hmsSaveChecklist', payload);
-            showAlert('Sjekkliste lagret!', 'success');
+            showToast('Sjekkliste lagret!', 'success');
             closeModal();
+            loadedTabs.delete('checklists'); // Invalidate cache
             loadChecklists();
         } catch (e) {
             console.error("Failed to save checklist:", e);
@@ -475,17 +612,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!checklistId) return;
 
         if (target.matches('.delete-checklist')) {
-            if (!confirm('Er du sikker på at du vil slette denne sjekklisten?')) return;
+            const confirmed = await showConfirm('Er du sikker på at du vil slette denne sjekklisten?');
+            if (!confirmed) return;
             try {
                 await runServerFn('hmsDeleteChecklist', checklistId);
-                showAlert('Sjekkliste slettet.', 'success');
+                showToast('Sjekkliste slettet.', 'success');
+                loadedTabs.delete('checklists'); // Invalidate cache
                 loadChecklists();
             } catch (e) {
                 console.error("Failed to delete checklist:", e);
             }
         } else if (target.matches('.edit-checklist')) {
-            // Future implementation: Fetch single checklist data and populate modal
-            showAlert(`Redigering av sjekkliste ${checklistId} er ikke implementert ennå.`);
+            try {
+                const response = await runServerFn('hmsGetChecklistById', checklistId);
+                const checklist = response.checklist;
+
+                // Populate and show the modal
+                document.getElementById('checklist-form').reset();
+                document.getElementById('checklist-id').value = checklist.id;
+                document.getElementById('checklist-name').value = checklist.name;
+                document.getElementById('checklist-description').value = checklist.description;
+                document.getElementById('checklist-frequency').value = checklist.frequency;
+                document.getElementById('checklist-modal-title').textContent = 'Rediger Sjekkliste';
+
+                const itemsContainer = document.getElementById('checklist-items-container');
+                itemsContainer.innerHTML = '';
+                if (checklist.itemsJson) {
+                    const items = JSON.parse(checklist.itemsJson);
+                    items.forEach(item => addChecklistItem(item.text));
+                }
+
+                openModal();
+            } catch (e) {
+                console.error("Failed to fetch checklist for editing:", e);
+                showToast('Kunne ikke hente sjekkliste for redigering.', 'error');
+            }
         }
     });
 
@@ -512,8 +673,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const response = await runServerFn('hmsRegisterDeviation', payload);
-            showAlert(`Avvik registrert! En oppgave med ID ${response.linkedTaskId} er opprettet.`, 'success');
+            showToast(`Avvik registrert! En oppgave med ID ${response.linkedTaskId} er opprettet.`, 'success');
             e.target.reset();
+            loadedTabs.delete('history'); // Invalidate history cache
         } catch (e) {
             console.error("Failed to register deviation:", e);
         }

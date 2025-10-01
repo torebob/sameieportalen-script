@@ -286,6 +286,14 @@
     <ul id="documentList" class="list"><li class="hint">Ingen dokumenter lastet opp.</li></ul>
   </div>
 </div>
+
+<template id="meeting-item-template">
+  <li>
+      <strong></strong><br>
+      <span class="details"></span>
+  </li>
+</template>
+
 <script src="SRC/calendar.js"></script>
 <script>
   const $ = s => document.querySelector(s);
@@ -414,19 +422,6 @@
     DOM.instanceNotice.style.display = isInstance ? 'block' : 'none';
   }
 
-  function applyInstanceLockUI(isInstance) {
-    const fieldsToLock = [
-        DOM.type, DOM.dato, DOM.start, DOM.slutt, DOM.sted, DOM.tittel,
-        DOM.chkRecurrence, DOM.recurrenceFrequency, DOM.recurrenceDay, DOM.recurrenceOccurrence
-    ];
-    fieldsToLock.forEach(el => {
-        if (el) el.disabled = isInstance;
-    });
-
-    DOM.btnSaveMeeting.style.display = isInstance ? 'none' : 'inline-block';
-    DOM.instanceNotice.style.display = isInstance ? 'block' : 'none';
-  }
-
   function updateStatusBadge(){
     if (!state.meetingStatus){
         DOM.statusBadge.style.display='none';
@@ -436,6 +431,15 @@
     DOM.statusBadge.className = 'pill' + (isLocked(state.meetingStatus) ? ' ' + CONFIG.CSS_CLASSES.LOCKED : '');
     DOM.statusBadge.style.display='inline-block';
     DOM.btnUnlock.style.display = (isLocked(state.meetingStatus) && state.canUnlock) ? 'inline-flex' : 'none';
+  }
+
+  function updateButtonVisibility() {
+    const isMeetingSelected = !!state.moteId;
+    const isMeetingLocked = isLocked(state.meetingStatus);
+
+    DOM.btnSendInnkalling.style.display = (isMeetingSelected && !isMeetingLocked) ? 'inline-block' : 'none';
+    DOM.btnGenerateProtocol.style.display = (isMeetingSelected && !isMeetingLocked) ? 'inline-block' : 'none';
+    DOM.btnViewProtocol.style.display = CONFIG.VIEWABLE_PROTOCOL_STATUSES.includes(state.meetingStatus) ? 'inline-block' : 'none';
   }
 
   // init
@@ -778,6 +782,11 @@
             .withFailureHandler(handleScriptFailure)
             .generateProtocol(state.moteId);
     });
+
+    // Recurrence checkbox logic
+    DOM.chkRecurrence.addEventListener('change', function() {
+      DOM.recurrenceOptions.style.display = this.checked ? 'block' : 'none';
+    });
   }
 
   function initializeCalendar() {
@@ -861,12 +870,17 @@
       ul.innerHTML = '<li class="hint">Ingen møter i listen for valgt periode.</li>';
     }
 
+    const template = document.getElementById('meeting-item-template');
     filteredList.forEach(m => {
-      const li = document.createElement('li');
-      li.innerHTML = `<strong>${escapeHtml(m.tittel||m.type)}</strong><br>${escapeHtml(m.type)} • ${m.dato?fmtDate(m.dato):''} • ${escapeHtml(m.start||'')} • ${escapeHtml(m.sted||'')}`;
-      li.style.cursor='pointer';
+      const clone = template.content.cloneNode(true);
+      clone.querySelector('strong').textContent = m.tittel || m.type;
+      clone.querySelector('.details').textContent = `${escapeHtml(m.type)} • ${m.dato?fmtDate(m.dato):''} • ${escapeHtml(m.start||'')} • ${escapeHtml(m.sted||'')}`;
+
+      const li = clone.querySelector('li');
+      li.style.cursor = 'pointer';
       li.addEventListener('click', () => loadMeeting(m));
-      ul.appendChild(li);
+
+      ul.appendChild(clone);
     });
 
     // Populate calendar
@@ -941,9 +955,7 @@
     updateStatusBadge();
     applyLockUI(isLocked(state.meetingStatus));
     applyInstanceLockUI(m.isRecurringInstance);
-    DOM.btnViewProtocol.style.display = CONFIG.VIEWABLE_PROTOCOL_STATUSES.includes(state.meetingStatus) ? 'inline-block' : 'none';
-    DOM.btnSendInnkalling.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
-    DOM.btnGenerateProtocol.style.display = (state.moteId && !isLocked(state.meetingStatus)) ? 'inline-block' : 'none';
+    updateButtonVisibility();
 
     // Show/hide video actions
     if (isValidHttpUrl(m.sted)) {
@@ -1078,8 +1090,7 @@
     updateStatusBadge();
     applyLockUI(false);
     applyInstanceLockUI(false);
-    DOM.btnViewProtocol.style.display = 'none';
-    DOM.btnSendInnkalling.style.display = 'none';
+    updateButtonVisibility();
     DOM.innspillList.innerHTML = '<div class="hint">Ingen innspill ennå.</div>';
   }
   function clearSak(){

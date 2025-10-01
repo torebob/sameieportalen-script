@@ -316,6 +316,27 @@ function hmsGenerateReport() {
     }
 }
 
+/**
+ * Fetches a single checklist by its ID.
+ * Required for the edit functionality.
+ * @param {string} id The ID of the checklist to retrieve.
+ * @returns {object} A response object with the checklist data.
+ */
+function hmsGetChecklistById(id) {
+    try {
+        _validateConfig();
+        if (!id) throw new Error("Checklist ID is required.");
+        const checklist = getRecordById_(HMS_CHECKLISTS_SHEET_NAME, id);
+        if (!checklist) {
+            return { ok: false, error: `Checklist with ID ${id} not found.` };
+        }
+        return { ok: true, checklist: checklist };
+    } catch (e) {
+        Logger.log(e);
+        return { ok: false, error: `Could not retrieve checklist: ${e.message}` };
+    }
+}
+
 // --- HELPER FUNCTIONS ---
 
 /**

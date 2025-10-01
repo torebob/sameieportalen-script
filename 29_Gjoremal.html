@@ -14,6 +14,8 @@
     .title{font-size:22px;font-weight:700}
     .muted{color:var(--muted);font-size:13px}
     .controls{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .controls .filter-group { display: flex; gap: 10px; align-items: center; }
+    .controls #searchInput { min-width: 220px; }
     .btn{display:inline-flex;gap:8px;align-items:center;padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer;font-size:13px}
     .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
     .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
@@ -48,23 +50,23 @@
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="head">
+  <main class="wrap">
+    <header class="head">
       <div>
         <div class="title">Oppgave- og Sakshåndtering</div>
         <div class="muted">Versjon <?= VERSION ?> • <span id="status" aria-live="polite">Laster inn...</span></div>
       </div>
-    </div>
+    </header>
 
     <div class="controls">
-      <div style="display: flex; gap: 10px; align-items: center;">
-        <input type="search" id="searchInput" placeholder="Søk i oppgaver..." class="form-group input" style="padding: 10px; min-width: 220px;"/>
-        <select id="statusFilter" class="form-group select" style="padding: 10px;">
+      <div class="filter-group">
+        <input type="search" id="searchInput" placeholder="Søk i oppgaver..." class="form-group input"/>
+        <select id="statusFilter" class="form-group select">
           <option value="all">Alle statuser</option>
           <option value="Open">Åpen</option>
           <option value="Completed">Fullført</option>
         </select>
-        <select id="assigneeFilter" class="form-group select" style="padding: 10px;">
+        <select id="assigneeFilter" class="form-group select">
           <option value="all">Alle ansvarlige</option>
         </select>
       </div>
@@ -80,7 +82,7 @@
     <div class="modal-content">
       <div class="modal-head">
         <div id="modalTitle" class="modal-title">Ny oppgave</div>
-        <button id="btnCloseModal" class="btn">✖</button>
+        <button id="btnCloseModal" class="btn" aria-label="Lukk modal">✖</button>
       </div>
       <form id="taskForm">
         <input type="hidden" id="taskId" />
@@ -253,53 +255,58 @@
 
     function deleteTask(id) {
       if (confirm('Er du sikker på at du vil slette denne oppgaven? Handlingen kan ikke angres.')) {
+        const originalTasks = [...tasks];
+
+        // Optimistically update UI
+        tasks = tasks.filter(t => t.id !== id);
+        applyFilters();
+
         document.getElementById('status').textContent = 'Sletter oppgave...';
         google.script.run
           .withSuccessHandler(response => {
             if (response.ok) {
               toast('Oppgave slettet!', 'ok');
-              fetchTasks();
+              document.getElementById('status').textContent = 'Klar';
             } else {
+              tasks = originalTasks; // Revert on failure
+              applyFilters();
               handleScriptFailure({ message: response.message || 'Kunne ikke slette oppgaven.' });
             }
           })
-          .withFailureHandler(handleScriptFailure)
+          .withFailureHandler(err => {
+            tasks = originalTasks; // Revert on failure
+            applyFilters();
+            handleScriptFailure(err);
+          })
           .gjoremalDeleteTask(id);
       }
     }
 
     function toggleTaskStatus(id) {
-        const card = document.querySelector(`[data-task-id="${id}"]`);
-        const btn = card?.querySelector('.btn-toggle-status');
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Oppdaterer...';
-        }
-
         const task = tasks.find(t => t.id === id);
         if (!task) return;
 
-        const newStatus = task.status === TASK_STATUS.OPEN ? TASK_STATUS.COMPLETED : TASK_STATUS.OPEN;
+        const originalStatus = task.status;
+        const newStatus = originalStatus === TASK_STATUS.OPEN ? TASK_STATUS.COMPLETED : TASK_STATUS.OPEN;
+
+        // Optimistically update UI
+        task.status = newStatus;
+        applyFilters();
 
         google.script.run
             .withSuccessHandler(response => {
                 if (response.ok) {
                     toast('Status oppdatert!', 'ok');
-                    fetchTasks();
                 } else {
+                    task.status = originalStatus; // Revert on failure
+                    applyFilters();
                     handleScriptFailure({ message: response.message || 'Kunne ikke oppdatere status.' });
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = 'Bytt Status';
-                    }
                 }
             })
             .withFailureHandler(err => {
+                task.status = originalStatus; // Revert on failure
+                applyFilters();
                 handleScriptFailure(err);
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = 'Bytt Status';
-                }
             })
             .gjoremalUpdateStatus(id, newStatus);
     }

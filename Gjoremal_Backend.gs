@@ -9,6 +9,10 @@
 const DB_SHEET_ID = 'YOUR_SHEET_ID_HERE'; // Replace with the actual ID of the Google Sheet
 const ATTACHMENTS_FOLDER_ID = 'YOUR_FOLDER_ID_HERE'; // Replace with the ID of the Google Drive folder for attachments
 
+// File Upload Validation
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_MIMETYPES = ['image/jpeg', 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+
 // Sheet Names
 const TASKS_SHEET_NAME = 'Tasks';
 const USERS_SHEET_NAME = 'Users';
@@ -73,7 +77,18 @@ function gjoremalSave(payload) {
     // Handle attachment upload
     if (payload.attachment) {
       const { base64, mimeType, name } = payload.attachment;
+
+      // Server-side validation
+      if (!ALLOWED_MIMETYPES.includes(mimeType)) {
+        throw new Error('Ugyldig filtype. Kun JPEG, PNG, PDF, DOCX, XLSX er tillatt.');
+      }
+
       const decoded = Utilities.base64Decode(base64, Utilities.Charset.UTF_8);
+
+      if (decoded.length > MAX_FILE_SIZE) {
+        throw new Error(`Filen er for stor. Maksimal størrelse er ${MAX_FILE_SIZE / 1024 / 1024} MB.`);
+      }
+
       const blob = Utilities.newBlob(decoded, mimeType, name);
 
       const folder = DriveApp.getFolderById(ATTACHMENTS_FOLDER_ID);

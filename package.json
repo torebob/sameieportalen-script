@@ -8,8 +8,10 @@
     "test": "npm run lint && npm run dup:check"
   },
   "devDependencies": {
-    "eslint": "^9.0.0",
-    "eslint-plugin-sonarjs": "^1.0.0",
+    "eslint": "^9.36.0",
+    "eslint-plugin-googleappsscript": "^1.0.5",
+    "eslint-plugin-sonarjs": "^1.0.4",
+    "globals": "^16.4.0",
     "jscpd": "^3.5.10"
   }
 }

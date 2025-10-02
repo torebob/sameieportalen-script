@@ -237,24 +237,27 @@ function getBookings(resourceId, year, month) {
 }
 
 function createBooking(bookingDetails) {
+    // Using LockService to prevent race conditions (double bookings)
     const lock = LockService.getScriptLock();
 
     try {
-        // KRITISK: Autentiser bruker først
-        const user = requireAuth(); // Fra Auth.gs
+        // CRITICAL: First, authenticate the user to ensure they have permission.
+        // This is the most important security measure. We'll use the version from the feature branch.
+        const user = requireAuth(); // Assumes this function is defined, e.g., in Auth.gs
 
-        lock.waitLock(30000); // Vent maks 30 sek
+        // Wait a maximum of 30 seconds for the lock.
+        lock.waitLock(30000);
 
         const { resourceId, startTime, endTime } = bookingDetails;
-
-        // VIKTIG: Bruk kun server-side brukerinfo - ALDRI stol på klient!
-        const userName = user.name;
-        const userEmail = user.email;
-
         const start = new Date(startTime);
         const end = new Date(endTime);
 
-        // Validering
+        // IMPORTANT: Use user details from the secure, server-side session.
+        // NEVER trust user details sent from the client.
+        const userName = user.name;
+        const userEmail = user.email;
+
+        // --- Validation ---
         if (!resourceId || !startTime || !endTime) {
             return { ok: false, message: "Alle felter er påkrevd" };
         }
@@ -263,12 +266,12 @@ function createBooking(bookingDetails) {
             return { ok: false, message: "Starttid må være før sluttid" };
         }
 
-        // Konfliktsjekk (nå innenfor lock)
+        // --- Conflict Check (within the lock to be thread-safe) ---
         const bookingsSheet = _getOrCreateSheet('Bookings',
             ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']
         );
         const data = bookingsSheet.getDataRange().getValues();
-        const headers = data.shift();
+        const headers = data.shift(); // Remove header row
         const resourceIdIndex = headers.indexOf('resourceId');
         const startTimeIndex = headers.indexOf('startTime');
         const endTimeIndex = headers.indexOf('endTime');
@@ -277,6 +280,7 @@ function createBooking(bookingDetails) {
             if (row[resourceIdIndex] !== resourceId) return false;
             const existingStart = new Date(row[startTimeIndex]);
             const existingEnd = new Date(row[endTimeIndex]);
+            // Check for overlapping times
             return start < existingEnd && end > existingStart;
         });
 
@@ -284,18 +288,19 @@ function createBooking(bookingDetails) {
             return { ok: false, message: "Tiden er allerede booket. Vennligst velg en annen tid." };
         }
 
-        // Opprett booking
+        // --- Create Booking ---
         const id = Utilities.getUuid();
         const createdAt = new Date().toISOString();
+        // Append the new booking to the sheet using the authenticated user's details.
         bookingsSheet.appendRow([id, resourceId, startTime, endTime, userEmail, userName, createdAt]);
 
-        // Logger handling
+        // --- Audit Logging (using the more detailed version from the feature branch) ---
         logAuditEvent('CREATE_BOOKING', 'Bookings', {
             bookingId: id,
             resourceId: resourceId
         });
 
-        // Send e-post
+        // --- Send Confirmation Email ---
         const resourceSheet = _getOrCreateSheet('CommonResources', ['id', 'name']);
         const resourceData = resourceSheet.getDataRange().getValues();
         const resourceHeaders = resourceData.shift();
@@ -304,6 +309,7 @@ function createBooking(bookingDetails) {
         const resourceRow = resourceData.find(r => r[resIdIndex] === resourceId);
         const resourceName = resourceRow ? resourceRow[resourceNameIndex] : 'Ukjent Ressurs';
 
+        // Encapsulate email sending in its own try-catch so a mail failure doesn't prevent the booking.
         try {
             MailApp.sendEmail(userEmail, "Booking bekreftelse", `
                 Hei ${userName},
@@ -315,20 +321,30 @@ function createBooking(bookingDetails) {
 
                 Takk!
             `);
-        } catch(e) {
-            console.error("Kunne ikke sende e-post: " + e.message);
+        } catch (e) {
+            console.error("Kunne ikke sende bekreftelses-epost for booking " + id + ": " + e.message);
         }
 
         return { ok: true, id: id };
 
     } catch (e) {
+        // Log the full error for debugging purposes.
         console.error("Error in createBooking: " + e.message);
         console.error(e.stack);
-        return { ok: false, message: e.message };
+
+        // Use the more specific, user-friendly error handling from the 'main' branch.
+        if (e.message.includes("Ikke autentisert") || e.message.includes("not authenticated")) {
+            return { ok: false, message: "Du må være logget inn for å booke." };
+        }
+        return { ok: false, message: "En serverfeil oppstod: " + e.message };
+
     } finally {
+        // CRITICAL: Always release the lock, even if an error occurred.
+        // This is taken from the 'feature' branch and prevents the system from deadlocking.
         lock.releaseLock();
     }
 }
+
 
 /**
  * Gets the raw HTML for the booking page.

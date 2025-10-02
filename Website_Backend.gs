@@ -35,19 +35,8 @@ function doGet(e) {
  */
 function getNewsFeed() {
   try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
-    if (!sheet) {
-      const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('News');
-      newSheet.appendRow(['id', 'title', 'content', 'publishedDate']);
-      return [];
-    }
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    return data.map(row => {
-      const article = {};
-      headers.forEach((header, i) => article[header] = row[i]);
-      return article;
-    }).sort((a, b) => new Date(b.publishedDate) - new Date(a.publishedDate));
+    const articles = DB.query('News');
+    return articles.sort((a, b) => new Date(b.publishedDate) - new Date(a.publishedDate));
   } catch (e) {
     console.error("Error in getNewsFeed: " + e.message);
     return [];
@@ -60,19 +49,7 @@ function getNewsFeed() {
  */
 function getDocuments() {
   try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
-    if (!sheet) {
-      const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('Documents');
-      newSheet.appendRow(['id', 'title', 'url', 'description']);
-      return [];
-    }
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    return data.map(row => {
-      const doc = {};
-      headers.forEach((header, i) => doc[header] = row[i]);
-      return doc;
-    });
+    return DB.query('Documents');
   } catch (e) {
     console.error("Error in getDocuments: " + e.message);
     return [];
@@ -86,41 +63,28 @@ function getDocuments() {
  */
 function getPageContent(pageId, password) {
   try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-    if (!sheet) {
-      const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('WebsitePages');
-      newSheet.appendRow(['pageId', 'title', 'content', 'password']);
+    const results = DB.query('WebsitePages', { pageId: pageId });
+    if (results.length === 0) {
       return null;
     }
 
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    const pageIdIndex = headers.indexOf('pageId');
-    const passwordIndex = headers.indexOf('password');
+    const page = results[0];
+    const pagePassword = page.password;
 
-    for (const row of data) {
-      if (row[pageIdIndex] === pageId) {
-        const page = {};
-        const pagePassword = row[passwordIndex];
-
-        if (pagePassword && pagePassword !== password) {
-          return { authRequired: true };
-        }
-
-        headers.forEach((header, i) => {
-          if (header !== 'password') {
-            page[header] = row[i];
-          }
-        });
-        return page;
-      }
+    if (pagePassword && pagePassword !== password) {
+      return { authRequired: true };
     }
-    return null;
+
+    // Fjern passord fra objektet som sendes til klienten
+    delete page.password;
+    return page;
+
   } catch (e) {
     console.error("Error in getPageContent: " + e.message);
     return null;
   }
 }
+
 
 function verifyPassword(pageId, password) {
     const pageContent = getPageContent(pageId, password);
@@ -147,89 +111,54 @@ function include(filename) {
  * @returns {object} A success or error object.
  */
 function savePageContent(pageId, content) {
-  try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-    if (!sheet) throw new Error("'WebsitePages' sheet not found.");
+    try {
+        const existingPage = DB.query('WebsitePages', { pageId: pageId });
 
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    const pageIdIndex = headers.indexOf('pageId');
-    const contentIndex = headers.indexOf('content');
-
-    let rowIndex = data.findIndex(row => row[pageIdIndex] === pageId);
-
-    if (rowIndex !== -1) {
-      // Update existing page
-      sheet.getRange(rowIndex + 2, contentIndex + 1).setValue(content);
-    } else {
-      // Create new page
-      const newRow = headers.map(h => {
-        if (h === 'pageId') return pageId;
-        if (h === 'content') return content;
-        if (h === 'title') return `Ny side (${pageId})`; // Default title
-        return '';
-      });
-      sheet.appendRow(newRow);
+        if (existingPage.length > 0) {
+            DB.update('WebsitePages', pageId, { content: content });
+        } else {
+            const newPage = {
+                pageId: pageId,
+                title: `Ny side (${pageId})`,
+                content: content,
+                password: ''
+            };
+            DB.insert('WebsitePages', newPage);
+        }
+        return { ok: true };
+    } catch (e) {
+        console.error("Error in savePageContent: " + e.message);
+        return { ok: false, message: e.message };
     }
-    return { ok: true };
-  } catch (e) {
-    console.error("Error in savePageContent: " + e.message);
-    return { ok: false, message: e.message };
-  }
 }
 
 
 // --- Booking System Functions ---
 
-function _getOrCreateSheet(sheetName, headers) {
-    const ss = SpreadsheetApp.openById(DB_SHEET_ID);
-    let sheet = ss.getSheetByName(sheetName);
-    if (!sheet) {
-        sheet = ss.insertSheet(sheetName);
-        sheet.appendRow(headers);
-    }
-    return sheet;
-}
-
 function listResources() {
     try {
-        const sheet = _getOrCreateSheet('CommonResources', ['id', 'name', 'description', 'maxBookingHours', 'price', 'cancellationDeadline']);
-        const data = sheet.getDataRange().getValues();
-        const headers = data.shift();
-        const resources = data.map(row => {
-            const resource = {};
-            headers.forEach((h, i) => resource[h] = row[i]);
-            return resource;
-        });
+        const resources = DB.query('CommonResources');
         return { ok: true, resources: resources };
     } catch (e) {
+        console.error("Error in listResources: " + e.message);
         return { ok: false, message: e.message };
     }
 }
 
 function getBookings(resourceId, year, month) {
     try {
-        const sheet = _getOrCreateSheet('Bookings', ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']);
-        const data = sheet.getDataRange().getValues();
-        const headers = data.shift();
-        const resourceIdIndex = headers.indexOf('resourceId');
-        const startTimeIndex = headers.indexOf('startTime');
+        // Hent alle bookinger for ressursen
+        const allBookings = DB.query('Bookings', { resourceId: resourceId });
 
-        const bookings = data.filter(row => {
-            if (row[resourceIdIndex] !== resourceId) {
-                return false;
-            }
-            const bookingDate = new Date(row[startTimeIndex]);
-            // Filter by month and year to reduce data transfer
+        // Filtrer i minnet basert på år og måned
+        const bookings = allBookings.filter(booking => {
+            const bookingDate = new Date(booking.startTime);
             return bookingDate.getFullYear() === year && bookingDate.getMonth() === month;
-        }).map(row => {
-            const booking = {};
-            headers.forEach((h, i) => booking[h] = row[i]);
-            return booking;
         });
 
         return { ok: true, bookings: bookings };
     } catch (e) {
+        console.error("Error in getBookings: " + e.message);
         return { ok: false, message: e.message };
     }
 }
@@ -245,17 +174,10 @@ function createBooking(bookingDetails) {
         const end = new Date(endTime);
 
         // --- Conflict Check ---
-        const bookingsSheet = _getOrCreateSheet('Bookings', ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']);
-        const data = bookingsSheet.getDataRange().getValues();
-        const headers = data.shift();
-        const resourceIdIndex = headers.indexOf('resourceId');
-        const startTimeIndex = headers.indexOf('startTime');
-        const endTimeIndex = headers.indexOf('endTime');
-
-        const conflictingBooking = data.find(row => {
-            if (row[resourceIdIndex] !== resourceId) return false;
-            const existingStart = new Date(row[startTimeIndex]);
-            const existingEnd = new Date(row[endTimeIndex]);
+        const allBookings = DB.query('Bookings', { resourceId: resourceId });
+        const conflictingBooking = allBookings.find(booking => {
+            const existingStart = new Date(booking.startTime);
+            const existingEnd = new Date(booking.endTime);
             // Check for overlap: (StartA < EndB) and (EndA > StartB)
             return start < existingEnd && end > existingStart;
         });
@@ -265,22 +187,24 @@ function createBooking(bookingDetails) {
         }
 
         // --- Create Booking ---
-        const id = Utilities.getUuid();
-        const createdAt = new Date().toISOString();
-        // Use the authenticated user's details, not the ones from the form
-        bookingsSheet.appendRow([id, resourceId, startTime, endTime, userEmail, userName, createdAt]);
+        const newBooking = {
+            resourceId: resourceId,
+            startTime: startTime,
+            endTime: endTime,
+            userEmail: userEmail,
+            userName: userName,
+            status: 'Confirmed' // Eksempel på status
+        };
+        const insertedBooking = DB.insert('Bookings', newBooking);
+
 
         // Log the audit event for GDPR compliance and tracking
         logAuditEvent('CREATE_BOOKING', 'Bookings', { resourceId, startTime, endTime });
 
         // --- Get Resource Name for Email ---
-        const resourceSheet = _getOrCreateSheet('CommonResources', ['id', 'name']);
-        const resourceData = resourceSheet.getDataRange().getValues();
-        const resourceHeaders = resourceData.shift();
-        const resIdIndex = resourceHeaders.indexOf('id');
-        const resourceNameIndex = resourceHeaders.indexOf('name');
-        const resourceRow = resourceData.find(r => r[resIdIndex] === resourceId);
-        const resourceName = resourceRow ? resourceRow[resourceNameIndex] : 'Ukjent Ressurs';
+        const resource = DB.getById('CommonResources', resourceId);
+        const resourceName = resource ? resource.name : 'Ukjent Ressurs';
+
 
         // --- Send Confirmation Email ---
         const subject = "Booking bekreftelse";
@@ -304,7 +228,7 @@ function createBooking(bookingDetails) {
             // Don't fail the whole operation, just log the error.
         }
 
-        return { ok: true, id: id };
+        return { ok: true, id: insertedBooking.id };
     } catch (e) {
         // Provide a more specific error message if not authenticated.
         if (e.message.includes("Ikke autentisert")) {

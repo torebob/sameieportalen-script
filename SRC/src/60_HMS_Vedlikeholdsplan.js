@@ -504,9 +504,7 @@ function _derivePriorityFromCriticality_(krit) {
 }
 function _num(v){
   if (v === '' || v == null) return '';
-  var s = String(v).trim().replace(/\s/g,'');
-  var hasC = s.indexOf(',')>=0, hasD = s.indexOf('.')>=0;
-  if (hasC && !hasD) s = s.replace(/\./g,'').replace(',','.');
-  else if (hasC && hasD && s.lastIndexOf(',')>s.lastIndexOf('.')) s = s.replace(/\./g,'').replace(',','.');
-  var n = Number(s); return isNaN(n) ? '' : n;
+  return Sameie.Num.parseNordicNumber(v);
+ return Sameie.Num.parseNordicNumber(v);
+n;
 }

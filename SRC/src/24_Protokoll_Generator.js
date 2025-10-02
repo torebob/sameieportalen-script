@@ -140,6 +140,6 @@
   }
 
   // Eksporter funksjonen for global tilgang
-  global.generateProtocol = generateProtocol;
+  // global.generateProtocol = generateProtocol;
 
 })(this);

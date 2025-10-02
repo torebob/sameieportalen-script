@@ -13,5 +13,8 @@
     "eslint-plugin-sonarjs": "^1.0.4",
     "globals": "^16.4.0",
     "jscpd": "^3.5.10"
+  },
+  "dependencies": {
+    "@google/clasp": "^3.0.6-alpha"
   }
 }

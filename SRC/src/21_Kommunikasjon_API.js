@@ -151,10 +151,10 @@ function sendInnkalling(moteId) {
     if (!moteId) throw new Error("Møte-ID er påkrevd.");
 
     // 1. Hent møtedetaljer og saksliste
-    const meeting = global.listMeetings_({ scope: 'all' }).find(m => m.id === moteId);
+    const meeting = listMeetings_({ scope: 'all' }).find(m => m.id === moteId);
     if (!meeting) throw new Error(`Fant ikke møte med ID: ${moteId}`);
 
-    const agendaItems = global.listAgenda(moteId);
+    const agendaItems = listAgenda(moteId);
 
     // 2. Hent mottakere (kun eiere)
     const personerSheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.PERSONER);
@@ -216,4 +216,4 @@ function sendInnkalling(moteId) {
 }
 
 // Eksporter funksjonen for å gjøre den tilgjengelig for UI
-global.sendInnkalling = sendInnkalling;
+// global.sendInnkalling = sendInnkalling;

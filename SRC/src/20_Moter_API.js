@@ -503,17 +503,17 @@
   // -------------------- EKSPORT --------------------
   global.openMeetingsUI = openMeetingsUI;
   global.uiBootstrap = uiBootstrap;
-  global.upsertMeeting = upsertMeeting;
-  global.listMeetings_ = listMeetings_;
-  global.addAgendaItem = addAgendaItem;
-  global.updateAgendaItem = updateAgendaItem;
-  global.listAgenda = listAgenda;
-  global.getBoardMembers = getBoardMembers;
-  global.deleteAgendaItem = deleteAgendaItem;
-  global.appendInnspill = appendInnspill;
-  global.listInnspill = listInnspill;
-  global.castVote = castVote;
-  global.getVoteSummary = getVoteSummary;
+  // global.upsertMeeting = upsertMeeting;
+  // global.listMeetings_ = listMeetings_;
+  // global.addAgendaItem = addAgendaItem;
+  // global.updateAgendaItem = updateAgendaItem;
+  // global.listAgenda = listAgenda;
+  // global.getBoardMembers = getBoardMembers;
+  // global.deleteAgendaItem = deleteAgendaItem;
+  // global.appendInnspill = appendInnspill;
+  // global.listInnspill = listInnspill;
+  // global.castVote = castVote;
+  // global.getVoteSummary = getVoteSummary;
   global.rtServerNow = rtServerNow;
   global.rtGetChanges = rtGetChanges;
 

@@ -1,0 +1,5 @@
+/SRC/*.js
+/SRC/*.html
+/node_modules/
+/coverage/
+/dist/

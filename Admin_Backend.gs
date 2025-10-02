@@ -41,7 +41,7 @@ function addNewsArticle(article) {
     const user = getCurrentUser(); // Sikrer at forfatter er logget inn
     article.author = user.name;
     article.publishedDate = new Date().toISOString();
-
+    
     const newArticle = DB.insert('News', article);
     return { ok: true, id: newArticle.id };
   } catch(e) { return { ok: false, message: e.message }; }
@@ -163,7 +163,7 @@ function listPages() {
 function deletePage(pageId) {
     try {
         if (!pageId) throw new Error("Side-ID er påkrevd.");
-
+        
         // The delete function in our provider uses the 'id' field by default.
         // For 'WebsitePages', the unique identifier is 'pageId'.
         // We need to fetch the item first to get its row index for deletion.

@@ -1,10 +1,7 @@
 {
   "threshold": 0,
   "minTokens": 100,
-  "reporters": ["console", "json", "html"],
-  "ignore": [
-    "**/node_modules/**",
-    "SRC/**",
-    "!SRC/src/**"
-  ]
+  "reporters": ["console", "html"],
+  "path": ["SRC/src"],
+  "ignore": ["**/node_modules/**"]
 }

@@ -1,0 +1,15 @@
+{
+  "name": "sameieportalen-script",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint SRC/src --max-warnings=0",
+    "dup:check": "jscpd --config .jscpd.json SRC/src",
+    "test": "npm run lint && npm run dup:check"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "eslint-plugin-sonarjs": "^1.0.0",
+    "jscpd": "^3.5.10"
+  }
+}

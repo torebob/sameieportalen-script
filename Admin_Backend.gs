@@ -4,15 +4,14 @@
  */
 function initializeSite() {
   try {
+    requireAuth(['admin']); // Only admins can initialize
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
     if (!sheet) {
         throw new Error("'WebsitePages'-arket finnes ikke. Sørg for at hovednettstedet er lastet inn minst én gang.");
     }
 
-    // Check if pages already exist to prevent duplicates
     const existingData = sheet.getDataRange().getValues();
-    if (existingData.length > 1) { // >1 to account for header row
-        // We can silently ignore instead of throwing an error, to make it more user friendly.
+    if (existingData.length > 1) {
         return { ok: true, message: "Nettstedet er allerede initialisert." };
     }
 
@@ -23,11 +22,11 @@ function initializeSite() {
       ['contact', 'Kontaktinformasjon', 'Styrets kontaktinformasjon kan legges inn her.', '']
     ];
 
-    // Append the default page data
     defaultPages.forEach(page => {
       sheet.appendRow(page);
     });
 
+    logAuditEvent('INITIALIZE_SITE', 'System', { success: true });
     return { ok: true };
   } catch (e) {
     console.error("Error in initializeSite: " + e.message);
@@ -39,6 +38,7 @@ function initializeSite() {
 
 function listNewsArticles() {
   try {
+    requireAuth(['admin', 'board_member', 'board_leader']);
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
     if (!sheet) return { ok: true, articles: [] };
     const data = sheet.getDataRange().getValues();
@@ -54,18 +54,21 @@ function listNewsArticles() {
 
 function addNewsArticle(article) {
   try {
+    requireAuth(['admin', 'board_member', 'board_leader']);
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
     article.id = Utilities.getUuid();
     article.publishedDate = new Date().toISOString();
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const newRow = headers.map(h => article[h] || '');
     sheet.appendRow(newRow);
+    logAuditEvent('ADD_NEWS', 'News', { articleId: article.id, title: article.title });
     return { ok: true, id: article.id };
   } catch(e) { return { ok: false, message: e.message }; }
 }
 
 function updateNewsArticle(article) {
   try {
+    requireAuth(['admin', 'board_member', 'board_leader']);
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
     const data = sheet.getDataRange().getValues();
     const headers = data.shift();
@@ -75,18 +78,21 @@ function updateNewsArticle(article) {
 
     const newRow = headers.map(h => article[h] || '');
     sheet.getRange(rowIndex + 2, 1, 1, headers.length).setValues([newRow]);
+    logAuditEvent('UPDATE_NEWS', 'News', { articleId: article.id });
     return { ok: true };
   } catch(e) { return { ok: false, message: e.message }; }
 }
 
 function deleteNewsArticle(articleId) {
   try {
+    requireAuth(['admin', 'board_member', 'board_leader']);
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
     const data = sheet.getDataRange().getValues();
     const idIndex = data[0].indexOf('id');
     const rowIndex = data.findIndex(row => row[idIndex] == articleId);
     if (rowIndex > 0) {
         sheet.deleteRow(rowIndex + 1);
+        logAuditEvent('DELETE_NEWS', 'News', { articleId: articleId });
         return { ok: true };
     }
     return { ok: false, message: "Artikkelen ble ikke funnet" };
@@ -97,6 +103,7 @@ function deleteNewsArticle(articleId) {
 
 function listDocuments() {
     try {
+        requireAuth(['admin', 'board_member', 'board_leader']);
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
         if (!sheet) return { ok: true, documents: [] };
         const data = sheet.getDataRange().getValues();
@@ -112,6 +119,7 @@ function listDocuments() {
 
 function addDocument(fileObject, title, description) {
     try {
+        requireAuth(['admin', 'board_member', 'board_leader']);
         if (!fileObject) throw new Error("Fildata mangler.");
 
         const folder = DriveApp.getFolderById(ATTACHMENTS_FOLDER_ID);
@@ -122,7 +130,7 @@ function addDocument(fileObject, title, description) {
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
         const docId = Utilities.getUuid();
         sheet.appendRow([docId, title, file.getUrl(), description]);
-
+        logAuditEvent('ADD_DOCUMENT', 'Documents', { documentId: docId, title: title });
         return { ok: true, id: docId };
     } catch(e) {
         console.error("Error in addDocument: " + e.message);
@@ -134,6 +142,7 @@ function addDocument(fileObject, title, description) {
 
 function addResource(resource) {
     try {
+        requireAuth(['admin', 'board_leader']);
         const sheet = _getOrCreateSheet('CommonResources', ['id', 'name', 'description', 'maxBookingHours', 'price', 'cancellationDeadline']);
         const id = Utilities.getUuid();
         sheet.appendRow([
@@ -144,6 +153,7 @@ function addResource(resource) {
             resource.price || '',
             resource.cancellationDeadline || ''
         ]);
+        logAuditEvent('ADD_RESOURCE', 'CommonResources', { resourceId: id, name: resource.name });
         return { ok: true, id: id };
     } catch (e) {
         return { ok: false, message: e.message };
@@ -152,6 +162,7 @@ function addResource(resource) {
 
 function deleteResource(resourceId) {
     try {
+        requireAuth(['admin', 'board_leader']);
         const sheet = _getOrCreateSheet('CommonResources', ['id', 'name', 'description', 'maxBookingHours', 'price', 'cancellationDeadline']);
         const data = sheet.getDataRange().getValues();
         const idIndex = data[0].indexOf('id');
@@ -159,36 +170,11 @@ function deleteResource(resourceId) {
 
         if (rowIndex > 0) {
             sheet.deleteRow(rowIndex + 1);
+            logAuditEvent('DELETE_RESOURCE', 'CommonResources', { resourceId: resourceId });
             return { ok: true };
         }
         return { ok: false, message: "Ressurs ikke funnet" };
     } catch (e) {
-        return { ok: false, message: e.message };
-    }
-}
-
-function deleteDocument(docId) {
-    try {
-        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
-        const data = sheet.getDataRange().getValues();
-        const headers = data.shift();
-        const idIndex = headers.indexOf('id');
-        const urlIndex = headers.indexOf('url');
-
-        const rowIndex = data.findIndex(row => row[idIndex] == docId);
-
-        if (rowIndex !== -1) {
-            const fileUrl = data[rowIndex][urlIndex];
-            const fileId = fileUrl.match(/id=([^&]+)/)[1];
-            if (fileId) {
-                DriveApp.getFileById(fileId).setTrashed(true);
-            }
-            sheet.deleteRow(rowIndex + 2); // +2 because of header and 0-based index
-            return { ok: true };
-        }
-        return { ok: false, message: "Dokument ikke funnet" };
-    } catch(e) {
-        console.error("Error in deleteDocument: " + e.message);
         return { ok: false, message: e.message };
     }
 }
@@ -199,9 +185,10 @@ function deleteDocument(docId) {
  */
 function listPages() {
     try {
+        requireAuth(['admin', 'board_member', 'board_leader']);
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
         if (!sheet) {
-            return { ok: true, pages: [] }; // No sheet means no pages
+            return { ok: true, pages: [] };
         }
         const data = sheet.getDataRange().getValues();
         const headers = data.shift();
@@ -220,35 +207,6 @@ function listPages() {
 }
 
 /**
- * Deletes a page from the WebsitePages sheet.
- * @param {string} pageId The ID of the page to delete.
- * @returns {object} A success or error object.
- */
-function deletePage(pageId) {
-    try {
-        if (!pageId) throw new Error("Side-ID er påkrevd.");
-        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-        if (!sheet) throw new Error("'WebsitePages'-arket ble ikke funnet.");
-
-        const data = sheet.getDataRange().getValues();
-        const pageIdIndex = data[0].indexOf('pageId');
-        if (pageIdIndex === -1) throw new Error("'pageId'-kolonnen ble ikke funnet.");
-
-        const rowIndex = data.findIndex(row => row[pageIdIndex] == pageId);
-
-        if (rowIndex > 0) { // > 0 to not delete header
-            sheet.deleteRow(rowIndex + 1);
-            return { ok: true };
-        } else {
-            return { ok: false, message: "Siden ble ikke funnet." };
-        }
-    } catch (e) {
-        console.error("Error in deletePage: " + e.message);
-        return { ok: false, message: e.message };
-    }
-}
-
-/**
  * Sets or changes the password for a page.
  * @param {string} pageId The ID of the page.
  * @param {string} password The new password. An empty string removes the password.
@@ -256,6 +214,7 @@ function deletePage(pageId) {
  */
 function setPagePassword(pageId, password) {
     try {
+        requireAuth(['admin', 'board_leader']);
         if (!pageId) throw new Error("Side-ID er påkrevd.");
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
         if (!sheet) throw new Error("'WebsitePages'-arket ble ikke funnet.");
@@ -265,7 +224,6 @@ function setPagePassword(pageId, password) {
         const pageIdIndex = headers.indexOf('pageId');
         let passwordIndex = headers.indexOf('password');
 
-        // If 'password' column doesn't exist, add it
         if (passwordIndex === -1) {
             sheet.getRange(1, headers.length + 1).setValue('password');
             passwordIndex = headers.length;
@@ -273,8 +231,9 @@ function setPagePassword(pageId, password) {
 
         const rowIndex = data.findIndex(row => row[pageIdIndex] == pageId);
 
-        if (rowIndex > 0) { // > 0 to not affect header
+        if (rowIndex > 0) {
             sheet.getRange(rowIndex + 1, passwordIndex + 1).setValue(password);
+            logAuditEvent('SET_PAGE_PASSWORD', 'WebsitePages', { pageId: pageId });
             return { ok: true };
         } else {
             return { ok: false, message: "Siden ble ikke funnet." };

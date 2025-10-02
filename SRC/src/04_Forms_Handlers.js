@@ -160,7 +160,7 @@ function _ensureFormsRegisterSheet_(){
     if (!sh) sh = ss.insertSheet(FORMS_REG_SHEET);
 
     const cur = sh.getRange(1,1,1,headers.length).getValues()[0];
-    const Sameie.Sheets.ensureHeader(sh, headers);
+    Sameie.Sheets.ensureHeader(sh, headers);
     return sh;
   } catch(e){
     if (typeof _logEvent === 'function') _logEvent('FormsScheduler', 'Klarte ikke sikre registerark: ' + e.message);

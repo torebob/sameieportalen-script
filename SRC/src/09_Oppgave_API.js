@@ -1,3 +1,4 @@
+/* global _getTasksSheet_, _hdrMap_ */
 /* ====================== Oppgave-API for Vaktmester (stabil) ======================
  * FILE: 09_Oppgave_API.gs | VERSION: 1.2.0 | UPDATED: 2025-09-14
  * FORMÅL: Hente oppgaver (aktive/historikk), oppdatere status m/kommentar,

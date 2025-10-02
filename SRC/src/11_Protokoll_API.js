@@ -1,3 +1,4 @@
+/* global Sameie */
 /* ================== Elektronisk Protokollgodkjenning (API) ==================
  * FILE: 11_Protokoll_API.gs | VERSION: 2.0.0 | UPDATED: 2025-09-13
  * FORMÅL: Sende, spore og motta godkjenninger/avvisninger for møteprotokoller.

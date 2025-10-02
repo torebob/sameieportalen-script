@@ -1,3 +1,4 @@
+/* global Sameie */
 /* ====================== Forms Scheduler (reminders & auto-close) ======================
  * FILE: 04_Forms_Scheduler.gs  |  VERSION: 1.7.0  |  UPDATED: 2025-09-13
  * FORMÅL: Daglig tidsstyrt håndtering av frister/påminnelser/auto-stenging for Google Forms

@@ -34,24 +34,24 @@ function doGet(e) {
  * @returns {Array<object>} A list of news articles.
  */
 function getNewsFeed() {
-  try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
-    if (!sheet) {
-      const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('News');
-      newSheet.appendRow(['id', 'title', 'content', 'publishedDate']);
-      return [];
+    try {
+        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('News');
+        if (!sheet) {
+            const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('News');
+            newSheet.appendRow(['id', 'title', 'content', 'publishedDate']);
+            return [];
+        }
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        return data.map(row => {
+            const article = {};
+            headers.forEach((header, i) => article[header] = row[i]);
+            return article;
+        }).sort((a, b) => new Date(b.publishedDate) - new Date(a.publishedDate));
+    } catch (e) {
+        console.error("Error in getNewsFeed: " + e.message);
+        return [];
     }
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    return data.map(row => {
-      const article = {};
-      headers.forEach((header, i) => article[header] = row[i]);
-      return article;
-    }).sort((a, b) => new Date(b.publishedDate) - new Date(a.publishedDate));
-  } catch (e) {
-    console.error("Error in getNewsFeed: " + e.message);
-    return [];
-  }
 }
 
 /**
@@ -59,24 +59,24 @@ function getNewsFeed() {
  * @returns {Array<object>} A list of documents.
  */
 function getDocuments() {
-  try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
-    if (!sheet) {
-      const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('Documents');
-      newSheet.appendRow(['id', 'title', 'url', 'description']);
-      return [];
+    try {
+        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
+        if (!sheet) {
+            const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('Documents');
+            newSheet.appendRow(['id', 'title', 'url', 'description']);
+            return [];
+        }
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        return data.map(row => {
+            const doc = {};
+            headers.forEach((header, i) => doc[header] = row[i]);
+            return doc;
+        });
+    } catch (e) {
+        console.error("Error in getDocuments: " + e.message);
+        return [];
     }
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    return data.map(row => {
-      const doc = {};
-      headers.forEach((header, i) => doc[header] = row[i]);
-      return doc;
-    });
-  } catch (e) {
-    console.error("Error in getDocuments: " + e.message);
-    return [];
-  }
 }
 
 /**
@@ -85,41 +85,43 @@ function getDocuments() {
  * @returns {object} The page content or null if not found.
  */
 function getPageContent(pageId, password) {
-  try {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-    if (!sheet) {
-      const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('WebsitePages');
-      newSheet.appendRow(['pageId', 'title', 'content', 'password']);
-      return null;
-    }
-
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    const pageIdIndex = headers.indexOf('pageId');
-    const passwordIndex = headers.indexOf('password');
-
-    for (const row of data) {
-      if (row[pageIdIndex] === pageId) {
-        const page = {};
-        const pagePassword = row[passwordIndex];
-
-        if (pagePassword && pagePassword !== password) {
-          return { authRequired: true };
+    try {
+        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
+        if (!sheet) {
+            const newSheet = SpreadsheetApp.openById(DB_SHEET_ID).insertSheet('WebsitePages');
+            newSheet.appendRow(['pageId', 'title', 'content', 'password']);
+            return null;
         }
 
-        headers.forEach((header, i) => {
-          if (header !== 'password') {
-            page[header] = row[i];
-          }
-        });
-        return page;
-      }
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        const pageIdIndex = headers.indexOf('pageId');
+        const passwordIndex = headers.indexOf('password');
+
+        for (const row of data) {
+            if (row[pageIdIndex] === pageId) {
+                const page = {};
+                const pagePassword = row[passwordIndex];
+
+                if (pagePassword && pagePassword !== password) {
+                    return {
+                        authRequired: true
+                    };
+                }
+
+                headers.forEach((header, i) => {
+                    if (header !== 'password') {
+                        page[header] = row[i];
+                    }
+                });
+                return page;
+            }
+        }
+        return null;
+    } catch (e) {
+        console.error("Error in getPageContent: " + e.message);
+        return null;
     }
-    return null;
-  } catch (e) {
-    console.error("Error in getPageContent: " + e.message);
-    return null;
-  }
 }
 
 function verifyPassword(pageId, password) {
@@ -127,7 +129,10 @@ function verifyPassword(pageId, password) {
     if (pageContent && !pageContent.authRequired) {
         return pageContent;
     }
-    return { ok: false, message: 'Ugyldig passord' };
+    return {
+        ok: false,
+        message: 'Ugyldig passord'
+    };
 }
 
 /**
@@ -137,7 +142,7 @@ function verifyPassword(pageId, password) {
  * @returns {string} The content of the file.
  */
 function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+    return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
 /**
@@ -147,36 +152,41 @@ function include(filename) {
  * @returns {object} A success or error object.
  */
 function savePageContent(pageId, content) {
-  try {
-    requireAuth(['admin', 'board_member', 'board_leader']);
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-    if (!sheet) throw new Error("'WebsitePages' sheet not found.");
+    try {
+        requireAuth(['admin', 'board_member', 'board_leader']);
+        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
+        if (!sheet) throw new Error("'WebsitePages' sheet not found.");
 
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    const pageIdIndex = headers.indexOf('pageId');
-    const contentIndex = headers.indexOf('content');
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        const pageIdIndex = headers.indexOf('pageId');
+        const contentIndex = headers.indexOf('content');
 
-    let rowIndex = data.findIndex(row => row[pageIdIndex] === pageId);
+        let rowIndex = data.findIndex(row => row[pageIdIndex] === pageId);
 
-    if (rowIndex !== -1) {
-      // Update existing page
-      sheet.getRange(rowIndex + 2, contentIndex + 1).setValue(content);
-    } else {
-      // Create new page
-      const newRow = headers.map(h => {
-        if (h === 'pageId') return pageId;
-        if (h === 'content') return content;
-        if (h === 'title') return `Ny side (${pageId})`; // Default title
-        return '';
-      });
-      sheet.appendRow(newRow);
+        if (rowIndex !== -1) {
+            // Update existing page
+            sheet.getRange(rowIndex + 2, contentIndex + 1).setValue(content);
+        } else {
+            // Create new page
+            const newRow = headers.map(h => {
+                if (h === 'pageId') return pageId;
+                if (h === 'content') return content;
+                if (h === 'title') return `Ny side (${pageId})`; // Default title
+                return '';
+            });
+            sheet.appendRow(newRow);
+        }
+        return {
+            ok: true
+        };
+    } catch (e) {
+        console.error("Error in savePageContent: " + e.message);
+        return {
+            ok: false,
+            message: e.message
+        };
     }
-    return { ok: true };
-  } catch (e) {
-    console.error("Error in savePageContent: " + e.message);
-    return { ok: false, message: e.message };
-  }
 }
 
 
@@ -202,9 +212,15 @@ function listResources() {
             headers.forEach((h, i) => resource[h] = row[i]);
             return resource;
         });
-        return { ok: true, resources: resources };
+        return {
+            ok: true,
+            resources: resources
+        };
     } catch (e) {
-        return { ok: false, message: e.message };
+        return {
+            ok: false,
+            message: e.message
+        };
     }
 }
 
@@ -230,9 +246,15 @@ function getBookings(resourceId, year, month) {
             return booking;
         });
 
-        return { ok: true, bookings: bookings };
+        return {
+            ok: true,
+            bookings: bookings
+        };
     } catch (e) {
-        return { ok: false, message: e.message };
+        return {
+            ok: false,
+            message: e.message
+        };
     }
 }
 
@@ -242,13 +264,16 @@ function createBooking(bookingDetails) {
 
     try {
         // CRITICAL: First, authenticate the user to ensure they have permission.
-        // This is the most important security measure. We'll use the version from the feature branch.
         const user = requireAuth(); // Assumes this function is defined, e.g., in Auth.gs
 
         // Wait a maximum of 30 seconds for the lock.
         lock.waitLock(30000);
 
-        const { resourceId, startTime, endTime } = bookingDetails;
+        const {
+            resourceId,
+            startTime,
+            endTime
+        } = bookingDetails;
         const start = new Date(startTime);
         const end = new Date(endTime);
 
@@ -259,11 +284,17 @@ function createBooking(bookingDetails) {
 
         // --- Validation ---
         if (!resourceId || !startTime || !endTime) {
-            return { ok: false, message: "Alle felter er påkrevd" };
+            return {
+                ok: false,
+                message: "Alle felter er påkrevd"
+            };
         }
 
         if (start >= end) {
-            return { ok: false, message: "Starttid må være før sluttid" };
+            return {
+                ok: false,
+                message: "Starttid må være før sluttid"
+            };
         }
 
         // --- Conflict Check (within the lock to be thread-safe) ---
@@ -285,7 +316,10 @@ function createBooking(bookingDetails) {
         });
 
         if (conflictingBooking) {
-            return { ok: false, message: "Tiden er allerede booket. Vennligst velg en annen tid." };
+            return {
+                ok: false,
+                message: "Tiden er allerede booket. Vennligst velg en annen tid."
+            };
         }
 
         // --- Create Booking ---
@@ -294,7 +328,7 @@ function createBooking(bookingDetails) {
         // Append the new booking to the sheet using the authenticated user's details.
         bookingsSheet.appendRow([id, resourceId, startTime, endTime, userEmail, userName, createdAt]);
 
-        // --- Audit Logging (using the more detailed version from the feature branch) ---
+        // --- Audit Logging ---
         logAuditEvent('CREATE_BOOKING', 'Bookings', {
             bookingId: id,
             resourceId: resourceId
@@ -312,35 +346,43 @@ function createBooking(bookingDetails) {
         // Encapsulate email sending in its own try-catch so a mail failure doesn't prevent the booking.
         try {
             MailApp.sendEmail(userEmail, "Booking bekreftelse", `
-                Hei ${userName},
+                    Hei ${userName},
 
-                Din booking er bekreftet:
-                Ressurs: ${resourceName}
-                Starttid: ${start.toLocaleString('no-NO')}
-                Sluttid: ${end.toLocaleString('no-NO')}
+                    Din booking er bekreftet:
+                    Ressurs: ${resourceName}
+                    Starttid: ${start.toLocaleString('no-NO')}
+                    Sluttid: ${end.toLocaleString('no-NO')}
 
-                Takk!
-            `);
+                    Takk!
+                `);
         } catch (e) {
             console.error("Kunne ikke sende bekreftelses-epost for booking " + id + ": " + e.message);
         }
 
-        return { ok: true, id: id };
+        return {
+            ok: true,
+            id: id
+        };
 
     } catch (e) {
         // Log the full error for debugging purposes.
         console.error("Error in createBooking: " + e.message);
         console.error(e.stack);
 
-        // Use the more specific, user-friendly error handling from the 'main' branch.
+        // Provide a user-friendly error message.
         if (e.message.includes("Ikke autentisert") || e.message.includes("not authenticated")) {
-            return { ok: false, message: "Du må være logget inn for å booke." };
+            return {
+                ok: false,
+                message: "Du må være logget inn for å booke."
+            };
         }
-        return { ok: false, message: "En serverfeil oppstod: " + e.message };
+        return {
+            ok: false,
+            message: "En serverfeil oppstod: " + e.message
+        };
 
     } finally {
         // CRITICAL: Always release the lock, even if an error occurred.
-        // This is taken from the 'feature' branch and prevents the system from deadlocking.
         lock.releaseLock();
     }
 }
@@ -378,14 +420,24 @@ function deleteDocument(docId) {
             sheet.deleteRow(rowIndex + 2);
 
             // Logger sletting
-            logAuditEvent('DELETE_DOCUMENT', 'Documents', { documentId: docId });
+            logAuditEvent('DELETE_DOCUMENT', 'Documents', {
+                documentId: docId
+            });
 
-            return { ok: true };
+            return {
+                ok: true
+            };
         }
-        return { ok: false, message: "Dokument ikke funnet" };
-    } catch(e) {
+        return {
+            ok: false,
+            message: "Dokument ikke funnet"
+        };
+    } catch (e) {
         console.error("Error in deleteDocument: " + e.message);
-        return { ok: false, message: e.message };
+        return {
+            ok: false,
+            message: e.message
+        };
     }
 }
 
@@ -398,123 +450,3 @@ function deletePage(pageId) {
 
         if (!pageId) throw new Error("Side-ID er påkrevd.");
         const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
-        if (!sheet) throw new Error("'WebsitePages'-arket ble ikke funnet.");
-
-        const data = sheet.getDataRange().getValues();
-        const pageIdIndex = data[0].indexOf('pageId');
-        if (pageIdIndex === -1) throw new Error("'pageId'-kolonnen ble ikke funnet.");
-
-        const rowIndex = data.findIndex(row => row[pageIdIndex] == pageId);
-
-        if (rowIndex > 0) {
-            sheet.deleteRow(rowIndex + 1);
-
-            // Logger sletting
-            logAuditEvent('DELETE_PAGE', 'WebsitePages', { pageId: pageId });
-
-            return { ok: true };
-        } else {
-            return { ok: false, message: "Siden ble ikke funnet." };
-        }
-    } catch (e) {
-        console.error("Error in deletePage: " + e.message);
-        return { ok: false, message: e.message };
-    }
-}
-
-// --- NYE GDPR-FUNKSJONER ---
-
-/**
- * Eksporterer brukerens egne data (GDPR Art. 15 - Rett til innsyn)
- */
-function exportMyData() {
-    try {
-        const user = getCurrentUser();
-
-        // Hent brukerens data fra alle relevante sheets
-        const myData = {
-            profile: getUserInfo(user.email),
-            bookings: getMyBookings(user.email),
-            auditLog: getMyAuditLog(user.email)
-        };
-
-        return { ok: true, data: myData };
-    } catch (e) {
-        return { ok: false, message: e.message };
-    }
-}
-
-function getMyBookings(email) {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Bookings');
-    if (!sheet) return [];
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    const emailIndex = headers.indexOf('userEmail');
-
-    return data.filter(row => row[emailIndex] === email).map(row => {
-        const booking = {};
-        headers.forEach((h, i) => booking[h] = row[i]);
-        return booking;
-    });
-}
-
-function getMyAuditLog(email) {
-    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('AuditLog');
-    if (!sheet) return [];
-    const data = sheet.getDataRange().getValues();
-    const headers = data.shift();
-    const emailIndex = headers.indexOf('userEmail');
-
-    return data.filter(row => row[emailIndex] === email).map(row => {
-        const log = {};
-        headers.forEach((h, i) => log[h] = row[i]);
-        return log;
-    });
-}
-
-/**
- * Sletter/anonymiserer brukerens data (GDPR Art. 17 - Rett til sletting)
- * MERK: Noe data må beholdes lovpålagt (økonomi i 5 år)
- */
-function requestDataDeletion() {
-    try {
-        const user = getCurrentUser();
-
-        // Anonymiser bookinger (ikke slett - nødvendig for statistikk)
-        const bookingsSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Bookings');
-        if (bookingsSheet) {
-            const data = bookingsSheet.getDataRange().getValues();
-            const headers = data[0];
-            const emailIndex = headers.indexOf('userEmail');
-            const nameIndex = headers.indexOf('userName');
-
-            for (let i = 1; i < data.length; i++) {
-                if (data[i][emailIndex] === user.email) {
-                    bookingsSheet.getRange(i + 1, emailIndex + 1).setValue('anonymisert@slettet.local');
-                    bookingsSheet.getRange(i + 1, nameIndex + 1).setValue('Anonymisert bruker');
-                }
-            }
-        }
-
-        // Logger sletting før bruker fjernes
-        logAuditEvent('USER_DATA_DELETION', 'Users', { email: user.email });
-
-        // Slett bruker fra Users-sheet
-        const usersSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Users');
-        if (usersSheet) {
-            const data = usersSheet.getDataRange().getValues();
-            const emailIndex = data[0].indexOf('email');
-            const rowIndex = data.findIndex(row => row[emailIndex] === user.email);
-            if (rowIndex > 0) {
-                usersSheet.deleteRow(rowIndex + 1);
-            }
-        }
-
-        return {
-            ok: true,
-            message: "Dine data er slettet/anonymisert. Du vil bli logget ut."
-        };
-    } catch (e) {
-        return { ok: false, message: e.message };
-    }
-}

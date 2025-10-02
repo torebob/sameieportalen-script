@@ -236,7 +236,11 @@ function getBookings(resourceId, year, month) {
 
 function createBooking(bookingDetails) {
     try {
-        const { resourceId, startTime, endTime, userName, userEmail } = bookingDetails;
+        // Get the currently logged-in user. This is the security fix.
+        const user = getCurrentUser();
+        const { email: userEmail, name: userName } = user;
+
+        const { resourceId, startTime, endTime } = bookingDetails;
         const start = new Date(startTime);
         const end = new Date(endTime);
 
@@ -263,7 +267,11 @@ function createBooking(bookingDetails) {
         // --- Create Booking ---
         const id = Utilities.getUuid();
         const createdAt = new Date().toISOString();
+        // Use the authenticated user's details, not the ones from the form
         bookingsSheet.appendRow([id, resourceId, startTime, endTime, userEmail, userName, createdAt]);
+
+        // Log the audit event for GDPR compliance and tracking
+        logAuditEvent('CREATE_BOOKING', 'Bookings', { resourceId, startTime, endTime });
 
         // --- Get Resource Name for Email ---
         const resourceSheet = _getOrCreateSheet('CommonResources', ['id', 'name']);
@@ -289,6 +297,7 @@ function createBooking(bookingDetails) {
         // Using a try-catch for the email in case of permission issues,
         // so it doesn't block the booking itself.
         try {
+            // Send to the authenticated user's email
             MailApp.sendEmail(userEmail, subject, body);
         } catch(e) {
             console.error("Kunne ikke sende bekreftelses-epost: " + e.message);
@@ -297,7 +306,12 @@ function createBooking(bookingDetails) {
 
         return { ok: true, id: id };
     } catch (e) {
-        return { ok: false, message: "En feil oppstod under bookingen: " + e.message };
+        // Provide a more specific error message if not authenticated.
+        if (e.message.includes("Ikke autentisert")) {
+            return { ok: false, message: "Du må være logget inn for å booke." };
+        }
+        console.error("Error in createBooking: " + e.message);
+        return { ok: false, message: "En serverfeil oppstod under bookingen: " + e.message };
     }
 }
 

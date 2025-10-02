@@ -176,8 +176,6 @@ function initBookingPage() {
             resourceId: selectedResource.id,
             startTime: `${date}T${startTime}:00`,
             endTime: `${date}T${endTime}:00`,
-            userName: document.getElementById('user-name').value,
-            userEmail: document.getElementById('user-email').value,
         };
 
         google.script.run.withSuccessHandler(response => {

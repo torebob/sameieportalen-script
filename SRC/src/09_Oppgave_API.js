@@ -1,3 +1,4 @@
+/* global _getTasksSheet_, _hdrMap_ */
 /* ====================== Oppgave-API for Vaktmester (stabil) ======================
  * FILE: 09_Oppgave_API.gs | VERSION: 1.2.0 | UPDATED: 2025-09-14
  * FORMÅL: Hente oppgaver (aktive/historikk), oppdatere status m/kommentar,
@@ -60,73 +61,8 @@ function getTasksForVaktmester(filter){
     var profile = _currentUserProfile_();
     if (!profile.email) throw new Error('Kunne ikke identifisere brukeren.');
 
-    var sh = _getTasksSheet_();
-    if (sh.getLastRow() < 2) return { ok:true, items:[] };
-
-    var H = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-    var M = _hdrMap_(H);
-    var vals = sh.getRange(2,1,sh.getLastRow()-1, sh.getLastColumn()).getValues();
-
-    var wantClosed = (String(filter||'active').toLowerCase() === 'history');
-    var items = [];
-    var meKeys = profile.keys;
-
-    for (var i=0;i<vals.length;i++){
-      var r = vals[i];
-
-      var ansvarlig = String(r[M['Ansvarlig']-1]||'').trim().toLowerCase();
-      var kategori  = String(r[M['Kategori']-1]||'').trim().toLowerCase();
-      var statusRaw = String(r[M['Status']-1]||'').trim().toLowerCase();
-
-      var assignedToMe = meKeys.indexOf(ansvarlig) >= 0 ||
-                         (ansvarlig === '' && kategori.indexOf('vaktmester') >= 0); // fallback
-
-      if (!assignedToMe) continue;
-
-      var inActive = VM_ACTIVE_STATUSES.indexOf(statusRaw) >= 0;
-      var inClosed = VM_CLOSED_STATUSES.indexOf(statusRaw) >= 0;
-
-      if (wantClosed && !inClosed) continue;
-      if (!wantClosed && !inActive) continue;
-
-      var frist = r[M['Frist']-1]; var opprettet = r[M['Opprettet']-1];
-      items.push({
-        id: r[M['OppgaveID']-1],
-        tittel: r[M['Tittel']-1],
-        beskrivelse: r[M['Beskrivelse']-1],
-        seksjon: r[M['Seksjonsnr']-1],
-        frist: _dateToNo_(frist),
-        opprettet: _dateToNo_(opprettet),
-        status: r[M['Status']-1],
-        prioritet: r[M['Prioritet']-1] || '—'
-      });
-    }
-    return { ok:true, items: items };
-  } catch(e){
-    _logEvent && _logEvent('VaktmesterAPI_Feil', 'getTasksForVaktmester: ' + e.message);
-    return { ok:false, error: e.message, items: [] };
-  }
-}
-
-/**
- * Sett status (Fullført/Avvist) – med valgfri kommentar.
- */
-function updateTaskStatusByVaktmester(taskId, newStatus, comment){
-  try{
-    var profile = _currentUserProfile_();
-    if (!taskId) throw new Error('Mangler OppgaveID.');
-    newStatus = String(newStatus||'').trim();
-    var valid = ['Fullført','Avvist'];
-    if (valid.indexOf(newStatus) < 0) throw new Error('Ugyldig status.');
-
-    var sh = _getTasksSheet_();
-    var H = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-    var M = _hdrMap_(H);
-
-    var range = sh.createTextFinder(taskId).matchEntireCell(true).findNext();
-    if (!range) throw new Error('Fant ikke oppgave ' + taskId);
-    var row = range.getRow();
-    var rowVals = sh.getRange(row,1,1,sh.getLastColumn()).getValues()[0];
+    var ctx = _getTaskRowCtx_(taskId);
+var sh = ctx.sh, H = ctx.H, M = ctx.M, row = ctx.row, rowVals = ctx.rowVals;
 
     var ansvarlig = String(rowVals[M['Ansvarlig']-1]||'').trim().toLowerCase();
     var allowed = (profile.keys.indexOf(ansvarlig) >= 0);
@@ -158,14 +94,8 @@ function addTaskCommentByVaktmester(taskId, comment){
     if (!comment) throw new Error('Skriv en kommentar.');
 
     var profile = _currentUserProfile_();
-    var sh = _getTasksSheet_();
-    var H = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-    var M = _hdrMap_(H);
-
-    var range = sh.createTextFinder(taskId).matchEntireCell(true).findNext();
-    if (!range) throw new Error('Fant ikke oppgave ' + taskId);
-    var row = range.getRow();
-    var rowVals = sh.getRange(row,1,1,sh.getLastColumn()).getValues()[0];
+    var ctx = _getTaskRowCtx_(taskId);
+var sh = ctx.sh, H = ctx.H, M = ctx.M, row = ctx.row, rowVals = ctx.rowVals;
 
     // Valgfritt: sjekk eierskap – vi lar alle vaktmestere som "eier" saken gjøre dette
     var ansvarlig = String(rowVals[M['Ansvarlig']-1]||'').trim().toLowerCase();
@@ -191,62 +121,8 @@ function addTaskCommentByVaktmester(taskId, comment){
 function createVaktmesterTask(payload){
   try{
     var profile = _currentUserProfile_();
-    var sh = _getTasksSheet_();
-    var H = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-    var M = _hdrMap_(H);
+    var ctx = _getTaskRowCtx_(taskId);
+var sh = ctx.sh, H = ctx.H, M = ctx.M, row = ctx.row, rowVals = ctx.rowVals;
 
-    var title = String(payload && payload.tittel || '').trim();
-    if (!title) throw new Error('Skriv tittel.');
-    var desc = String(payload && payload.beskrivelse || '').trim();
-    var seksjon = String(payload && payload.seksjonsnr || '').trim();
-    var frist = payload && payload.frist ? new Date(payload.frist) : null;
-
-    var id = (typeof _nextTaskId_ === 'function') ? _nextTaskId_() : ('TASK-' + new Date().getTime());
-
-    var row = [];
-    row[M['OppgaveID']-1] = id;
-    row[M['Tittel']-1]    = title;
-    row[M['Beskrivelse']-1]= desc;
-    row[M['Kategori']-1]  = 'Vaktmester';
-    row[M['Prioritet']-1] = 'Medium';
-    row[M['Opprettet']-1] = new Date();
-    row[M['Frist']-1]     = (frist && !isNaN(frist)) ? frist : '';
-    row[M['Status']-1]    = 'Ny';
-    // Lagre ansvarlig som e-post (robust matching i API støtter både navn og e-post)
-    row[M['Ansvarlig']-1] = profile.email || profile.name || '';
-    row[M['Seksjonsnr']-1]= seksjon;
-    row[M['Relatert']-1]  = '';
-    row[M['Kommentarer']-1]= '';
-
-    // Fyll tomme celler
-    for (var c=0;c<H.length;c++){ if (typeof row[c] === 'undefined') row[c]=''; }
-
-    sh.appendRow(row);
-    _logEvent && _logEvent('Oppgaver','Ny vaktmester-sak: ' + id + ' (' + (profile.email||'') + ')');
-    return { ok:true, id:id, message:'Opprettet ny sak.' };
-  } catch(e){
-    _logEvent && _logEvent('VaktmesterAPI_Feil', 'createVaktmesterTask: ' + e.message);
-    return { ok:false, error: e.message };
-  }
-}
-
-/** Til UI: hent enkel profil (navn/epost). */
-function getCurrentVaktmesterProfile(){
-  return _currentUserProfile_();
-}
-
-/** Test: lag en oppgave tildelt meg selv, så Vaktmester-UI får noe å vise */
-function _debugCreateTaskForMe(opts) {
-  const ss = SpreadsheetApp.getActive();
-  const sh = ss.getSheetByName(SHEETS.TASKS) || ss.insertSheet(SHEETS.TASKS);
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(['OppgaveID','Tittel','Ansvarlig','Status','Seksjonsnr','Frist']);
-  }
-  const email = (Session.getActiveUser()?.getEmail() || Session.getEffectiveUser()?.getEmail() || '').toLowerCase();
-  const id = (typeof _nextTaskId_==='function') ? _nextTaskId_() : `TASK-${Date.now()}`;
-  const tittel = opts?.tittel || 'Skifte lyspære i oppgang';
-  const seksjon = opts?.seksjon || '';
-  const frist = opts?.frist || '';
-  sh.appendRow([id, tittel, email, 'Ny', seksjon, frist]);
-  return id;
+  return { sh: sh, H: H, M: M, row: row, rowVals: rowVals };
 }

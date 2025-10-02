@@ -1,0 +1,10 @@
+{
+  "env": { "es6": true, "browser": true },
+  "plugins": ["sonarjs"],
+  "extends": ["eslint:recommended", "plugin:sonarjs/recommended"],
+  "rules": {
+    "sonarjs/no-identical-functions": "error",
+    "no-duplicate-case": "error",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+  }
+}

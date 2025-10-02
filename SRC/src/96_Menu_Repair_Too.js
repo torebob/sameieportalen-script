@@ -1,5 +1,3 @@
-/* ============================================================================
- * Diagnose & Repair Toolkit (kollisjonsfri)
  * FILE: 96_Repair_Tools.gs
  * VERSION: 1.1.0
  * UPDATED: 2025-09-15
@@ -16,6 +14,9 @@
  *  - Ingen globale const-er. Kun toppnivå-funksjoner med prefix repair96_.
  *  - Tåler at andre filer definerer ACCESS_SHEET, MONTHS, osv.
  * ========================================================================== */
+function _ensureHeaderRow_(ss, dstName, header) {
+  var dst = _ensureHeaderRow_(ss, dstName, header);
+
 
 /** Kjør ALT i ett (trygt å kjøre flere ganger) */
 function repair96_RunAll() {
@@ -135,21 +136,16 @@ function repair96_MigrateArk9ToStyringsdokLogg() {
     return 'Ark 9 var tom – døpte om til ' + dstName;
   }
 
-  var dst = ss.getSheetByName(dstName);
-  if (!dst) {
-    dst = ss.insertSheet(dstName);
-    dst.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
-    try { dst.setFrozenRows(1); } catch (_) {}
-  } else if (dst.getLastRow() === 0) {
-    dst.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
-    try { dst.setFrozenRows(1); } catch (_) {}
-  }
+  var dst = _ensureHeaderRow_(ss, dstName, header);
+
 
   var srcHeader = src.getRange(1,1,1,cols).getValues()[0].map(String);
   function idx(name){ return srcHeader.indexOf(name) + 1; } // 1-basert
   var c = {
     dokument_id: idx('dokument_id'),
     navn: idx('navn'),
+try { dst.setFrozenRows(1); } catch (_) {}
+try { dst.setFrozenRows(1); } catch (_) {}
     master: idx('masterdokument_url'),
     pdf: idx('gjeldende_pdf_url'),
     ansvarlig: idx('ansvarlig_rolle'),

@@ -1,0 +1,10 @@
+/SRC/*.js
+/SRC/*.html
+/node_modules/
+/coverage/
+/dist/
+/report/
+/jscpd-*.txt
+*.bak
+*.save
+*.backup.js

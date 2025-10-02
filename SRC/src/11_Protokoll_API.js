@@ -1,3 +1,4 @@
+/* global Sameie */
 /* ================== Elektronisk Protokollgodkjenning (API) ==================
  * FILE: 11_Protokoll_API.gs | VERSION: 2.0.0 | UPDATED: 2025-09-13
  * FORMÅL: Sende, spore og motta godkjenninger/avvisninger for møteprotokoller.
@@ -21,12 +22,7 @@ function _ensureSheetLocal_(name, headers){
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(name);
   if (!sh) sh = ss.insertSheet(name);
   var cur = sh.getRange(1,1,1,headers.length).getValues()[0];
-  var mismatch = JSON.stringify(cur) !== JSON.stringify(headers);
-  if (sh.getLastRow() === 0 || mismatch){
-    sh.getRange(1,1,1,Math.max(headers.length, sh.getLastColumn())).clearContent();
-    sh.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
-    if (sh.getFrozenRows() < 1) sh.setFrozenRows(1);
-  }
+  var Sameie.Sheets.ensureHeader(sh, headers);
   return sh;
 }
 function _hdrIdxMap_(headers, names){

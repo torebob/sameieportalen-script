@@ -21,12 +21,7 @@ function _ensureSheetLocal_(name, headers){
   var ss = SpreadsheetApp.getActive(), sh = ss.getSheetByName(name);
   if (!sh) sh = ss.insertSheet(name);
   var cur = sh.getRange(1,1,1,headers.length).getValues()[0];
-  var mismatch = JSON.stringify(cur) !== JSON.stringify(headers);
-  if (sh.getLastRow() === 0 || mismatch){
-    sh.getRange(1,1,1,Math.max(headers.length, sh.getLastColumn())).clearContent();
-    sh.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
-    if (sh.getFrozenRows() < 1) sh.setFrozenRows(1);
-  }
+  var Sameie.Sheets.ensureHeader(sh, headers);
   return sh;
 }
 function _hdrIdxMap_(headers, names){

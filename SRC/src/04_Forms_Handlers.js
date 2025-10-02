@@ -159,12 +159,7 @@ function _ensureFormsRegisterSheet_(){
     if (!sh) sh = ss.insertSheet(FORMS_REG_SHEET);
 
     const cur = sh.getRange(1,1,1,headers.length).getValues()[0];
-    const mismatch = JSON.stringify(cur) !== JSON.stringify(headers);
-    if (sh.getLastRow() === 0 || mismatch){
-      sh.getRange(1,1,1,Math.max(headers.length, sh.getLastColumn())).clearContent();
-      sh.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold');
-      if (sh.getFrozenRows() < 1) sh.setFrozenRows(1);
-    }
+    const Sameie.Sheets.ensureHeader(sh, headers);
     return sh;
   } catch(e){
     if (typeof _logEvent === 'function') _logEvent('FormsScheduler', 'Klarte ikke sikre registerark: ' + e.message);

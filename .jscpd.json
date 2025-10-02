@@ -3,5 +3,12 @@
   "minTokens": 100,
   "reporters": ["console", "html"],
   "path": ["SRC/src"],
-  "ignore": ["**/node_modules/**"]
+  "ignore": [
+    "**/node_modules/**",
+    "**/*.bak",
+    "**/*.backup.js",
+    "**/*.save",
+    "report/**"
+  ]
 }
+

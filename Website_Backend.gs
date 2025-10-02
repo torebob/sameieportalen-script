@@ -148,6 +148,7 @@ function include(filename) {
  */
 function savePageContent(pageId, content) {
   try {
+    requireAuth(['admin', 'board_member', 'board_leader']);
     const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
     if (!sheet) throw new Error("'WebsitePages' sheet not found.");
 
@@ -209,6 +210,7 @@ function listResources() {
 
 function getBookings(resourceId, year, month) {
     try {
+        requireAuth();
         const sheet = _getOrCreateSheet('Bookings', ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']);
         const data = sheet.getDataRange().getValues();
         const headers = data.shift();
@@ -235,13 +237,36 @@ function getBookings(resourceId, year, month) {
 }
 
 function createBooking(bookingDetails) {
+    const lock = LockService.getScriptLock();
+
     try {
-        const { resourceId, startTime, endTime, userName, userEmail } = bookingDetails;
+        // KRITISK: Autentiser bruker først
+        const user = requireAuth(); // Fra Auth.gs
+
+        lock.waitLock(30000); // Vent maks 30 sek
+
+        const { resourceId, startTime, endTime } = bookingDetails;
+
+        // VIKTIG: Bruk kun server-side brukerinfo - ALDRI stol på klient!
+        const userName = user.name;
+        const userEmail = user.email;
+
         const start = new Date(startTime);
         const end = new Date(endTime);
 
-        // --- Conflict Check ---
-        const bookingsSheet = _getOrCreateSheet('Bookings', ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']);
+        // Validering
+        if (!resourceId || !startTime || !endTime) {
+            return { ok: false, message: "Alle felter er påkrevd" };
+        }
+
+        if (start >= end) {
+            return { ok: false, message: "Starttid må være før sluttid" };
+        }
+
+        // Konfliktsjekk (nå innenfor lock)
+        const bookingsSheet = _getOrCreateSheet('Bookings',
+            ['id', 'resourceId', 'startTime', 'endTime', 'userEmail', 'userName', 'createdAt']
+        );
         const data = bookingsSheet.getDataRange().getValues();
         const headers = data.shift();
         const resourceIdIndex = headers.indexOf('resourceId');
@@ -252,7 +277,6 @@ function createBooking(bookingDetails) {
             if (row[resourceIdIndex] !== resourceId) return false;
             const existingStart = new Date(row[startTimeIndex]);
             const existingEnd = new Date(row[endTimeIndex]);
-            // Check for overlap: (StartA < EndB) and (EndA > StartB)
             return start < existingEnd && end > existingStart;
         });
 
@@ -260,12 +284,18 @@ function createBooking(bookingDetails) {
             return { ok: false, message: "Tiden er allerede booket. Vennligst velg en annen tid." };
         }
 
-        // --- Create Booking ---
+        // Opprett booking
         const id = Utilities.getUuid();
         const createdAt = new Date().toISOString();
         bookingsSheet.appendRow([id, resourceId, startTime, endTime, userEmail, userName, createdAt]);
 
-        // --- Get Resource Name for Email ---
+        // Logger handling
+        logAuditEvent('CREATE_BOOKING', 'Bookings', {
+            bookingId: id,
+            resourceId: resourceId
+        });
+
+        // Send e-post
         const resourceSheet = _getOrCreateSheet('CommonResources', ['id', 'name']);
         const resourceData = resourceSheet.getDataRange().getValues();
         const resourceHeaders = resourceData.shift();
@@ -274,30 +304,29 @@ function createBooking(bookingDetails) {
         const resourceRow = resourceData.find(r => r[resIdIndex] === resourceId);
         const resourceName = resourceRow ? resourceRow[resourceNameIndex] : 'Ukjent Ressurs';
 
-        // --- Send Confirmation Email ---
-        const subject = "Booking bekreftelse";
-        const body = `
-            Hei ${userName},
-
-            Din booking er bekreftet:
-            Ressurs: ${resourceName}
-            Starttid: ${start.toLocaleString('no-NO')}
-            Sluttid: ${end.toLocaleString('no-NO')}
-
-            Takk!
-        `;
-        // Using a try-catch for the email in case of permission issues,
-        // so it doesn't block the booking itself.
         try {
-            MailApp.sendEmail(userEmail, subject, body);
+            MailApp.sendEmail(userEmail, "Booking bekreftelse", `
+                Hei ${userName},
+
+                Din booking er bekreftet:
+                Ressurs: ${resourceName}
+                Starttid: ${start.toLocaleString('no-NO')}
+                Sluttid: ${end.toLocaleString('no-NO')}
+
+                Takk!
+            `);
         } catch(e) {
-            console.error("Kunne ikke sende bekreftelses-epost: " + e.message);
-            // Don't fail the whole operation, just log the error.
+            console.error("Kunne ikke sende e-post: " + e.message);
         }
 
         return { ok: true, id: id };
+
     } catch (e) {
-        return { ok: false, message: "En feil oppstod under bookingen: " + e.message };
+        console.error("Error in createBooking: " + e.message);
+        console.error(e.stack);
+        return { ok: false, message: e.message };
+    } finally {
+        lock.releaseLock();
     }
 }
 
@@ -307,4 +336,169 @@ function createBooking(bookingDetails) {
  */
 function getBookingPageHtml() {
     return HtmlService.createHtmlOutputFromFile('Booking.html').getContent();
+}
+
+// --- SIKKER DOKUMENT-SLETTING ---
+
+function deleteDocument(docId) {
+    try {
+        // Kun admin eller styremedlemmer kan slette dokumenter
+        requireAuth(['admin', 'board_member', 'board_leader']);
+
+        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Documents');
+        const data = sheet.getDataRange().getValues();
+        const headers = data.shift();
+        const idIndex = headers.indexOf('id');
+        const urlIndex = headers.indexOf('url');
+
+        const rowIndex = data.findIndex(row => row[idIndex] == docId);
+
+        if (rowIndex !== -1) {
+            const fileUrl = data[rowIndex][urlIndex];
+            const fileId = fileUrl.match(/id=([^&]+)/)[1];
+            if (fileId) {
+                DriveApp.getFileById(fileId).setTrashed(true);
+            }
+            sheet.deleteRow(rowIndex + 2);
+
+            // Logger sletting
+            logAuditEvent('DELETE_DOCUMENT', 'Documents', { documentId: docId });
+
+            return { ok: true };
+        }
+        return { ok: false, message: "Dokument ikke funnet" };
+    } catch(e) {
+        console.error("Error in deleteDocument: " + e.message);
+        return { ok: false, message: e.message };
+    }
+}
+
+// --- SIKKER SIDE-SLETTING ---
+
+function deletePage(pageId) {
+    try {
+        // Kun admin kan slette sider
+        requireAuth(['admin', 'board_leader']);
+
+        if (!pageId) throw new Error("Side-ID er påkrevd.");
+        const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('WebsitePages');
+        if (!sheet) throw new Error("'WebsitePages'-arket ble ikke funnet.");
+
+        const data = sheet.getDataRange().getValues();
+        const pageIdIndex = data[0].indexOf('pageId');
+        if (pageIdIndex === -1) throw new Error("'pageId'-kolonnen ble ikke funnet.");
+
+        const rowIndex = data.findIndex(row => row[pageIdIndex] == pageId);
+
+        if (rowIndex > 0) {
+            sheet.deleteRow(rowIndex + 1);
+
+            // Logger sletting
+            logAuditEvent('DELETE_PAGE', 'WebsitePages', { pageId: pageId });
+
+            return { ok: true };
+        } else {
+            return { ok: false, message: "Siden ble ikke funnet." };
+        }
+    } catch (e) {
+        console.error("Error in deletePage: " + e.message);
+        return { ok: false, message: e.message };
+    }
+}
+
+// --- NYE GDPR-FUNKSJONER ---
+
+/**
+ * Eksporterer brukerens egne data (GDPR Art. 15 - Rett til innsyn)
+ */
+function exportMyData() {
+    try {
+        const user = getCurrentUser();
+
+        // Hent brukerens data fra alle relevante sheets
+        const myData = {
+            profile: getUserInfo(user.email),
+            bookings: getMyBookings(user.email),
+            auditLog: getMyAuditLog(user.email)
+        };
+
+        return { ok: true, data: myData };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
+}
+
+function getMyBookings(email) {
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Bookings');
+    if (!sheet) return [];
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const emailIndex = headers.indexOf('userEmail');
+
+    return data.filter(row => row[emailIndex] === email).map(row => {
+        const booking = {};
+        headers.forEach((h, i) => booking[h] = row[i]);
+        return booking;
+    });
+}
+
+function getMyAuditLog(email) {
+    const sheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('AuditLog');
+    if (!sheet) return [];
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const emailIndex = headers.indexOf('userEmail');
+
+    return data.filter(row => row[emailIndex] === email).map(row => {
+        const log = {};
+        headers.forEach((h, i) => log[h] = row[i]);
+        return log;
+    });
+}
+
+/**
+ * Sletter/anonymiserer brukerens data (GDPR Art. 17 - Rett til sletting)
+ * MERK: Noe data må beholdes lovpålagt (økonomi i 5 år)
+ */
+function requestDataDeletion() {
+    try {
+        const user = getCurrentUser();
+
+        // Anonymiser bookinger (ikke slett - nødvendig for statistikk)
+        const bookingsSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Bookings');
+        if (bookingsSheet) {
+            const data = bookingsSheet.getDataRange().getValues();
+            const headers = data[0];
+            const emailIndex = headers.indexOf('userEmail');
+            const nameIndex = headers.indexOf('userName');
+
+            for (let i = 1; i < data.length; i++) {
+                if (data[i][emailIndex] === user.email) {
+                    bookingsSheet.getRange(i + 1, emailIndex + 1).setValue('anonymisert@slettet.local');
+                    bookingsSheet.getRange(i + 1, nameIndex + 1).setValue('Anonymisert bruker');
+                }
+            }
+        }
+
+        // Logger sletting før bruker fjernes
+        logAuditEvent('USER_DATA_DELETION', 'Users', { email: user.email });
+
+        // Slett bruker fra Users-sheet
+        const usersSheet = SpreadsheetApp.openById(DB_SHEET_ID).getSheetByName('Users');
+        if (usersSheet) {
+            const data = usersSheet.getDataRange().getValues();
+            const emailIndex = data[0].indexOf('email');
+            const rowIndex = data.findIndex(row => row[emailIndex] === user.email);
+            if (rowIndex > 0) {
+                usersSheet.deleteRow(rowIndex + 1);
+            }
+        }
+
+        return {
+            ok: true,
+            message: "Dine data er slettet/anonymisert. Du vil bli logget ut."
+        };
+    } catch (e) {
+        return { ok: false, message: e.message };
+    }
 }

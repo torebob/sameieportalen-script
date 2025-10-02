@@ -1,4 +1,4 @@
- * FILE: 96_Repair_Tools.gs
+/* FILE: 96_Repair_Tools.gs
  * VERSION: 1.1.0
  * UPDATED: 2025-09-15
  *
@@ -7,16 +7,13 @@
  *  - Slår sammen MøteStemmer → MøteSakStemmer
  *  - Migrerer Ark 9 → Styringsdokumenter_Logg (ryddig loggformat)
  *  - Migrerer Ark 10 → DIAG_CHECKS (standard sjekklogg)
- *  - Liten “quick fix”: fryser header-rad på utvalgte ark, lager DIAG_PROJECT om mangler
+ *  - Liten "quick fix": fryser header-rad på utvalgte ark, lager DIAG_PROJECT om mangler
  *  - Kaller projectOverview() hvis den finnes
  *
  * SIKKERHET:
  *  - Ingen globale const-er. Kun toppnivå-funksjoner med prefix repair96_.
  *  - Tåler at andre filer definerer ACCESS_SHEET, MONTHS, osv.
  * ========================================================================== */
-function _ensureHeaderRow_(ss, dstName, header) {
-  var dst = _ensureHeaderRow_(ss, dstName, header);
-
 
 /** Kjør ALT i ett (trygt å kjøre flere ganger) */
 function repair96_RunAll() {
@@ -36,16 +33,16 @@ function repair96_ShowMenu() {
   try {
     var ui = SpreadsheetApp.getUi();
     ui.createMenu('Diagnose/Repair 96')
-      .addItem('Kjør ALT (RunAll)', 'repair96_RunAll')
-      .addSeparator()
-      .addItem('Opprett kjerneark', 'repair96_EnsureCoreSheets')
-      .addItem('Fusjoner stemme-ark', 'repair96_MergeVoteSheets')
-      .addItem('Migrer Ark 9 → Logg', 'repair96_MigrateArk9ToStyringsdokLogg')
-      .addItem('Migrer Ark 10 → Checks', 'repair96_MigrateArk10ToDiagChecks')
-      .addSeparator()
-      .addItem('Legg til kategorivalidering', 'repair96_addCategoryValidation')
-      .addItem('Diag quick fix', 'repair96_DiagQuickFix')
-      .addToUi();
+    .addItem('Kjør ALT (RunAll)', 'repair96_RunAll')
+    .addSeparator()
+    .addItem('Opprett kjerneark', 'repair96_EnsureCoreSheets')
+    .addItem('Fusjoner stemme-ark', 'repair96_MergeVoteSheets')
+    .addItem('Migrer Ark 9 → Logg', 'repair96_MigrateArk9ToStyringsdokLogg')
+    .addItem('Migrer Ark 10 → Checks', 'repair96_MigrateArk10ToDiagChecks')
+    .addSeparator()
+    .addItem('Legg til kategorivalidering', 'repair96_addCategoryValidation')
+    .addItem('Diag quick fix', 'repair96_DiagQuickFix')
+    .addToUi();
   } catch (e) {
     Logger.log('repair96_ShowMenu: ' + (e && e.message || e));
   }
@@ -85,7 +82,7 @@ function repair96_EnsureCoreSheets() {
   (function () {
     var name = 'Oppgaver';
     var sh = ss.getSheetByName(name);
-    if (!sh) return; // vi lager ikke nytt hvis du konsekvent bruker annet navn
+    if (!sh) return;
     if (sh.getLastRow() === 0) {
       var headers = ['OppgaveID','Tittel','Beskrivelse','Kategori','Prioritet','Opprettet','Frist','Status','Ansvarlig','Seksjonsnr','Kostnad','Lenke'];
       sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
@@ -128,7 +125,6 @@ function repair96_MigrateArk9ToStyringsdokLogg() {
   if (rows < 2) {
     src.setName(dstName);
     try { src.setFrozenRows(1); } catch (_) {}
-    // sett header hvis blankt
     if (src.getLastRow() === 0) {
       src.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
       try { src.setFrozenRows(1); } catch(_) {}
@@ -136,16 +132,18 @@ function repair96_MigrateArk9ToStyringsdokLogg() {
     return 'Ark 9 var tom – døpte om til ' + dstName;
   }
 
-  var dst = _ensureHeaderRow_(ss, dstName, header);
-
+  var dst = ss.getSheetByName(dstName);
+  if (!dst) {
+    dst = ss.insertSheet(dstName);
+    dst.getRange(1,1,1,header.length).setValues([header]).setFontWeight('bold');
+    try { dst.setFrozenRows(1); } catch (_) {}
+  }
 
   var srcHeader = src.getRange(1,1,1,cols).getValues()[0].map(String);
-  function idx(name){ return srcHeader.indexOf(name) + 1; } // 1-basert
+  function idx(name){ return srcHeader.indexOf(name) + 1; }
   var c = {
     dokument_id: idx('dokument_id'),
     navn: idx('navn'),
-try { dst.setFrozenRows(1); } catch (_) {}
-try { dst.setFrozenRows(1); } catch (_) {}
     master: idx('masterdokument_url'),
     pdf: idx('gjeldende_pdf_url'),
     ansvarlig: idx('ansvarlig_rolle'),
@@ -153,9 +151,7 @@ try { dst.setFrozenRows(1); } catch (_) {}
     endret: idx('sist_endret')
   };
 
-  // Tolerer at noen mangler, men krever minst navn/master/pdf/ansvarlig
   if (!c.navn || !c.master || !c.pdf || !c.ansvarlig) {
-    // Fall back: bare gi nytt navn
     src.setName(dstName);
     try { src.setFrozenRows(1); } catch (_) {}
     return 'Ark 9 hadde uventet struktur – ga nytt navn til ' + dstName + ' (ingen migrasjon)';
@@ -167,15 +163,15 @@ try { dst.setFrozenRows(1); } catch (_) {}
     var dato = repair96_parseDateNor_(datoRaw);
     return [
       dato,
-      String(r[c.navn - 1] || ''),                  // Kategori (Header/System)
-      String(r[c.master - 1] || ''),                // Mål (Konfig/Oppgaver/…)
-      String(r[c.pdf - 1] || ''),                   // Status (OK/…)
-      String(r[c.ansvarlig - 1] || ''),             // Kommentar (du brukte dette feltet)
-      String(r[c.ansvarlig - 1] || ''),             // AnsvarligRolle (speilet)
-      String(c.versjon ? r[c.versjon - 1] : ''),    // SisteVersjon
-      String(c.endret ? r[c.endret - 1] : ''),      // SistEndret
-      String(r[c.master - 1] || ''),                // MasterURL (placeholder)
-      String(r[c.pdf - 1] || '')                    // PDF_URL (placeholder)
+      String(r[c.navn - 1] || ''),
+                     String(r[c.master - 1] || ''),
+                     String(r[c.pdf - 1] || ''),
+                     String(r[c.ansvarlig - 1] || ''),
+                     String(r[c.ansvarlig - 1] || ''),
+                     String(c.versjon ? r[c.versjon - 1] : ''),
+                     String(c.endret ? r[c.endret - 1] : ''),
+                     String(r[c.master - 1] || ''),
+                     String(r[c.pdf - 1] || '')
     ];
   });
 
@@ -209,7 +205,6 @@ function repair96_MigrateArk10ToDiagChecks() {
     return 'Ark 10 var tom – slettet';
   }
 
-  // Håndter at Ark 10 sannsynligvis ikke har header
   var vals = src.getRange(1, 1, rows, cols).getValues();
   var out = [];
   for (var i = 0; i < vals.length; i++) {
@@ -233,12 +228,11 @@ function repair96_MigrateArk10ToDiagChecks() {
   return 'Migrerte ' + out.length + ' rader fra Ark 10 → ' + dstName;
 }
 
-/** Liten “quick fix”: fryser headere, sørger for DIAG_PROJECT, prøver projectOverview() */
+/** Liten "quick fix": fryser headere, sørger for DIAG_PROJECT, prøver projectOverview() */
 function repair96_DiagQuickFix() {
   var ss = SpreadsheetApp.getActive();
   var fixed = [];
 
-  // Sørg for DIAG_PROJECT
   (function () {
     var name = 'DIAG_PROJECT';
     var sh = ss.getSheetByName(name);
@@ -248,7 +242,6 @@ function repair96_DiagQuickFix() {
     }
   })();
 
-  // Fryser header-raden på utvalgte ark hvis de har minst 1 rad
   var candidates = ['TILGANG','LEVERANDØRER','Oppgaver','HMS_PLAN','MøteSakStemmer','Styringsdokumenter_Logg','DIAG_CHECKS','DIAG_PROJECT','BEBOERE','Seksjoner','Eierskap','Møter'];
   candidates.forEach(function (n) {
     var sh = ss.getSheetByName(n);
@@ -256,7 +249,6 @@ function repair96_DiagQuickFix() {
     try { sh.setFrozenRows(1); fixed.push('Frosset header på ' + n); } catch (_) {}
   });
 
-  // Oppdater prosjekt-oversikt hvis tilgjengelig
   try { if (typeof projectOverview === 'function') { projectOverview(); fixed.push('Oppdatert DIAG_PROJECT'); } } catch (_) {}
 
   return fixed.length ? fixed.join(' / ') : 'Quick fix: ingenting å endre';
@@ -293,7 +285,7 @@ function repair96_addCategoryValidation() {
 function repair96_parseDateNor_(v) {
   if (v instanceof Date && !isNaN(v)) return v;
   var s = String(v || '').trim();
-  var m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/); // dd.MM.yyyy
+  var m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
   if (m) {
     var d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
     return isNaN(d) ? s : d;
@@ -305,7 +297,6 @@ function repair96_parseDateNor_(v) {
 function repair96_parseNorDateTime_(s) {
   if (s instanceof Date && !isNaN(s)) return s;
   var str = String(s || '').trim();
-  // dd.MM.yyyy kl. HH.mm.ss  (og varianter)
   var rx = /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s*(?:kl\.?|@)?\s*)?(\d{1,2})[.:](\d{2})(?:[.:](\d{2}))?$/i;
   var m = str.match(rx);
   if (m) {
@@ -322,6 +313,7 @@ function repair96_intFrom_(text, re) {
   var m = String(text || '').match(re);
   return m ? parseInt(m[1], 10) : 0;
 }
+
 /** Append én sjekk-linje til DIAG_CHECKS (sikker og idempotent på header) */
 function diagChecks_Log(source, test, ok, warn, fail, message) {
   var ss = SpreadsheetApp.getActive();
@@ -340,26 +332,23 @@ function diagChecks_Log(source, test, ok, warn, fail, message) {
   sh.getRange(2,1,Math.max(1, sh.getLastRow()-1),1).setNumberFormat('dd.MM.yyyy HH:mm:ss');
 }
 
-/** En enkel “helsesjekk” som logger til DIAG_CHECKS */
+/** En enkel "helsesjekk" som logger til DIAG_CHECKS */
 function runAllChecks() {
   var ss = SpreadsheetApp.getActive();
   var ok=0, warn=0, fail=0, notes=[];
 
-  // Kritiske krav
   [['HMS_PLAN', true], ['Oppgaver', true]].forEach(function(spec){
     var exists = !!ss.getSheetByName(spec[0]);
     if (exists) { ok++; notes.push('OK '+spec[0]); }
     else { fail++; notes.push('Mangler '+spec[0]); }
   });
 
-  // Anbefalte (advarsel hvis mangler)
   ['TILGANG','LEVERANDØRER'].forEach(function(name){
     var exists = !!ss.getSheetByName(name);
     if (exists) { ok++; notes.push('OK '+name); }
     else { warn++; notes.push('Mangler (anbefalt) '+name); }
   });
 
-  // Info: BEBOERE (teller som OK hvis finnes, ellers ikke feil)
   if (ss.getSheetByName('BEBOERE')) { ok++; notes.push('OK BEBOERE'); }
 
   var msg = 'runAllChecks: OK='+ok+', WARN='+warn+', FAIL='+fail+' | '+notes.join('; ');
@@ -369,9 +358,8 @@ function runAllChecks() {
 
 /** (Valgfritt) Daglig trigger kl 07:30 som kjører runAllChecks og logger til DIAG_CHECKS */
 function installDailyDiagChecksTrigger() {
-  // Rydder gamle klokke-triggere for denne funksjonen først
   ScriptApp.getProjectTriggers().forEach(function(t){
     if (t.getHandlerFunction() === 'runAllChecks') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('runAllChecks').timeBased().atHour(7).nearMinute(30).everyDays(1).create();
+    ScriptApp.newTrigger('runAllChecks').timeBased().atHour(7).nearMinute(30).everyDays(1).create();
 }

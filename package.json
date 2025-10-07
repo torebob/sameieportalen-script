@@ -5,14 +5,30 @@
   "scripts": {
     "lint": "eslint SRC/src --max-warnings=0",
     "dup:check": "jscpd --config .jscpd.json SRC/src",
-    "test": "npm run lint && npm run dup:check"
+    "test": "npm run lint && npm run dup:check",
+    "dev": "vite",
+    "build": "vite build",
+    "flatten": "node scripts/flatten-html.mjs",
+    "preview": "vite preview dist",
+    "serve": "fuser -k 9090/tcp || true && serve dist -l 9090",
+    "start": "npm run build && npm run flatten && npm run serve"
   },
   "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "@types/react-router-dom": "^5.3.3",
     "eslint": "^9.36.0",
     "eslint-plugin-googleappsscript": "^1.0.5",
     "eslint-plugin-sonarjs": "^1.0.4",
     "globals": "^16.4.0",
-    "jscpd": "^3.5.10"
+    "jscpd": "^3.5.10",
+    "posthtml": "^0.16.6",
+    "posthtml-cli": "^0.10.0",
+    "posthtml-include": "^2.0.1",
+    "serve": "^14.2.5",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.8",
+    "vite-plugin-include-html": "^1.0.0"
   },
   "dependencies": {
     "@google/clasp": "^3.0.6-alpha"

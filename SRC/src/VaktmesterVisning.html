@@ -1,0 +1,371 @@
+<? var FILE = '33_VaktmesterVisning.html'; ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <?!= include('AppMetaPartial') ?>
+  <!-- ======================= VaktmesterVisning ==================
+       FILE: 33_VaktmesterVisning.html | VERSION: <?= VERSION || '1.0.0' ?> | UPDATED: 2025-09-14
+       PURPOSE: Vaktmester-UI for oppgaver, status og kommentarer
+  ================================================================= -->
+
+<!doct
+ html>
+<html lang="no">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Vaktmester</title>
+<style>
+  :root{--card:#fff;--muted:#6b7280;--border:#e5e7eb;--brand:#0ea5e9;--ok:#10b981;--warn:#ef4444;--ink:#0f172a;--bg:#f8fafc}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+  .wrap{padding:16px}
+  .grid{display:grid;grid-template-columns:380px 1fr;gap:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+  h2,h3{margin:0 0 8px}
+  .seg{display:inline-flex;gap:6px;background:#eef6ff;border:1px solid var(--border);border-radius:999px;padding:4px;margin:8px 0}
+  .seg button{background:transparent;border:0;padding:6px 12px;border-radius:999px;cursor:pointer}
+  .seg button.active{background:#fff;border:1px solid var(--border)}
+  .list{max-height:560px;overflow:auto}
+  .task{border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px;background:#fff;cursor:pointer}
+  .task:hover{background:#f9fbff}
+  .hint{color:var(--muted);font-size:12px}
+  label{display:block;font-weight:600;margin:8px 0 6px}
+  input,textarea,select{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:#fbfdff}
+  textarea{resize:vertical;min-height:80px}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);cursor:pointer;background:#fff;font-weight:600}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.success{background:var(--ok);border-color:var(--ok);color:#fff}
+  .btn.danger{background:var(--warn);border-color:var(--warn);color:#fff}
+  .status{min-height:20px;color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#1e40af;font-size:12px;font-weight:700}
+  .attachment-list{margin:12px 0;padding:0;list-style:none}
+  .attachment-list li{display:flex;align-items:center;gap:8px;padding:4px;border-radius:6px}
+  .attachment-list li:hover{background:#f4f4f5}
+  .attachment-list a{color:var(--brand);text-decoration:none;font-weight:500}
+  .attachment-list a:hover{text-decoration:underline}
+  input[type="file"]{padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>Vaktmester</h2>
+  <div class="hint" id="vmWelcome">Laster profil …</div>
+
+  <div class="grid">
+    <!-- Venstre: liste -->
+    <div class="card">
+      <div class="seg">
+        <button id="tabActive" class="active">Aktive</button>
+        <button id="tabHistory">Historikk</button>
+      </div>
+      <div id="taskList" class="list">
+        <div class="hint">Laster oppgaver …</div>
+      </div>
+    </div>
+
+    <!-- Høyre: detaljer -->
+    <div class="card">
+      <h3>Detaljer</h3>
+      <div id="noSelection" class="hint">Velg en oppgave fra listen.</div>
+
+      <div id="taskPane" style="display:none">
+        <div class="grid2">
+          <div>
+            <label>OppgaveID</label>
+            <input id="d_id" disabled/>
+          </div>
+          <div>
+            <label>Status</label>
+            <input id="d_status" disabled/>
+          </div>
+        </div>
+
+        <label>Tittel</label>
+        <input id="d_title" disabled/>
+
+        <label>Beskrivelse</label>
+        <textarea id="d_desc" disabled></textarea>
+
+        <div class="grid2">
+          <div>
+            <label>Opprettet</label>
+            <input id="d_created" disabled/>
+          </div>
+          <div>
+            <label>Frist</label>
+            <input id="d_due" disabled/>
+          </div>
+        </div>
+
+        <div class="grid2">
+          <div>
+            <label>Seksjon</label>
+            <input id="d_section" disabled/>
+          </div>
+          <div>
+            <label>Prioritet</label>
+            <input id="d_priority" disabled/>
+          </div>
+        </div>
+
+        <label>Ny kommentar</label>
+        <textarea id="d_comment" placeholder="Skriv en kort kommentar …"></textarea>
+
+        <div class="toolbar">
+          <button class="btn" id="btnAddComment">Legg til kommentar</button>
+          <span class="pill">Endre status:</span>
+          <button class="btn success" id="btnComplete">Sett Fullført</button>
+          <button class="btn danger" id="btnReject">Sett Avvist</button>
+        </div>
+
+        <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)"/>
+
+        <label>Vedlegg</label>
+        <div id="d_attachments_list" class="hint">Ingen vedlegg.</div>
+
+        <label>Last opp vedlegg</label>
+        <input type="file" id="d_attachment_file"/>
+        <div class="toolbar">
+          <button class="btn" id="btnUploadAttachment">Last opp vedlegg</button>
+        </div>
+
+        <div class="status" id="detailStatus"></div>
+      </div>
+
+      <hr style="margin:16px 0;border:none;border-top:1px solid var(--border)"/>
+
+      <h3>Ny oppgave</h3>
+      <div class="grid2">
+        <div>
+          <label>Tittel</label>
+          <input id="n_title" placeholder="F.eks. Skifte lysrør i garasjen"/>
+        </div>
+        <div>
+          <label>Frist</label>
+          <input id="n_due" type="date"/>
+        </div>
+      </div>
+      <div class="grid2">
+        <div>
+          <label>Seksjonsnr</label>
+          <input id="n_section" placeholder="F.eks. B-302"/>
+        </div>
+        <div>
+          <label>Prioritet</label>
+          <select id="n_priority">
+            <option>Lav</option><option selected>Medium</option><option>Høy</option>
+          </select>
+        </div>
+      </div>
+      <label>Beskrivelse</label>
+      <textarea id="n_desc" placeholder="Detaljer …"></textarea>
+
+      <div class="toolbar">
+        <button class="btn primary" id="btnCreate">Opprett oppgave</button>
+        <span id="createStatus" class="status"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = s => document.querySelector(s);
+  let state = { tab:'active', items:[], sel:null, me:null };
+
+  function fmt(dateISO){
+    if (!dateISO) return '';
+    try { return new Date(dateISO).toLocaleString('no-NO'); } catch(_){ return ''; }
+  }
+  function escapeHtml(s){
+    return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // init
+  google.script.run.withSuccessHandler(p=>{
+    state.me = p || {name:'',email:''};
+    $('#vmWelcome').textContent = (state.me.name ? ('Hei, ' + state.me.name) : 'Hei') + (state.me.email ? ' ('+state.me.email+')' : '');
+    loadTasks();
+  }).getCurrentVaktmesterProfile();
+
+  function loadTasks(){
+    $('#taskList').innerHTML = '<div class="hint">Laster oppgaver …</div>';
+    google.script.run.withSuccessHandler(res=>{
+      if (!res || !res.ok){ $('#taskList').innerHTML = '<div class="hint">Kunne ikke hente oppgaver.</div>'; return; }
+      state.items = res.items || [];
+      drawList();
+    }).getTasksForVaktmester(state.tab);
+  }
+
+  function drawList(){
+    const box = $('#taskList'); box.innerHTML='';
+    if (!state.items.length){
+      box.innerHTML = '<div class="hint">Ingen oppgaver.</div>';
+      $('#noSelection').style.display = 'block';
+      $('#taskPane').style.display = 'none';
+      state.sel = null;
+      return;
+    }
+    state.items.forEach(t=>{
+      const el = document.createElement('div');
+      el.className = 'task';
+      const created = fmt(t.opprettetISO);
+      const due = t.fristISO ? new Date(t.fristISO).toLocaleDateString('no-NO') : '';
+      el.innerHTML = `<strong>${escapeHtml(t.tittel||t.id)}</strong><div class="hint">${escapeHtml(t.status||'')} • Opprettet ${escapeHtml(created)}${due?(' • Frist '+escapeHtml(due)) : ''}</div>`;
+      el.onclick = ()=>selectTask(t.id);
+      box.appendChild(el);
+    });
+  }
+
+  function selectTask(id){
+    const t = state.items.find(x=>x.id===id);
+    if (!t){ return; }
+    state.sel = t;
+    $('#noSelection').style.display = 'none';
+    $('#taskPane').style.display = 'block';
+
+    $('#d_id').value = t.id || '';
+    $('#d_status').value = t.status || '';
+    $('#d_title').value = t.tittel || '';
+    $('#d_desc').value = t.beskrivelse || '';
+    $('#d_created').value = t.opprettetISO ? new Date(t.opprettetISO).toLocaleString('no-NO') : '';
+    $('#d_due').value = t.fristISO ? new Date(t.fristISO).toLocaleDateString('no-NO') : '';
+    $('#d_section').value = t.seksjon || '';
+    $('#d_priority').value = t.prioritet || '';
+    $('#d_comment').value = '';
+    $('#d_attachment_file').value = '';
+    $('#detailStatus').textContent = '';
+
+    // Render attachments
+    const attachmentBox = $('#d_attachments_list');
+    attachmentBox.innerHTML = '';
+    if (t.attachments && t.attachments.length > 0) {
+      const ul = document.createElement('ul');
+      ul.className = 'attachment-list';
+      t.attachments.forEach(att => {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>📎</span> <a href="${escapeHtml(att.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(att.name)}</a>`;
+        ul.appendChild(li);
+      });
+      attachmentBox.appendChild(ul);
+    } else {
+      attachmentBox.innerHTML = '<div class="hint">Ingen vedlegg.</div>';
+    }
+  }
+
+  // Tabs
+  $('#tabActive').onclick = ()=>{ $('#tabActive').classList.add('active'); $('#tabHistory').classList.remove('active'); state.tab='active'; loadTasks(); };
+  $('#tabHistory').onclick = ()=>{ $('#tabHistory').classList.add('active'); $('#tabActive').classList.remove('active'); state.tab='history'; loadTasks(); };
+
+  // Actions
+  $('#btnAddComment').onclick = ()=>{
+    if (!state.sel){ return; }
+    const text = ($('#d_comment').value||'').trim();
+    if (!text){ $('#detailStatus').textContent='Skriv en kommentar først.'; return; }
+    $('#detailStatus').textContent='Lagrer kommentar …';
+    google.script.run.withSuccessHandler(res=>{
+      $('#detailStatus').textContent='Kommentar lagret.';
+      $('#d_comment').value='';
+      // Frisk opp liste/utvalg (hent på nytt for å reflektere ev. status-oppdatering)
+      const currentId = state.sel.id;
+      loadTasks().then(() => {
+        // re-select the task if it still exists in the list
+        if (state.items.some(item => item.id === currentId)) {
+          selectTask(currentId);
+        }
+      });
+    }).withFailureHandler(e=> $('#detailStatus').textContent = e?.message || 'Kunne ikke lagre kommentar.')
+      .addTaskCommentByVaktmester(state.sel.id, text);
+  };
+
+  $('#btnUploadAttachment').onclick = ()=>{
+    if (!state.sel){ return; }
+    const fileInput = $('#d_attachment_file');
+    if (fileInput.files.length === 0) {
+      $('#detailStatus').textContent = 'Velg en fil først.';
+      return;
+    }
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      const data = e.target.result.split(',');
+      const fileObject = {
+        fileName: file.name,
+        mimeType: file.type,
+        data: data[1] // base64 encoded data
+      };
+
+      $('#detailStatus').textContent = 'Laster opp vedlegg...';
+      google.script.run
+        .withSuccessHandler(res => {
+          if (!res || !res.ok) {
+             $('#detailStatus').textContent = res?.error || 'En feil oppstod ved opplasting.';
+             return;
+          }
+          $('#detailStatus').textContent = 'Vedlegg lastet opp!';
+          fileInput.value = ''; // Clear file input
+
+          // Refresh task list and re-select to show new attachment
+          const currentId = state.sel.id;
+          loadTasks().then(() => {
+            if (state.items.some(item => item.id === currentId)) {
+               // Find the updated task item to append the new attachment to its data
+               const task = state.items.find(item => item.id === currentId);
+               if(task) {
+                 if (!task.attachments) task.attachments = [];
+                 task.attachments.push(res.attachment);
+               }
+               selectTask(currentId);
+            }
+          });
+        })
+        .withFailureHandler(err => {
+          $('#detailStatus').textContent = 'Opplasting feilet: ' + err.message;
+        })
+        .uploadAttachmentByVaktmester(state.sel.id, fileObject);
+    };
+
+    reader.onerror = (err) => {
+      $('#detailStatus').textContent = 'Kunne ikke lese filen.';
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  function setStatus(status){
+    if (!state.sel){ return; }
+    $('#detailStatus').textContent='Oppdaterer status …';
+    google.script.run.withSuccessHandler(_=>{
+      $('#detailStatus').textContent='Status oppdatert.';
+      loadTasks();
+    }).withFailureHandler(e=> $('#detailStatus').textContent = e?.message || 'Feil ved oppdatering.')
+      .updateTaskStatusByVaktmester(state.sel.id, status, null);
+  }
+  $('#btnComplete').onclick = ()=> setStatus('Fullført');
+  $('#btnReject').onclick   = ()=> setStatus('Avvist');
+
+  // Create new
+  $('#btnCreate').onclick = ()=>{
+    const payload = {
+      tittel: ($('#n_title').value||'').trim(),
+      frist:  $('#n_due').value || '',
+      seksjonsnr: ($('#n_section').value||'').trim(),
+      prioritet: $('#n_priority').value,
+      beskrivelse: ($('#n_desc').value||'').trim()
+    };
+    if (!payload.tittel){ $('#createStatus').textContent='Tittel er påkrevd.'; return; }
+    $('#createStatus').textContent='Oppretter oppgave …';
+    google.script.run.withSuccessHandler(res=>{
+      if (!res || !res.ok){ $('#createStatus').textContent = res?.message || 'Kunne ikke opprette oppgave.'; return; }
+      $('#createStatus').textContent='Oppgave opprettet (' + res.id + ').';
+      // Tøm felter
+      $('#n_title').value=''; $('#n_due').value=''; $('#n_section').value=''; $('#n_priority').value='Medium'; $('#n_desc').value='';
+      loadTasks();
+    }).withFailureHandler(e=> $('#createStatus').textContent = e?.message || 'Feil ved oppretting.')
+      .createVaktmesterTask(payload);
+  };
+</script>
+</body>
+</html>

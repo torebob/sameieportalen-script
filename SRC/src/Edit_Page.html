@@ -1,0 +1,74 @@
+<!-- Denne filen er ment som et admin verktøy -->
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sceditor@3/minified/themes/default.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sceditor@3/minified/sceditor.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sceditor@3/minified/formats/xhtml.min.js"></script>
+    <style>
+        body { font-family: 'Roboto', sans-serif; }
+        #editor-container { padding: 20px; }
+        textarea { width: 100%; height: 400px; }
+        #save-btn {
+            background-color: #005f73;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="editor-container">
+        <h2 id="page-title">Redigerer side</h2>
+        <textarea id="editor"></textarea>
+        <button id="save-btn">Lagre Endringer</button>
+    </div>
+
+    <script>
+        const pageId = '<?= pageId ?>';
+        let editor;
+
+        function initEditor(initialContent) {
+            const textarea = document.getElementById('editor');
+            textarea.value = initialContent;
+            sceditor.create(textarea, {
+                format: 'xhtml',
+                style: 'https://cdn.jsdelivr.net/npm/sceditor@3/minified/themes/default.min.css'
+            });
+            editor = sceditor.instance(textarea);
+        }
+
+        function saveContent() {
+            const newContent = editor.val();
+            google.script.run
+                .withSuccessHandler(() => {
+                    alert('Innhold lagret!');
+                    // Optionally, redirect or close the editor
+                    google.script.host.close();
+                })
+                .withFailureHandler(err => alert('Feil ved lagring: ' + err.message))
+                .savePageContent(pageId, newContent);
+        }
+
+        document.getElementById('save-btn').addEventListener('click', saveContent);
+
+        // Fetch initial content and initialize the editor
+        google.script.run
+            .withSuccessHandler(page => {
+                if (page) {
+                    document.getElementById('page-title').innerText = `Redigerer: ${page.title}`;
+                    initEditor(page.content);
+                } else {
+                    // This is a new page
+                    document.getElementById('page-title').innerText = `Redigerer: Ny Side (${pageId})`;
+                    initEditor('');
+                }
+            })
+            .getPageContent(pageId);
+    </script>
+</body>
+</html>

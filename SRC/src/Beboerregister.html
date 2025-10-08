@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Beboerregister</title>
+    <style>
+        body { font-family: sans-serif; }
+        .container { padding: 20px; }
+        .search-bar { margin-bottom: 20px; }
+        .section { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        .section-header { font-weight: bold; }
+        .person-list { margin-left: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Beboerregister</h1>
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Søk etter navn, seksjon, etc.">
+            <button onclick="handleSearch()">Søk</button>
+        </div>
+        <button onclick="openModal('section')">Legg til seksjon</button>
+        <button onclick="exportData('all')">Eksporter alle</button>
+        <button onclick="exportData('owners')">Eksporter eiere</button>
+        <button onclick="exportData('tenants')">Eksporter leietakere</button>
+        <div id="register-content"></div>
+    </div>
+
+    <!-- Modal for adding/editing -->
+    <div id="formModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5);">
+        <div style="background:white; padding:20px; margin:100px auto; width:50%;">
+            <h2 id="modalTitle"></h2>
+            <div id="modalContent"></div>
+            <button onclick="closeModal()">Lukk</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchData();
+        });
+
+        let allData = [];
+
+        function fetchData() {
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.ok) {
+                        allData = response.data;
+                        renderData(allData);
+                    } else {
+                        alert(response.error);
+                    }
+                })
+                .withFailureHandler(err => {
+                    alert('Feil ved henting av data: ' + err.message);
+                })
+                .getBeboerregisterData();
+        }
+
+        function renderData(data) {
+            const content = document.getElementById('register-content');
+            content.innerHTML = '';
+            data.forEach(section => {
+                const sectionDiv = document.createElement('div');
+                sectionDiv.className = 'section';
+                sectionDiv.innerHTML = `
+                    <div class="section-header">Seksjon ${section.seksjonsnummer} (${section.adresse}) - ${section.areal} m²</div>
+                    <button onclick="openModal('section', '${section.id}')">Rediger</button>
+                    <button onclick="deleteRecord('Sections', '${section.id}')">Slett</button>
+                    <div class="person-list">
+                        <strong>Eiere:</strong>
+                        <button onclick="openModal('owner', null, '${section.id}')">Legg til eier</button>
+                        ${renderPeople(section.owners, 'owner')}
+                    </div>
+                    <div class="person-list">
+                        <strong>Leietakere:</strong>
+                        <button onclick="openModal('tenant', null, '${section.id}')">Legg til leietaker</button>
+                        ${renderPeople(section.tenants, 'tenant')}
+                    </div>
+                `;
+                content.appendChild(sectionDiv);
+            });
+        }
+
+        function renderPeople(people, type) {
+            if (!people || people.length === 0) return '<div>Ingen registrert.</div>';
+            return '<ul>' + people.map(p => `
+                <li>
+                    ${p.navn} (${p.epost}, ${p.telefon})
+                    <button onclick="openModal('${type}', '${p.id}')">Rediger</button>
+                    <button onclick="deleteRecord('${type === 'owner' ? 'Owners' : 'Tenants'}', '${p.id}')">Slett</button>
+                </li>
+            `).join('') + '</ul>';
+        }
+
+        function handleSearch() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filteredData = allData.filter(section => {
+                const inSection = section.seksjonsnummer.toLowerCase().includes(query) || section.adresse.toLowerCase().includes(query);
+                const inOwner = section.owners.some(o => o.navn.toLowerCase().includes(query));
+                const inTenant = section.tenants.some(t => t.navn.toLowerCase().includes(query));
+                return inSection || inOwner || inTenant;
+            });
+            renderData(filteredData);
+        }
+
+        function openModal(type, id = null, sectionId = null) {
+            const modal = document.getElementById('formModal');
+            const title = document.getElementById('modalTitle');
+            const content = document.getElementById('modalContent');
+            let record = {};
+            let sheetName = '';
+
+            if (id) {
+                if (type === 'section') {
+                    record = allData.find(s => s.id === id);
+                    sheetName = 'Sections';
+                } else if (type === 'owner') {
+                    allData.forEach(s => {
+                        const found = s.owners.find(o => o.id === id);
+                        if (found) record = found;
+                    });
+                    sheetName = 'Owners';
+                } else if (type === 'tenant') {
+                     allData.forEach(s => {
+                        const found = s.tenants.find(t => t.id === id);
+                        if (found) record = found;
+                    });
+                    sheetName = 'Tenants';
+                }
+            }
+
+            let formHtml = '';
+            if (type === 'section') {
+                title.innerText = id ? 'Rediger seksjon' : 'Ny seksjon';
+                sheetName = 'Sections';
+                formHtml = `
+                    <input type="hidden" id="form-id" value="${id || ''}">
+                    <input type="hidden" id="form-sheetName" value="${sheetName}">
+                    Seksjonsnummer: <input type="text" id="form-seksjonsnummer" value="${record.seksjonsnummer || ''}"><br>
+                    Adresse: <input type="text" id="form-adresse" value="${record.adresse || ''}"><br>
+                    Areal: <input type="text" id="form-areal" value="${record.areal || ''}"><br>
+                `;
+            } else { // owner or tenant
+                title.innerText = id ? `Rediger ${type}` : `Ny ${type}`;
+                sheetName = type === 'owner' ? 'Owners' : 'Tenants';
+                 formHtml = `
+                    <input type="hidden" id="form-id" value="${id || ''}">
+                    <input type="hidden" id="form-sheetName" value="${sheetName}">
+                    <input type="hidden" id="form-sectionId" value="${record.sectionId || sectionId}">
+                    Navn: <input type="text" id="form-navn" value="${record.navn || ''}"><br>
+                    E-post: <input type="text" id="form-epost" value="${record.epost || ''}"><br>
+                    Telefon: <input type="text" id="form-telefon" value="${record.telefon || ''}"><br>
+                `;
+            }
+            formHtml += '<button onclick="saveRecord()">Lagre</button>';
+            content.innerHTML = formHtml;
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('formModal').style.display = 'none';
+        }
+
+        function saveRecord() {
+            const id = document.getElementById('form-id').value;
+            const sheetName = document.getElementById('form-sheetName').value;
+            let payload = { id, sheetName };
+
+            if (sheetName === 'Sections') {
+                payload.seksjonsnummer = document.getElementById('form-seksjonsnummer').value;
+                payload.adresse = document.getElementById('form-adresse').value;
+                payload.areal = document.getElementById('form-areal').value;
+            } else {
+                payload.sectionId = document.getElementById('form-sectionId').value;
+                payload.navn = document.getElementById('form-navn').value;
+                payload.epost = document.getElementById('form-epost').value;
+                payload.telefon = document.getElementById('form-telefon').value;
+            }
+
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.ok) {
+                        closeModal();
+                        fetchData(); // Refresh data
+                    } else {
+                        alert(response.error);
+                    }
+                })
+                .withFailureHandler(err => {
+                    alert('Feil ved lagring: ' + err.message);
+                })
+                .saveBeboerRecord(payload);
+        }
+
+        function deleteRecord(sheetName, id) {
+            if (!confirm('Er du sikker på at du vil slette?')) return;
+
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.ok) {
+                        fetchData(); // Refresh data
+                    } else {
+                        alert(response.error);
+                    }
+                })
+                .withFailureHandler(err => {
+                    alert('Feil ved sletting: ' + err.message);
+                })
+                .deleteBeboerRecord({ sheetName, id });
+        }
+
+        function exportData(type) {
+            google.script.run
+                .withSuccessHandler(response => {
+                    if (response.ok) {
+                        const { name, base64, mimeType } = response.file;
+                        const link = document.createElement('a');
+                        link.href = `data:${mimeType};base64,${base64}`;
+                        link.download = name;
+                        link.click();
+                    } else {
+                        alert(response.error);
+                    }
+                })
+                .withFailureHandler(err => {
+                    alert('Feil ved eksportering: ' + err.message);
+                })
+                .exportBeboerliste(type);
+        }
+    </script>
+</body>
+</html>

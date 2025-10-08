@@ -1,0 +1,201 @@
+<!--
+ ==================================================================
+   FILE: 43_BeboerHenvendelse.html
+   VERSION: 1.0.0
+   UPDATED: 2025-09-28
+   PURPOSE: Lar beboere sende en henvendelse til styret.
+ ==================================================================
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ny Henvendelse til Styret</title>
+    <style>
+        :root {
+            --primary: #3b82f6; --success: #10b981; --danger: #ef4444;
+            --border: #e5e7eb; --text-muted: #6b7280; --text-main: #1f2937;
+            --bg-light: #f9fafb; --bg-white: #ffffff;
+        }
+        body {
+            font-family: Inter, -apple-system, sans-serif;
+            padding: 20px;
+            background-color: var(--bg-light);
+            color: var(--text-main);
+        }
+        .container { max-width: 600px; margin: 0 auto; }
+        h3 {
+            margin: 0 0 20px; font-size: 20px; font-weight: 600;
+        }
+        .form-group { margin-bottom: 16px; }
+        label {
+            display: block; font-size: 14px; font-weight: 500;
+            margin-bottom: 6px;
+        }
+        input[type="text"], select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box; /* Important for consistent sizing */
+        }
+        textarea {
+            min-height: 120px; resize: vertical;
+        }
+        .file-input-wrapper {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        #file-name { font-style: italic; }
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            background-color: var(--primary);
+            color: var(--bg-white);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover { background-color: #2563eb; }
+        button:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        #status-message {
+            margin-top: 16px; padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: 500;
+            display: none; /* Hidden by default */
+        }
+        .status-success { background-color: #d1fae5; color: #065f46; }
+        .status-error { background-color: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h3>Send Henvendelse til Styret</h3>
+
+        <form id="henvendelse-form">
+            <div class="form-group">
+                <label for="tittel">Tittel</label>
+                <input type="text" id="tittel" name="tittel" required>
+            </div>
+
+            <div class="form-group">
+                <label for="kategori">Kategori</label>
+                <select id="kategori" name="kategori" required>
+                    <option value="" disabled selected>Velg en kategori</option>
+                    <option value="Vedlikehold">Vedlikehold</option>
+                    <option value="Generelt">Generelt</option>
+                    <option value="Økonomi">Økonomi</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="innhold">Beskrivelse</label>
+                <textarea id="innhold" name="innhold" required></textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="vedlegg">Legg ved fil (valgfritt)</label>
+                <input type="file" id="vedlegg" name="vedlegg" style="display: none;">
+                <button type="button" onclick="document.getElementById('vedlegg').click();">Velg fil...</button>
+                <div class="file-input-wrapper">
+                    Valgt fil: <span id="file-name">Ingen</span>
+                </div>
+            </div>
+
+            <button type="submit" id="submit-btn">Send Henvendelse</button>
+        </form>
+
+        <div id="status-message"></div>
+    </div>
+
+    <script>
+        const $ = id => document.getElementById(id);
+
+        const form = $('henvendelse-form');
+        const submitBtn = $('submit-btn');
+        const statusMessage = $('status-message');
+        const fileInput = $('vedlegg');
+        const fileNameSpan = $('file-name');
+
+        fileInput.addEventListener('change', () => {
+            fileNameSpan.textContent = fileInput.files.length > 0 ? fileInput.files[0].name : 'Ingen';
+        });
+
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Sender...';
+            statusMessage.style.display = 'none';
+
+            const file = fileInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => {
+                    const base64 = reader.result.split(',')[1];
+                    const payload = {
+                        tittel: form.tittel.value,
+                        kategori: form.kategori.value,
+                        innhold: form.innhold.value,
+                        attachment: {
+                            base64: base64,
+                            mimeType: file.type,
+                            name: file.name,
+                        },
+                    };
+                    sendData(payload);
+                };
+                reader.onerror = (error) => {
+                    showStatus('Feil ved lesing av fil: ' + error, 'error');
+                    resetForm();
+                };
+            } else {
+                const payload = {
+                    tittel: form.tittel.value,
+                    kategori: form.kategori.value,
+                    innhold: form.innhold.value,
+                };
+                sendData(payload);
+            }
+        });
+
+        function sendData(payload) {
+            google.script.run
+                .withSuccessHandler(res => {
+                    if (res.ok) {
+                        showStatus('Henvendelsen er sendt og registrert som en sak hos styret.', 'success');
+                        form.reset();
+                        fileNameSpan.textContent = 'Ingen';
+                    } else {
+                        showStatus('Feil: ' + (res.error || 'Ukjent feil oppstod.'), 'error');
+                    }
+                    resetForm();
+                })
+                .withFailureHandler(err => {
+                    showStatus('En alvorlig feil oppstod: ' + err.message, 'error');
+                    resetForm();
+                })
+                .sendHenvendelse(payload);
+        }
+
+        function showStatus(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = type === 'success' ? 'status-success' : 'status-error';
+            statusMessage.style.display = 'block';
+        }
+
+        function resetForm() {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Send Henvendelse';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<? var FILE = '41_Settings.html'; var VERSION = '1.0.0'; var UPDATED = '2025-09-28'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportal — Innstillinger for Q&A Agent</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff}
+    .wrap{max-width:800px;margin:0 auto;padding:20px}
+    .head{margin-bottom:14px}
+    .title{font-size:22px;font-weight:700}
+    .muted{color:var(--muted);font-size:13px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px}
+    .form-group{margin-bottom:16px}
+    label{display:block;margin-bottom:6px;font-size:14px;color:var(--muted)}
+    input[type="text"],input[type="password"]{width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;font-size:15px}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
+    .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
+    .toast.ok{background:var(--success)}
+    .toast.err{background:var(--danger)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="title">Innstillinger for Q&A Agent</div>
+      <div class="muted">Angi API-nøkkel og mappe-ID for dokumentasjon.</div>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="geminiKey">Gemini API-nøkkel</label>
+        <input type="password" id="geminiKey" placeholder="Skriv inn din Gemini API-nøkkel">
+      </div>
+      <div class="form-group">
+        <label for="folderId">Google Drive Mappe-ID</label>
+        <input type="text" id="folderId" placeholder="Skriv inn ID-en til Google Drive-mappen">
+      </div>
+      <button class="btn primary" id="btnSave">Lagre Innstillinger</button>
+    </div>
+  </div>
+
+  <script>
+    const btnSave = document.getElementById('btnSave');
+    const keyEl = document.getElementById('geminiKey');
+    const folderEl = document.getElementById('folderId');
+
+    function toast(msg, kind){
+      const t=document.createElement('div'); t.className='toast ' + (kind||'');
+      t.textContent=String(msg||''); document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2800);
+    }
+
+    function setLoading(isLoading) {
+      btnSave.disabled = isLoading;
+      btnSave.textContent = isLoading ? 'Lagrer...' : 'Lagre Innstillinger';
+    }
+
+    // Load existing settings when the page opens
+    document.addEventListener('DOMContentLoaded', () => {
+      setLoading(true);
+      google.script.run
+        .withSuccessHandler(function(settings) {
+          setLoading(false);
+          if (settings) {
+            keyEl.value = settings.GEMINI_API_KEY || '';
+            folderEl.value = settings.DRIVE_FOLDER_ID || '';
+          }
+        })
+        .withFailureHandler(function(e) {
+          setLoading(false);
+          toast(e.message, 'err');
+        })
+        .getQnASettings();
+    });
+
+    btnSave.addEventListener('click', () => {
+      const settings = {
+        GEMINI_API_KEY: keyEl.value.trim(),
+        DRIVE_FOLDER_ID: folderEl.value.trim()
+      };
+
+      if (!settings.GEMINI_API_KEY || !settings.DRIVE_FOLDER_ID) {
+        toast('Begge feltene må fylles ut.', 'err');
+        return;
+      }
+
+      setLoading(true);
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          setLoading(false);
+          if (response.success) {
+            toast('Innstillinger lagret!', 'ok');
+          } else {
+            toast(response.error, 'err');
+          }
+        })
+        .withFailureHandler(function(e) {
+          setLoading(false);
+          toast(e.message, 'err');
+        })
+        .saveQnASettings(settings);
+    });
+  </script>
+</body>
+</html>

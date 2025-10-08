@@ -1,0 +1,25 @@
+<?!= include('partials/head', { pageTitle: 'Budsjett UI' }); ?>
+<body>
+  <?!= include('partials/nav'); ?>
+  <main>
+    <h1>Budsjett</h1>
+    <?!= include('partials/filter-panel', { defaultYear: new Date().getFullYear() }); ?>
+    <?!= include('partials/budget-table'); ?>
+  </main>
+  <?!= include('partials/footer'); ?>
+  <script>
+    function applyBudgetFilters() {
+      google.script.run
+        .withSuccessHandler(renderBudget)
+        .getBudget(document.getElementById('filter-year').value);
+    }
+    function renderBudget(rows) {
+      var tb = document.querySelector('#budget-table tbody'); tb.innerHTML='';
+      (rows||[]).forEach(function(r){
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>'+ (r.name||'') +'</td><td>'+ (r.amount||0) +'</td><td>'+ (r.category||'') +'</td>';
+        tb.appendChild(tr);
+      });
+    }
+  </script>
+</body>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+    <script>
+        const APP_URL = '<?= ScriptApp.getService().getUrl() ?>';
+    </script>
+    <style>
+      /* --- Eksempel-innhold fra Website.css --- */
+      body {
+        font-family: 'Roboto', sans-serif;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        background-color: #f4f4f9;
+        color: #333;
+      }
+      header {
+        background-color: #005f73;
+        color: white;
+        padding: 1rem;
+        text-align: center;
+      }
+      nav ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        gap: 1.5rem;
+      }
+      nav a {
+        color: white;
+        text-decoration: none;
+        font-weight: 700;
+      }
+      nav a:hover {
+        text-decoration: underline;
+      }
+      main {
+        flex-grow: 1;
+        padding: 2rem;
+        max-width: 900px;
+        margin: 0 auto;
+        width: 100%;
+      }
+      footer {
+        background-color: #333;
+        color: white;
+        text-align: center;
+        padding: 1rem;
+        margin-top: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Sameiets Hjemmeside</h1>
+      <nav>
+        <ul>
+          <li><a href="#" data-page="home">Hjem</a></li>
+          <li><a href="#" data-page="about">Om Oss</a></li>
+          <li><a href="#" data-page="rules">Husordensregler</a></li>
+          <li><a href="#" data-page="news">Nyheter</a></li>
+          <li><a href="#" data-page="docs">Dokumenter</a></li>
+          <li><a href="#" data-page="booking">Booking</a></li>
+          <li><a href="#" data-page="contact">Kontakt</a></li>
+          <li><a href="#" data-page="20_HMS">HMS</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="content">
+      <!-- Sideinnhold vil bli lastet her -->
+      <h2>Velkommen!</h2>
+      <p>Dette er den offentlige hjemmesiden for sameiet. Klikk på en av lenkene i menyen for å navigere.</p>
+    </main>
+
+    <footer>
+      <p>&copy; 2024 Sameiet Navn. Alle rettigheter forbeholdt.</p>
+      <div style="margin-top: 10px;">
+        <!-- Denne lenken tar deg nå til den interne portalen -->
+        <a href="<?= ScriptApp.getService().getUrl() ?>?view=portal" target="_blank" style="color: white;">Logg inn i portalen</a>
+      </div>
+    </footer>
+
+    <script>
+      // --- Eksempel-innhold fra Website.js ---
+      document.addEventListener('DOMContentLoaded', function() {
+        const contentArea = document.getElementById('content');
+        
+        // Funksjon for å laste sideinnhold
+        function loadPage(pageName) {
+          contentArea.innerHTML = `<p>Laster siden: ${pageName}...</p>`;
+          
+          // I en ekte applikasjon, ville vi kalt google.script.run her for å hente HTML
+          // For dette eksempelet, viser vi bare en enkel tekst.
+          google.script.run
+            .withSuccessHandler(html => {
+              contentArea.innerHTML = html;
+            })
+            .withFailureHandler(err => {
+              contentArea.innerHTML = `<p>Kunne ikke laste siden. Feil: ${err.message}</p>`;
+            })
+            .getPublicPageContent(pageName);
+        }
+
+        // Legg til klikk-hendelse på alle nav-lenker
+        document.querySelectorAll('nav a').forEach(link => {
+          link.addEventListener('click', function(e) {
+            e.preventDefault(); // Forhindrer at siden laster på nytt
+            const page = this.dataset.page;
+            if (page) {
+              loadPage(page);
+            }
+          });
+        });
+        
+        // Last inn startsiden
+        loadPage('home');
+      });
+
+
+      // --- Eksempel-innhold fra Booking.js ---
+      function initializeBookingSystem() {
+        console.log("Bookingsystem initialisert. Denne funksjonen ville inneholdt logikk for kalender, valg av tid, etc.");
+        // Her ville du lagt til logikk for å håndtere booking-kalenderen
+      }
+      
+    </script>
+  </body>
+</html>
+

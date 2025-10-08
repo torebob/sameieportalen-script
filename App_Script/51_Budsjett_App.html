@@ -1,0 +1,10 @@
+<?!= include('partials/head', { pageTitle: 'Budsjett App' }); ?>
+<body>
+  <?!= include('partials/nav'); ?>
+  <main>
+    <h1>Budsjett – App</h1>
+    <?!= include('partials/filter-panel', { defaultYear: new Date().getFullYear() }); ?>
+    <?!= include('partials/budget-table'); ?>
+  </main>
+  <?!= include('partials/footer'); ?>
+</body>

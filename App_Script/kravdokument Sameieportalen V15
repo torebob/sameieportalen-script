@@ -1,0 +1,828 @@
+---
+title: "Sameieportalen v15 - Kravdokument"
+subtitle: "Komplett kravspesifikasjon for digital sameieportal"
+author: "Produktteam Sameieportalen"
+date: "30. september 2025"
+version: "1.0"
+documentclass: report
+geometry: "margin=2.5cm"
+papersize: a4
+fontsize: 11pt
+toc: true
+toc-depth: 3
+numbersections: true
+lang: nb-NO
+---
+
+\newpage
+
+# Dokumentinformasjon
+
+**Dokumenttype:** Kravspesifikasjon (BRD/FRD/NFR)
+**Versjon:** 1.0 (endelig)
+**Dato:** 30. september 2025
+**Status:** Godkjent
+
+**Godkjent av:**
+- Produktleder
+- Teknisk leder
+- Styreleder-representant
+- Personvernombud
+
+**Distribusjonsansvar:** Produktleder
+**Konfidensialitet:** Intern
+
+\newpage
+
+# Sammendrag
+
+Sameieportalen v15 er en komplett digital løsning for eierseksjonssameier og borettslag i Norge. Systemet digitaliserer hele verdikjeden fra daglig kommunikasjon til strategisk styring av sameiet.
+
+## Nøkkelfunksjoner
+
+- Digital kommunikasjon mellom beboere og styre
+- Avvikshåndtering med SLA-styring
+- Booking av fellesressurser med betaling
+- Dokumentarkiv med elektronisk signering
+- Digitale årsmøter med vektet stemmegivning
+- Økonomioversikt og purrehåndtering
+- HMS og FDV-årshjul
+- Google Sheets-integrasjon for import
+
+## Målsetninger
+
+| Område | Mål | Måltall | Måleperiode |
+|--------|-----|---------|-------------|
+| Effektivitet | Redusere styrets tidsbruk | -30% | 6 måneder |
+| Tilfredshet | Øke beboer-NPS | +20 poeng | 12 måneder |
+| Digitalisering | Eliminere papir | 100% | 12 måneder |
+| Etterlevelse | GDPR + WCAG 2.2 AA | 100% | Kontinuerlig |
+
+## Teknisk plattform
+
+- **Web:** Progressive Web App (PWA)
+- **Mobil:** Native iOS og Android
+- **Database:** PostgreSQL med Redis cache
+- **Hosting:** Cloud (AWS/Azure/GCP)
+- **Sikkerhet:** OWASP ASVS Level 2
+
+\newpage
+
+# 1. Formål og mål
+
+## 1.1 Hva er Sameieportalen v15?
+
+Sameieportalen v15 er neste generasjon digital løsning for norske boligsameier. Systemet erstatter tradisjonelle papirbaserte prosesser med en integrert digital plattform som støtter alle aspekter av sameiestyring.
+
+### Hovedområder
+
+**Kommunikasjon:**
+- Toveis meldingssystem mellom beboere og styre
+- Målrettede kunngjøringer
+- Sakshåndtering med status
+
+**Forvaltning:**
+- Avviksmeldinger med prioritering
+- Oppgavetavle for vaktmester
+- KPI og rapportering
+
+**Økonomi:**
+- Visning av felleskostnader
+- Automatisk purring
+- Integrasjon med regnskapssystemer
+
+**Dokumenter:**
+- Rollebasert tilgang
+- Versjonskontroll
+- Elektronisk signering med BankID
+
+**Årsmøter:**
+- Digital saksliste
+- Vektet stemmegivning
+- Hybrid møter (fysisk + digitalt)
+
+**Fellesressurser:**
+- Booking av rom, parkering, ladere
+- Depositum-håndtering
+- Betaling med Vipps
+
+## 1.2 Forretningsmål
+
+### Effektivitet
+**Mål:** Redusere styrets tidsbruk på administrative oppgaver med 30%
+
+**Tiltak:**
+- Automatisere purrerutiner
+- Selvbetjening for beboere
+- Digital godkjenningsflyt
+
+**Måling:**
+- Tidsregistrering før/etter
+- Antall henvendelser til styre
+- Gjennomsnittstid per sak
+
+### Tilfredshet
+**Mål:** Øke beboertilfredshet (NPS) med 20 poeng
+
+**Tiltak:**
+- Raskere respons på avvik
+- Transparent kommunikasjon
+- Enkel booking av ressurser
+
+**Måling:**
+- Kvartalsvis NPS-måling
+- Tilbakemeldinger etter avvik
+- App-vurderinger
+
+### Digitalisering
+**Mål:** 100% digitale prosesser innen 12 måneder
+
+**Tiltak:**
+- Elektronisk signering
+- Digital årsmøte-gjennomføring
+- Paperless dokumentarkiv
+
+**Måling:**
+- Andel digitale signaturer
+- Antall papirdokumenter
+- Digital deltakelse årsmøter
+
+### Etterlevelse
+**Mål:** Full GDPR-compliance og WCAG 2.2 AA
+
+**Tiltak:**
+- Privacy by design
+- Regelmessige audits
+- Tilgjengelighetstesting
+
+**Måling:**
+- Audit-resultater
+- WCAG-samsvar
+- Behandlingsprotokoll (ROPA)
+
+## 1.3 Suksesskriterier
+
+### Brukeradopsjon
+- 80% av beboere registrert innen 3 måneder
+- 60% aktive brukere (månedlig pålogging) innen 6 måneder
+- 90% av styreoppgaver digitale innen 6 måneder
+
+### Teknisk ytelse
+- 99.9% oppetid målt over 30 dager
+- P95 responstid < 1.5 sekunder
+- 0 kritiske sikkerhetshendelser
+
+### Forretningsmessig
+- Reduksjon i administrative kostnader: 25% innen 24 måneder
+- ROI: Positiv innen 18 måneder
+- Kundetilfredshet: NPS > 50 innen 12 måneder
+
+## 1.4 Avgrensning
+
+### Inkludert i v15
+
+- Nettløsning (PWA) for desktop og nettbrett
+- Native mobilapper for iOS og Android
+- BankID-autentisering
+- Vipps, eFaktura og AvtaleGiro-betaling
+- Integrasjoner: Tripletex, Visma, Uni Micro, OBOS
+- Google Sheets-import
+- Digital signering
+- Årsmøtemodul med stemmegivning
+- Webhooks for eksterne systemer
+
+### Ikke inkludert (utenfor v15)
+
+- Fullstendig regnskapsføring (dekkes av tredjepart)
+- Offentlig innsynsportal
+- E-postinnlogging uten 2FA (utfases)
+- Direkte bankintegrasjoner
+- Automatisk budsjettering
+- SMS-innlogging
+- Sosiale funksjoner (forum, chat mellom beboere)
+
+### Fremtidige versjoner
+
+- AI-basert avvikskategorisering (v16)
+- Prediktiv vedlikehold (v16)
+- Integrasjon med smarthus-systemer (v17)
+- Mobile nøkler og adgangskontroll (v17)
+
+\newpage
+
+# 2. Roller og interessenter
+
+## 2.1 Brukerroller
+
+### Beboer
+**Antall:** 10-500 per sameie
+**Primæroppgaver:**
+- Melde avvik
+- Booke fellesressurser
+- Delta i årsmøter
+- Betale felleskostnader
+- Lese dokumenter
+
+**Tilgangsnivå:** Begrenset til egne data og fellesinformasjon
+
+### Styreleder
+**Antall:** 1 per sameie
+**Primæroppgaver:**
+- Overordnet ansvar for sameiet
+- Signere protokoller og kontrakter
+- Godkjenne større beslutninger
+- Representere sameiet utad
+- Konfigurere systemet
+
+**Tilgangsnivå:** Full tilgang til alle funksjoner
+
+### Styremedlem
+**Antall:** 3-7 per sameie
+**Primæroppgaver:**
+- Håndtere henvendelser fra beboere
+- Behandle avvik
+- Delta i styremøter
+- Godkjenne bookinger (hvis påkrevd)
+
+**Tilgangsnivå:** Utvidet tilgang, men ikke full admin
+
+### Vaktmester
+**Antall:** 0-2 per sameie
+**Primæroppgaver:**
+- Utføre vedlikehold
+- Lukke avvik
+- Oppdatere status på oppgaver
+- Utføre HMS-kontroller
+
+**Tilgangsnivå:** Begrenset til avvik, oppgaver og teknisk dokumentasjon
+
+### Forvalter
+**Antall:** 1 per sameie (hvis eksternt forvaltet)
+**Primæroppgaver:**
+- Økonomistyring
+- Kontraktshåndtering
+- Rapportering til styre
+- Koordinere leverandører
+
+**Tilgangsnivå:** Utvidet tilgang til økonomi og dokumenter
+
+### Revisor
+**Antall:** 1 per sameie
+**Primæroppgaver:**
+- Gjennomføre revisjon
+- Kontrollere økonomi
+- Signere revisjonsberetning
+
+**Tilgangsnivå:** Tidsavgrenset lesetilgang til økonomi og dokumenter
+
+### Gjest
+**Antall:** Variabel
+**Primæroppgaver:**
+- Midlertidig tilgang til spesifikke ressurser
+- F.eks. leverandør med tilgang til teknisk dokumentasjon
+
+**Tilgangsnivå:** Minimal, avgrenset tilgang
+
+## 2.2 Interessenter
+
+### Interne interessenter
+
+**Produktleder**
+- Ansvar: Prioritering, veikart, leveranse
+- Innflytelse: Høy
+- Involvering: Kontinuerlig
+
+**Teknisk leder**
+- Ansvar: Arkitektur, tekniske valg
+- Innflytelse: Høy
+- Involvering: Kontinuerlig
+
+**Personvernombud (DPO)**
+- Ansvar: GDPR-compliance
+- Innflytelse: Middels
+- Involvering: Ved endringer i databehandling
+
+**UX-designer**
+- Ansvar: Brukeropplevelse, design
+- Innflytelse: Middels
+- Involvering: Kontinuerlig
+
+**Utviklingsteam**
+- Ansvar: Implementering, testing
+- Innflytelse: Lav-Middels
+- Involvering: Kontinuerlig
+
+### Eksterne interessenter
+
+**Sameieeiere (økonomiske)**
+- Ansvar: Finansiering, godkjenning
+- Innflytelse: Høy
+- Involvering: Ved milepæler
+
+**Beboere (sluttbrukere)**
+- Ansvar: Bruk av systemet
+- Innflytelse: Lav
+- Involvering: Testing, tilbakemeldinger
+
+**Leverandører**
+- BankID AS: Autentisering
+- Vipps MobilePay: Betalinger
+- Regnskapssystemleverandører: Integrasjoner
+- Innflytelse: Middels
+- Involvering: Ved integrasjon og support
+
+**Datatilsynet**
+- Ansvar: Personvernkontroll
+- Innflytelse: Høy (regulatorisk)
+- Involvering: Ved forespørsel
+
+**Bransjeorganisasjoner**
+- NBBL (Norske Boligbyggelags Landsforbund)
+- Huseierne
+- Innflytelse: Lav
+- Involvering: Veiledning om standarder
+
+## 2.3 Interessentmatrise
+
+| Interessent | Innflytelse | Interesse | Strategi |
+|-------------|-------------|-----------|----------|
+| Sameieeiere | Høy | Høy | Involver aktivt |
+| Beboere | Lav | Høy | Informer og lytt |
+| Styret | Høy | Høy | Tett samarbeid |
+| Forvalter | Middels | Høy | Regelmessig dialog |
+| Leverandører | Middels | Middels | Følg opp integrasjoner |
+| Datatilsynet | Høy | Lav | Sørg for compliance |
+| Produktteam | Høy | Høy | Kontinuerlig involvering |
+
+\newpage
+
+# 3. Forutsetninger og avhengigheter
+
+## 3.1 Autentisering
+
+### BankID
+**Type:** Primær autentiseringsmetode
+**Protokoll:** OpenID Connect (OIDC)
+**Sikkerhetsnivå:** Nivå 4 (høyeste)
+
+**Konfigurasjon:**
+```
+Provider: BankID OIDC
+Issuer: https://oidc.bankid.no
+Authorization endpoint: /auth
+Token endpoint: /token
+Scopes: openid, profile, ssn
+Response type: code (authorization code flow)
+```
+
+**Miljøer:**
+- **Produksjon:** oidc.bankid.no
+- **Test:** oidc-ver2.bankid.no
+
+**Kostnader:**
+- Oppsettskostnad: ~50 000 NOK
+- Per autentisering: ~3 NOK
+
+### TOTP (Tofaktorautentisering)
+**Type:** Sekundær autentiseringsmetode
+**Algoritme:** HMAC-SHA1
+**Konfigurasjon:**
+- Sifferlengde: 6
+- Periode: 30 sekunder
+- Nøkkellengde: 160 bits
+
+**Støttede apper:**
+- Google Authenticator
+- Microsoft Authenticator
+- Authy
+- 1Password
+
+### SMS-autentisering
+**Type:** Sekundær autentiseringsmetode (backup)
+**Provider:** Twilio eller Link Mobility
+**Format:**
+- Lengde: 6 siffer
+- Gyldighet: 5 minutter
+- Maks forsøk: 3 per 15 minutter
+
+## 3.2 Kommunikasjon
+
+### E-post
+**Provider:** SendGrid (anbefalt) eller Amazon SES
+
+**Kapasitet:**
+- Volum: Opp til 100 000 e-poster/måned
+- Hastighet: Opp til 1000 e-poster/sekund
+
+**Funksjoner:**
+- HTML og ren tekst
+- Sporingspiksel for åpninger
+- Klikk-tracking
+- Bounce- og spam-håndtering
+
+**Sikkerhet:**
+- DKIM, SPF, DMARC konfigurert
+- Dedikert IP-adresse anbefales
+
+**Kostnader:**
+- SendGrid: $19.95/måned for 50k e-poster
+- AWS SES: $0.10 per 1000 e-poster
+
+### SMS
+**Provider:** Twilio (anbefalt) eller Link Mobility
+
+**Kapasitet:**
+- Globalt nettverk
+- 99.95% leveringsgrad
+- Leverings-callback
+
+**Kostnader:**
+- Norge: ~0.70 NOK per SMS
+- Månedlig fast: 0 NOK (pay-as-you-go)
+
+**Begrensninger:**
+- Maksimal lengde: 160 tegn (1 SMS)
+- Lange meldinger: 153 tegn per del
+- Rate limit: 1 SMS per sekund per nummer
+
+### Push-varsler
+**iOS:** Apple Push Notification Service (APNs)
+- Gratis
+- Krever Apple Developer-konto ($99/år)
+- HTTP/2-basert
+
+**Android:** Firebase Cloud Messaging (FCM)
+- Gratis
+- Google-konto påkrevd
+- HTTP-basert
+
+**Funksjoner:**
+- Rik innhold (bilder, knapper)
+- Gruppert varsling
+- Prioritering (normal/høy)
+- Time-to-live (TTL)
+
+## 3.3 Betalingsløsninger
+
+### Vipps
+**Type:** Mobilbetaling
+**API-versjon:** Ecommerce v2
+**Bruksområde:** Booking, depositum
+
+**Transaksjonsgebyr:**
+- Per transaksjon: 2 NOK + 2.5%
+- Minstegrense: 2 NOK
+
+**Integrasjon:**
+```
+Base URL: https://api.vipps.no
+Authentication: Bearer token
+Endpoints:
+  - POST /ecomm/v2/payments (initier betaling)
+  - GET /ecomm/v2/payments/{orderId} (status)
+  - POST /ecomm/v2/payments/{orderId}/capture (hent penger)
+  - POST /ecomm/v2/payments/{orderId}/refund (refunder)
+```
+
+### eFaktura
+**Type:** Elektronisk faktura via nettbank
+**Standard:** KID (Kunde-IDentifikasjon)
+
+**Krav:**
+- Bankavtale (alle norske banker støtter)
+- KID-generator (implementeres i løsningen)
+- OCR-linje for papirfaktura
+
+**Kostnader:**
+- Varierer per bank
+- Typisk: 1-5 NOK per faktura
+
+### AvtaleGiro
+**Type:** Automatisk trekk
+**Standard:** OCR-fil til bank
+
+**Prosess:**
+1. Beboer oppretter avtale i nettbank
+2. System sender OCR-fil til bank 5 dager før forfall
+3. Bank trekker beløp automatisk på forfallsdato
+
+**Kostnader:**
+- Per transaksjon: 1-3 NOK
+
+## 3.4 Regnskapssystemer
+
+### Tripletex
+**API:** REST
+**Dokumentasjon:** api.tripletex.io
+**Autentisering:** OAuth 2.0 eller API-token
+
+**Støttede operasjoner:**
+- Hente kunder
+- Opprette fakturaer
+- Hente betalinger
+- Eksportere bilag
+
+**Rate limits:**
+- 200 requests per minutt
+
+### Visma eAccounting
+**API:** REST
+**Dokumentasjon:** developer.visma.com
+**Autentisering:** OAuth 2.0
+
+**Støttede operasjoner:**
+- Regnskapsdata
+- Fakturaer
+- Rapporter
+
+### Uni Micro
+**API:** SOAP/REST (begrens et)
+**Autentisering:** API-nøkkel
+**Merknad:** Begrenset API, manual eksport kan være nødvendig
+
+### OBOS
+**API:** Proprietær
+**Tilgang:** Kun for OBOS-sameier
+**Kontakt:** OBOS Eiendomsforvaltning
+
+**Støttede operasjoner:**
+- Beboerregister
+- Økonomidata
+- Fakturagrunnlag
+
+## 3.5 Teknisk infrastruktur
+
+### Hosting
+**Provider:** AWS (anbefalt), Azure eller Google Cloud
+
+**Krav:**
+- Region: Nord-Europa (Ireland eller Stockholm)
+- Multi-AZ deployment
+- Auto-scaling
+- Load balancing
+
+**Estimert kostnad:**
+- Produksjon: ~15 000 NOK/måned
+- Staging: ~3 000 NOK/måned
+- Development: ~1 500 NOK/måned
+
+### Database
+**Primær:** PostgreSQL 14+
+- Managed service (RDS, Cloud SQL)
+- Multi-AZ for høy tilgjengelighet
+- Automatisk backup
+
+**Cache:** Redis 7+
+- For sesjoner og mellomlagring
+- Managed service (ElastiCache, Memorystore)
+
+**Objektlagring:** S3-kompatibel
+- For dokumenter og bilder
+- CDN foran (CloudFront, Cloudflare)
+
+### CI/CD
+**Version control:** Git (GitHub eller GitLab)
+- Branch protection
+- Required reviews
+- Automated tests
+
+**Pipeline:** GitHub Actions eller GitLab CI
+- Automatisk testing
+- Security scanning
+- Deployment til staging og prod
+
+**Deployment:** Kubernetes eller Serverless
+- Blue/green deployment
+- Canary releases
+- Rollback-mulighet
+
+\newpage
+
+# 4. Funksjonelle krav
+
+Dette kapittelet beskriver alle funksjonelle krav for Sameieportalen v15. Hvert krav er prioritert med MoSCoW-metoden:
+
+- **M** (Must have): Kritisk for v15-lansering
+- **S** (Should have): Viktig, men kan utsettes
+- **C** (Could have): Ønskelig hvis tid
+- **W** (Won't have): Ikke i v15
+
+## 4.1 Autentisering og tilgang (FR-010)
+
+**Prioritet:** M (Must have)
+**Kompleksitet:** Middels
+**Estimat:** 3 uker
+
+### Krav
+
+| ID | Beskrivelse | Prioritet | Akseptansekriterie |
+|----|-------------|-----------|-------------------|
+| FR-010.1 | BankID-pålogging privatperson | M | Vellykket innlogging < 3 sek |
+| FR-010.2 | BankID-pålogging representant | M | Organisasjon verifiseres |
+| FR-010.3 | TOTP tofaktor | M | QR-kode og backupkoder |
+| FR-010.4 | SMS tofaktor | M | 6-sifret kode, 5 min gyldighet |
+| FR-010.5 | Automatisk rolletildeling | M | Basert på enhetsregister |
+| FR-010.6 | Brute-force beskyttelse | M | 5 forsøk, 15 min låsing |
+| FR-010.7 | Ny enhet-varsling | S | E-post ved ukjent enhet |
+| FR-010.8 | Samtidige sesjoner | S | Maks 3 aktive sesjoner |
+| FR-010.9 | Sesjonsadministrasjon | C | Se og avslutte sesjoner |
+
+### Detaljert beskrivelse
+
+**BankID-integrasjon:**
+Systemet skal bruke BankID OIDC-protokollen for sikker autentisering. Ved vellykket pålogging mottar systemet brukerens fødselsnummer, som brukes til å slå opp i enhetsregisteret for automatisk rolletildeling.
+
+**Sikkerhetskrav:**
+- All kommunikasjon over TLS 1.3
+- Sesjonstokens: JWT med 30 min utløp
+- Refresh tokens: 7 dager gyldighet
+- Tokens lagres kryptert i HttpOnly cookies
+
+**Feilhåndtering:**
+Ved mislykket innlogging skal bruker få klar tilbakemelding uten å avsløre om brukernavn eller passord er feil ("Ugyldig brukernavn eller passord").
+
+### Brukerflyt
+
+```
+1. Bruker klikker "Logg inn"
+2. Velger "Logg inn med BankID"
+3. Redirectes til BankID
+4. Fullfører BankID-autentisering
+5. Redirectes tilbake til portal
+6. System validerer tokens
+7. Slår opp rolle i enhetsregister
+8. Oppretter sesjon
+9. Logger hendelse
+10. Viser dashboard
+```
+
+\newpage
+
+## 4.2 Bruker- og enhetshåndtering (FR-020)
+
+**Prioritet:** M (Must have)
+**Kompleksitet:** Høy
+**Estimat:** 4 uker
+
+### Krav
+
+| ID | Beskrivelse | Prioritet |
+|----|-------------|-----------|
+| FR-020.1 | Person-seksjon-kobling (mange-til-mange) | M |
+| FR-020.2 | Støtte for medeiere | M |
+| FR-020.3 | Støtte for leietakere | M |
+| FR-020.4 | Selvbetjent profiloppdatering | M |
+| FR-020.5 | Styret kan overstyre kontaktinfo | M |
+| FR-020.6 | Innflyttingsflyt med sjekklister | M |
+| FR-020.7 | Utflyttingsflyt med sjekklister | M |
+| FR-020.8 | Nøkkeloverlevering-logging | S |
+| FR-020.9 | Historikk over tidligere beboere | S |
+| FR-020.10 | CSV-import av beboerregister | M |
+
+### Datamodell
+
+**Person:**
+```yaml
+personId: UUID (PK)
+navn: string(200)
+epost: email (unique)
+telefon: string(12)
+fødselsnummer: string(11) (encrypted, nullable)
+språk: enum [nb_NO, en_US]
+varslingPush: boolean
+varslingEpost: boolean
+varslingSMS: boolean
+opprettet: datetime
+sistInnlogget: datetime
+```
+
+**Seksjon:**
+```yaml
+seksjonId: string(20) (PK)
+sameieId: UUID (FK)
+byggId: string(10)
+oppgang: string(10)
+etasje: integer
+arealM2: decimal(10,2)
+brøkTeller: integer
+brøkNevner: integer
+aktiv: boolean
+```
+
+**PersonSeksjonRelasjon:**
+```yaml
+personId: UUID (FK)
+seksjonId: string(20) (FK)
+rolle: enum [Eier, Medeier, Leietaker, Beboer]
+hovedkontakt: boolean
+fraDato: date
+tilDato: date (nullable)
+```
+
+### Innflyttingsprosess
+
+**Sjekkliste:**
+1. ☐ Opprett bruker (BankID eller manuelt)
+2. ☐ Knytt til seksjon med rolle
+3. ☐ Bekreft kontaktinformasjon
+4. ☐ Godta husordensregler
+5. ☐ Registrer varslingskanaler
+6. ☐ Lever nøkler og adgangskort
+7. ☐ Registrer parkeringsplasser
+8. ☐ Registrer ladepunkt
+9. ☐ Vis guidet tur
+10. ☐ Aktiver full tilgang
+
+**Automatisering:**
+- E-post med velkommen sendes automatisk
+- Onboarding-tur vises ved første innlogging
+- Styret varsles om ny beboer
+
+\newpage
+
+## 4.3 Meldinger og kunngjøringer (FR-030)
+
+**Prioritet:** M (Must have)
+**Kompleksitet:** Middels
+**Estimat:** 3 uker
+
+### Krav
+
+| ID | Beskrivelse | Prioritet |
+|----|-------------|-----------|
+| FR-030.1 | Toveis meldingssystem | M |
+| FR-030.2 | Sakshåndtering med status | M |
+| FR-030.3 | Målrettede kunngjøringer | M |
+| FR-030.4 | Planlagte utsendelser | M |
+| FR-030.5 | Meldingsmaler | S |
+| FR-030.6 | Vedlegg (bilder, PDF) | S |
+| FR-030.7 | Søkbar meldingshistorikk | M |
+| FR-030.8 | Varsling på foretrukket kanal | M |
+| FR-030.9 | Rate limiting (maks 5 push/dag) | M |
+| FR-030.10 | Lesebekreftelser | S |
+
+### Meldingstyper
+
+**1. Person-til-person:**
+- Direkte mellom to brukere
+- Umiddelbar notifikasjon
+- Lagres i begge parters innboks
+
+**2. Saksmelding:**
+- Knyttet til avvik eller oppgave
+- Alle involverte får varsler
+- Trådet historikk
+
+**3. Kunngjøring:**
+- Broadcast til målgruppe
+- Kan planlegges
+- Prioritet: Normal/Viktig/Kritisk
+
+**4. Systemmelding:**
+- Automatisk generert
+- Påminnelser, frister, etc.
+- Kan ikke besvares
+
+### Målretting
+
+**Målgrupper:**
+- Alle beboere
+- Spesifikt bygg
+- Spesifikk oppgang
+- Spesifikk etasje
+- Tilpasset gruppe
+- Kun styret
+- Kun vaktmester
+
+**Eksempel:**
+```yaml
+tittel: "Heisservice i Bygg A"
+melding: "Heisen vil være ute av drift 15-17 april"
+målgruppe: "Bygg A"
+prioritet: "Viktig"
+sendetidspunkt: "2025-04-12T08:00:00Z"
+kanaler: [Push, Epost]
+```
+
+\newpage
+
+## 4.4 Avviksmelding og service (FR-040)
+
+**Prioritet:** M (Must have)
+**Kompleksitet:** Høy
+**Estimat:** 5 uker
+
+### Krav
+
+| ID | Beskrivelse | Prioritet |
+|----|-------------|-----------|
+| FR-040.1 | Avviksmelding med kategori | M |
+| FR-040.2 | Vedlegg av bilder (maks 10×10MB) | M |
+| FR-040.3 | Geotagging | S |
+| FR-040.4 | Automatisk SLA fra kategori | M |
+| FR-040.5 | Status: Ny, Pågår, Venter, Løst, Avvist | M |
+| FR-040.6 | Prioritet: Lav, Middels, Høy, Kritisk | M |
+| FR-040.7 | Tildeling til vaktmester/leverandør | M |
+| FR-040.8 | Intern chat per avvik | S |
+| FR-040.9 | Varsling ved statusendring | M |
+| FR-040.10 | KPI-dashboar

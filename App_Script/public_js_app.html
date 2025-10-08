@@ -1,0 +1,147 @@
+<script>
+// ---------- DOM ----------
+const contentArea = document.getElementById('content-area');
+const mainMenuUl  = document.querySelector('#main-menu ul');
+const userInfoDiv = document.getElementById('user-info');
+
+// ---------- Global app-state ----------
+const appState = { user:null, menu:[] };
+
+// ---------- Spinner ----------
+function showSpinner(){ document.getElementById('app-spinner')?.classList.add('show'); }
+function hideSpinner(){ document.getElementById('app-spinner')?.classList.remove('show'); }
+
+// ---------- Views (innhold som rendres i høyre-panelet) ----------
+function setLoadingState(m){ contentArea.innerHTML = `<h2>${m}</h2>`; }
+function setErrorState(m){ contentArea.innerHTML = `<h2 style="color:#b91c1c">${m}</h2>`; }
+
+function loadDashboard(){
+  contentArea.innerHTML = `
+    <h2>Dashboard</h2>
+    <p>Velkommen til Sameieportalen!</p>
+  `;
+}
+function loadAnnouncements(){
+  contentArea.innerHTML = `<h2>Oppslag</h2><p>Listen over kunngjøringer vises her.</p>`;
+}
+function loadMeetings(){
+  setLoadingState('Laster møteoversikt…');
+  showSpinner();
+  google.script.run
+    .withSuccessHandler(meetings => {
+      let html = '<h2>Møter & Protokoller</h2>';
+      if (!meetings || !meetings.length) html += '<p>Ingen kommende møter funnet.</p>';
+      else {
+        html += '<ul>' + meetings.map(m => {
+          const d = new Date(m.dato).toLocaleDateString('no-NO');
+          return `<li><strong>${m.tittel}</strong> – ${d}</li>`;
+        }).join('') + '</ul>';
+      }
+      contentArea.innerHTML = html;
+    })
+    .withFailureHandler(err => setErrorState('Kunne ikke laste møter: ' + err.message))
+    .withSuccessHandler(() => hideSpinner())
+    .listMeetings_({ scope:'planned' });
+}
+function openNewAnnouncementUI(){
+  showSpinner();
+  google.script.run
+    .withSuccessHandler(() => { hideSpinner(); /* modal åpnes server-side */ })
+    .withFailureHandler(err => { hideSpinner(); setErrorState('Kunne ikke åpne dialogen: ' + err.message); })
+    .openNyttOppslagUI();
+}
+function loadUserAdmin(){ contentArea.innerHTML = '<h2>Brukeradministrasjon</h2>'; }
+function loadJanitorTasks(){ contentArea.innerHTML = '<h2>Mine Oppgaver</h2>'; }
+
+// ---------- Routing (SPA via hash) ----------
+const ROUTES = {
+  '/dashboard': loadDashboard,
+  '/oppslag':   loadAnnouncements,
+  '/moter':     loadMeetings,
+  '/send':      openNewAnnouncementUI,
+  '/brukeradmin': loadUserAdmin,
+  '/oppgaver':  loadJanitorTasks,
+};
+function routeTitle(path){
+  const map = {'/dashboard':'Dashboard','/oppslag':'Oppslag','/moter':'Møter & Protokoller','/send':'Send Oppslag','/brukeradmin':'Brukeradmin','/oppgaver':'Mine Oppgaver'};
+  return map[path] || 'Sameieportalen';
+}
+function router(){
+  const hash = location.hash.replace(/^#/,'') || '/dashboard';
+  const path = hash.startsWith('/') ? hash : `/${hash}`;
+  document.querySelectorAll('#main-menu a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === `#${path}`));
+  document.title = `Sameieportalen – ${routeTitle(path)}`;
+  (ROUTES[path] || loadDashboard)();
+}
+
+// ---------- Menybygging ----------
+/**
+ * Vi forventer at backend (uiBootstrap) returnerer menu = [{name, action}]
+ * Hvor action er ett av:
+ *  - "loadDashboard", "loadAnnouncements", "loadMeetings", "openNyttOppslagUI",
+ *    "loadUserAdmin", "loadJanitorTasks", eller en server-funksjon som åpner UI (f.eks. openMeetingsUI).
+ */
+const ACTION_TO_ROUTE = {
+  loadDashboard:'/dashboard',
+  loadAnnouncements:'/oppslag',
+  loadMeetings:'/moter',
+  openNyttOppslagUI:'/send',
+  loadUserAdmin:'/brukeradmin',
+  loadJanitorTasks:'/oppgaver',
+};
+function buildMenu(userRoles, dynamicMenu){
+  // hvis backend-meny finnes, bruk den; ellers fallback
+  const items = (dynamicMenu && dynamicMenu.length)
+    ? dynamicMenu.map(it => ({ name: it.name, path: ACTION_TO_ROUTE[it.action] || '/dashboard', rawAction: it.action }))
+    : [
+        { name:'Dashboard', path:'/dashboard' },
+        { name:'Oppslag', path:'/oppslag' },
+        { name:'Møter & Protokoller', path:'/moter' },
+        { name:'Send Oppslag', path:'/send' },
+        { name:'Brukeradmin', path:'/brukeradmin' },
+        { name:'Mine Oppgaver', path:'/oppgaver' },
+      ];
+
+  mainMenuUl.innerHTML = '';
+  for (const it of items) {
+    const li = document.createElement('li');
+    const a  = document.createElement('a');
+    a.href   = `#${it.path}`;
+    a.textContent = it.name;
+    li.appendChild(a);
+    mainMenuUl.appendChild(li);
+  }
+}
+
+// ---------- UI helpers ----------
+function renderUserInfo(user){
+  const name = user?.name || user?.email || 'Ukjent';
+  userInfoDiv.textContent = name;
+}
+
+// ---------- Init ----------
+function init(){
+  showSpinner();
+  setLoadingState('Laster brukerinformasjon…');
+
+  google.script.run
+    .withSuccessHandler(data => {
+      appState.user = data.user;
+      appState.menu = data.menu || [];
+      renderUserInfo(appState.user);
+      buildMenu(appState.user.roles || ['Gjest'], appState.menu);
+
+      // start router
+      window.addEventListener('hashchange', router);
+      if (!location.hash) location.hash = '#/dashboard';
+      router();
+    })
+    .withFailureHandler(err => setErrorState('Klarte ikke å laste brukerdata: ' + err.message))
+    .withSuccessHandler(() => hideSpinner())
+    .uiBootstrap();
+}
+function loadMineSaker(){ contentArea.innerHTML = '<h2>Mine Saker</h2><p>Kommer…</p>'; }
+function loadBooking(){ contentArea.innerHTML = '<h2>Booking</h2><p>Kommer…</p>'; }
+
+document.addEventListener('DOMContentLoaded', init);
+</script>

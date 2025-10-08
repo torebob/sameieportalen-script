@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportalen</title>
+  <?!= include('public_css_app'); ?>
+</head>
+<body>
+  <!-- Spinner overlay -->
+  <div id="app-spinner"><div class="ring"></div></div>
+
+  <!-- Topplinje -->
+  <header id="top-bar">
+    <div class="brand">Sameieportalen</div>
+    <div class="user">
+      <span id="user-info">Laster…</span>
+      <a id="logout-btn" href="#" class="logout">Logg ut</a>
+    </div>
+  </header>
+
+  <!-- Layout: venstre sidebar + innhold -->
+  <div id="app-shell">
+    <aside id="sidebar">
+      <nav id="main-menu"><ul></ul></nav>
+    </aside>
+    <main id="content-area" role="main" tabindex="-1">
+      <h2>Laster…</h2>
+    </main>
+  </div>
+
+  <?!= include('public_js_app'); ?>
+</body>
+</html>

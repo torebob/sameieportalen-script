@@ -1,169 +1,241 @@
+<!-- public/js/app.html -->
 <script>
-// =================================================================
-// Sameieportalen Frontend - Hovedapplikasjon (Hjernen)
-// FILE: public/js/app.js (limt inn i public_js_app.html)
-// =================================================================
+// Globalt objekt for frontend-tilstand
+const AppState = {
+    user: { roles: ['Gjest'], name: 'Laster...' },
+    menu: [],
+    currentPage: null,
+    // Registrerte sider (action-navn: filnavn i public/js/ui/mappen)
+    // OBS: Disse navnene må matche HTML-filene (f.eks. 'styret' matcher public/js/ui/styret-page.html)
+    pages: {
+        'dashboard': 'public/js/ui/dashboard-page',
+        'styret': 'public/js/ui/styret-page',
+        'booking': 'public/js/ui/booking-page',
+        'dokumenter': 'public/js/ui/dokumenter-page',
+        'avvik-new': 'public/js/ui/avvik-new-page',
+        // Legg til flere sider her etter hvert
+    },
+    pageContent: {} // Cache for innhold som lastes asynkront
+};
 
-// ---------- DOM-elementer ----------
-const contentArea = document.getElementById('content-area');
-const mainMenuUl  = document.querySelector('#main-menu ul');
-const userInfoDiv = document.getElementById('user-info');
+/**
+ * Hjelpefunksjon for å kalle Apps Script backend asynkront.
+ * Dette er kritisk for all kommunikasjon med Sheets/Google Services.
+ * @param {string} functionName Navnet på Apps Script-funksjonen (i .gs-filen)
+ * @param {object} args Eventuelle argumenter til funksjonen
+ * @returns {Promise<any>}
+ */
+function callServer(functionName, args = {}) {
+    const spinner = document.getElementById('app-spinner');
+    spinner.style.display = 'flex';
 
-// ---------- Meny-konfig (fallback basert på ROLLER) ----------
-// Brukes KUN hvis backend (uiBootstrap) ikke sender en ferdig meny.
-// action peker på *funksjonsnavn* vi har i window (se lenger ned).
-const MENU_CONFIG = [
-    { name: 'Dashboard',           roles: ['Gjest','Beboer','Seksjonseier','Leietaker','Styremedlem','Admin','Vaktmester'], action: 'loadDashboard' },
-{ name: 'Oppslag',             roles: ['Gjest','Beboer','Seksjonseier','Leietaker','Styremedlem','Admin','Vaktmester'], action: 'loadAnnouncements' },
-// ------------------ STYRET ------------------
-{ name: 'Møter & Protokoller', roles: ['Styremedlem','Admin'], action: 'loadMeetings' },
-{ name: 'Send Oppslag',        roles: ['Styremedlem','Admin'], action: 'openNewAnnouncementUI' },
-{ name: 'Brukeradmin',         roles: ['Admin'],               action: 'loadUserAdmin' },
-// ------------------ VAKTMESTER ------------------
-{ name: 'Mine Oppgaver',       roles: ['Vaktmester'],          action: 'loadJanitorTasks' },
-];
+    // Returner en promise for å håndtere asynkrone kall
+    return new Promise(function(resolve, reject) { // Bruker standard function her
 
-// ---------- App-Initialisering ----------
-function init() {
-    setLoadingState('Laster brukerinformasjon…');
+        // Definer suksess-handler
+        const successHandler = function(response) {
+            spinner.style.display = 'none';
 
-    google.script.run
-    .withSuccessHandler(userData => {
-        // Forventet format: { user: {name,email,roles:[]}, menu?: [{name,action}] }
-        const user = userData && userData.user ? userData.user : { name:'Gjest', email:'', roles:['Gjest'] };
-        renderUserInfo(user);
+            if (response && response.success === true) {
+                return resolve(response.result);
+            } else if (response && response.error) {
+                console.error('Backend Error:', response.error);
+                // Bruk en custom modal/toast i prod.
+                // alert('Feil fra server: ' + response.error);
+                return reject(new Error(response.error));
+            }
+            return reject(new Error('Ukjent feil ved serverkall.'));
+        }
 
-        // Dynamisk meny: bruk server-meny hvis den finnes, ellers bygg fra roller
-        const serverMenu = Array.isArray(userData && userData.menu) ? userData.menu : null;
-        const menuItems  = (serverMenu && serverMenu.length) ? serverMenu : deriveMenuFromRoles(user.roles || ['Gjest']);
-        buildMenu(menuItems);
+        // Definer feil-handler
+        const failureHandler = function(error) {
+            spinner.style.display = 'none';
+            console.error('Server call failed:', error);
+            // Bruk en custom modal/toast i prod.
+            // alert('En uventet feil oppstod: ' + error);
+            reject(error);
+        };
 
-        // Standard-side
-        const firstAction = (menuItems[0] && menuItems[0].action) || 'loadDashboard';
-        runMenuAction(firstAction);
-    })
-    .withFailureHandler(error => {
-        setErrorState('Klarte ikke å laste brukerdata: ' + (error && error.message ? error.message : error));
-        console.error(error);
-        // Fallback for helt offline/feil – vis et minimum
-        renderUserInfo({ name:'Gjest', email:'', roles:['Gjest'] });
-        const fallbackMenu = deriveMenuFromRoles(['Gjest']);
-        buildMenu(fallbackMenu);
-        runMenuAction('loadDashboard');
-    })
-    .uiBootstrap();
-}
-
-// ---------- Hjelpefunksjoner for UI ----------
-function renderUserInfo(user) {
-    if (!user || !user.email) {
-        userInfoDiv.innerHTML = '<span>Ikke innlogget</span>';
-        return;
-    }
-    userInfoDiv.innerHTML = `
-    <span>Logget inn som: <strong>${user.name || user.email}</strong></span>
-    <a href="#" id="logout-btn">Logg ut</a>
-    `;
-}
-
-function setLoadingState(message) {
-    contentArea.innerHTML = `<h2>${message}</h2>`;
-}
-
-function setErrorState(message) {
-    contentArea.innerHTML = `<h2 style="color: red;">${message}</h2>`;
-}
-
-// Bygger meny fra [{name, action}] – action er funksjonsnavn (string)
-function buildMenu(menuItems) {
-    mainMenuUl.innerHTML = '';
-
-    if (!menuItems || !menuItems.length) {
-        mainMenuUl.innerHTML = '<li><em>Ingen menypunkter tilgjengelig</em></li>';
-        return;
-    }
-
-    menuItems.forEach(item => {
-        const li = document.createElement('li');
-        const a  = document.createElement('a');
-        a.href = '#';
-        a.textContent = item.name;
-        a.addEventListener('click', e => {
-            e.preventDefault();
-            document.querySelectorAll('#main-menu a').forEach(el => el.classList.remove('active'));
-            a.classList.add('active');
-            runMenuAction(item.action);
-        });
-        li.appendChild(a);
-        mainMenuUl.appendChild(li);
+        // Kaller Apps Script-funksjonen, doPost er ruteren på serversiden.
+        google.script.run
+        .withSuccessHandler(successHandler)
+        .withFailureHandler(failureHandler)
+        .doPost({ function: functionName, ...args });
     });
 }
 
-// Kjør funksjon fra navnet (f.eks. 'loadDashboard')
-function runMenuAction(actionName) {
-    const fn = typeof actionName === 'string' ? window[actionName] : null;
-    if (typeof fn === 'function') {
-        fn();
+/**
+ * Laster inn en spesifikk side i hovedinnholdsområdet.
+ * @param {string} action Navn på aksjonen/siden (f.eks. 'styret')
+ */
+function loadPage(action) {
+    const contentArea = document.getElementById('content-area');
+    const pagePath = AppState.pages[action];
+    const pageName = action.charAt(0).toUpperCase() + action.slice(1);
+
+    if (!pagePath) {
+        contentArea.innerHTML = `<h2 class="text-xl font-bold text-red-600 p-6">Feil: Siden '${action}' eksisterer ikke eller er ikke definert i AppState.pages.</h2>`;
+        AppState.currentPage = null;
+        return;
+    }
+
+    AppState.currentPage = action;
+    contentArea.innerHTML = `<div class="p-6"><h2 class="text-2xl font-semibold text-gray-700">Laster: ${pageName}...</h2></div>`;
+
+    // 1. Hent HTML-innholdet for siden via getHtmlContent
+    callServer('getHtmlContent', { filename: pagePath })
+    .then(function(result) { // Bruker standard function her
+        // result.content inneholder HTML-stringen
+        contentArea.innerHTML = result.content || `<div class="p-6">Kunne ikke laste innhold for ${pageName}.</div>`;
+        document.title = 'Sameieportalen - ' + pageName;
+        // Skroller til toppen av innholdsområdet etter lasting
+        contentArea.scrollTop = 0;
+    })
+    .catch(function(error) { // Bruker standard function her
+        contentArea.innerHTML = `<div class="p-6"><h2 class="text-xl font-bold text-red-600">Feil ved lasting av side: ${error.message}</h2><p>Sjekk Apps Script Logger for detaljer.</p></div>`;
+    });
+
+    // Oppdater hash i URL-en
+    window.location.hash = '#' + action;
+    updateUI();
+}
+
+/** Oppdaterer topplinjen med brukerdata og genererer meny. */
+function updateUI() {
+    const userInfoEl = document.getElementById('user-info');
+    const menuEl = document.querySelector('#main-menu ul');
+
+    userInfoEl.textContent = `${AppState.user.name} (${AppState.user.roles.join(', ')})`;
+
+    // Bygg menyen basert på roller fra backend
+    menuEl.innerHTML = '';
+    AppState.menu.forEach(function(item) { // Bruker standard function her
+        const li = document.createElement('li');
+        // Legger til dynamisk ruting for lenker i sidemenyen
+        li.innerHTML = `<a href="#${item.action}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-blue-700 transition duration-150 rounded-lg">${item.name}</a>`;
+        li.querySelector('a').addEventListener('click', function(e) { // Bruker standard function her
+            e.preventDefault();
+            loadPage(item.action);
+        });
+        menuEl.appendChild(li);
+    });
+
+    // Legg til hendelseslytter for hash-endringer for å støtte tilbake/frem-knapper
+    window.addEventListener('hashchange', function() { // Bruker standard function her
+        const hash = window.location.hash.substring(1);
+        if (hash && hash !== AppState.currentPage) {
+            loadPage(hash);
+        }
+    });
+
+    // Legg til hendelseslytter for lenker i content-area som bruker #hash-ruting
+    document.getElementById('content-area').addEventListener('click', function(e) { // Bruker standard function her
+        let target = e.target;
+        // Gå oppover i DOM-en hvis klikket skjedde på et barne-element av <a>
+        while (target && target.tagName !== 'A') {
+            target = target.parentElement;
+        }
+
+        if (target && target.href && target.href.includes('#')) {
+            const hash = target.hash.substring(1);
+            if (AppState.pages[hash]) {
+                e.preventDefault();
+                loadPage(hash);
+            }
+        }
+    });
+}
+
+/** Initialiserer appen ved start. */
+function initApp() { // Fjerner async for å være mer kompatibel, selv om Apps Script's google.script.run er asynkron
+    console.log("App starter...");
+    const contentArea = document.getElementById('content-area');
+
+    // Gjøres asynkront via callServer
+    callServer('uiBootstrap')
+    .then(function(data) { // Bruker standard function her
+        AppState.user = data.user;
+        AppState.menu = data.menu;
+
+        updateUI();
+
+        const initialAction = window.location.hash ? window.location.hash.substring(1) : AppState.menu[0]?.action || 'dashboard';
+        const finalAction = AppState.pages[initialAction] ? initialAction : 'dashboard';
+
+        loadPage(finalAction);
+
+    })
+    .catch(function(e) { // Bruker standard function her
+        console.error("Kritisk oppstartsfeil i initApp:", e);
+        const errorMsg = 'Kunne ikke koble til serveren. Sjekk Apps Script Logger og publisering.';
+        document.getElementById('app-spinner').style.display = 'none';
+        contentArea.innerHTML = `<div class="p-6"><h2 class="text-xl font-bold text-red-600">${errorMsg}</h2><p class="text-gray-600">${e.message}</p></div>`;
+    });
+
+    // Skjules inne i promise-handleren, men vi sikrer at den ikke spinner i evig tid ved catch
+}
+
+// Kjør initialiseringsfunksjonen
+window.onload = initApp;
+
+</script>
+<!-- Simuler Google Script API for lokal testing/intelliSense -->
+<script>
+// Denne seksjonen er kun for utvikling/testing utenfor Apps Script-miljøet
+if (typeof google === 'undefined' || typeof google.script === 'undefined') {
+    window.google = {
+        script: {
+            run: {
+                withSuccessHandler: function(handler) { // Bruker standard function her
+                    return {
+                        withFailureHandler: function(fail) { // Bruker standard function her
+                            return {
+                                doPost: function(args) { // Bruker standard function her
+                                    // MOCK-implementasjon for doPost
+                                    setTimeout(function() { // Bruker standard function her
+                                        if (args.function === 'uiBootstrap') {
+                                            const mockData = {
+                                                user: { name: 'Mock Bruker', email: 'test@sameie.no', roles: ['Styreleder', 'Beboer'] },
+                                                menu: [
+                                                    { name: 'Dashboard', action: 'dashboard' },
+                                                    { name: 'Styret', action: 'styret' },
+                                                    { name: 'Booking', action: 'booking' },
+                                                    { name: 'Dokumenter', action: 'dokumenter' }
+                                                ]
+                                            };
+                                            handler({ success: true, result: mockData });
+                                        } else if (args.function === 'getHtmlContent') {
+                                            const pageKey = args.filename;
+                                            const contentMap = {
+                                                'public/js/ui/dashboard-page': '<!-- MOCK --> <h2 class="text-3xl font-light">MOCK Dashboard</h2><p>Dette er mock data.</p>',
+                                                'public/js/ui/styret-page': '<!-- MOCK --> <h2 class="text-3xl font-light">MOCK Styret</h2><p>Styret side.</p>',
+                                                'public/js/ui/avvik-new-page': '<!-- MOCK --> <h2 class="text-3xl font-light">MOCK Nytt Avvik</h2><p>Melde skjema.</p>',
+                                                'public/js/ui/booking-page': '<!-- MOCK --> <h2 class="text-3xl font-light">MOCK Booking</h2><p>Booking side.</p>',
+                                                'public/js/ui/dokumenter-page': '<!-- MOCK --> <h2 class="text-3xl font-light">MOCK Dokumenter</h2><p>Dokumenter side.</p>',
+                                            };
+                                            const htmlContent = contentMap[pageKey] || `<h2 class="text-3xl font-light">MOCK: Siden for ${pageKey} finnes ikke.</h2>`;
+
+                                            // Må etterligne Apps Script-responsen:
+                                            const response = { success: true, result: { content: htmlContent } };
+
+                                            handler(response);
+                                        } else {
+                                            fail('MOCK: Ukjent funksjon: ' + args.function);
+                                        }
+                                    }, 100);
+                                }
+                            };
+                        }
+                    };
+                }
+            }
+        }
+    };
+    // Sørg for at initApp kalles hvis vi er i en mock-miljø
+    if (document.readyState === 'complete') {
+        initApp();
     } else {
-        contentArea.innerHTML = `<p>Funksjonen <strong>${actionName}</strong> finnes ikke.</p>`;
-        console.warn('Ukjent meny-action:', actionName);
+        window.addEventListener('load', initApp);
     }
 }
-
-// Bygg meny lokalt ut fra roller hvis serveren ikke sendte meny
-function deriveMenuFromRoles(roles) {
-    roles = Array.isArray(roles) ? roles : ['Gjest'];
-    return MENU_CONFIG.filter(item => item.roles.some(r => roles.includes(r)))
-    .map(item => ({ name: item.name, action: item.action }));
-}
-
-// ---------- “Sider” (kan fylles med ekte data etter hvert) ----------
-function loadDashboard() {
-    contentArea.innerHTML = '<h2>Dashboard</h2><p>Velkommen til Sameieportalen! Innholdet for dashbordet vil vises her.</p>';
-    // Eksempel videre: google.script.run.withSuccessHandler(drawKpi).dashMetrics();
-}
-
-function loadAnnouncements() {
-    contentArea.innerHTML = '<h2>Oppslag</h2><p>Listen over alle kunngjøringer vil vises her.</p>';
-}
-
-function loadMeetings() {
-    setLoadingState('Laster møteoversikt…');
-    google.script.run
-    .withSuccessHandler(meetings => {
-        let html = '<h2>Møter & Protokoller</h2>';
-        if (!meetings || !meetings.length) {
-            html += '<p>Ingen kommende møter funnet.</p>';
-        } else {
-            html += '<ul>';
-            meetings.forEach(meeting => {
-                const meetingDate = new Date(meeting.dato).toLocaleDateString('no-NO');
-                html += `<li><strong>${meeting.tittel}</strong> - ${meetingDate}</li>`;
-            });
-            html += '</ul>';
-        }
-        contentArea.innerHTML = html;
-    })
-    .withFailureHandler(err => setErrorState('Kunne ikke laste møter: ' + (err && err.message ? err.message : err)))
-    .listMeetings_({ scope: 'planned' });
-}
-
-function openNewAnnouncementUI() {
-    contentArea.insertAdjacentHTML('beforeend','<p>Åpner dialog for nytt oppslag…</p>');
-    google.script.run
-    .withSuccessHandler(() => setTimeout(() => loadDashboard(), 800))
-    .withFailureHandler(err => setErrorState('Kunne ikke åpne dialogen: ' + (err && err.message ? err.message : err)))
-    .openNyttOppslagUI();
-}
-
-function loadUserAdmin() {
-    contentArea.innerHTML = '<h2>Brukeradministrasjon</h2><p>Verktøy for å administrere brukere og roller vil vises her.</p>';
-}
-
-function loadJanitorTasks() {
-    contentArea.innerHTML = '<h2>Mine Oppgaver</h2><p>Listen over dine tildelte oppgaver som vaktmester vil vises her.</p>';
-}
-
-// ---------- Start applikasjonen ----------
-document.addEventListener('DOMContentLoaded', init);
 </script>

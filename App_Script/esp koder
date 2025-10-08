@@ -1,0 +1,3 @@
+pio lib update
+pio run -t clean
+pio run

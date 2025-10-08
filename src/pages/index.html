@@ -1,19 +1,242 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="no">
 <head>
-  <title>Sameieportalen – Forside</title>
-  <include src="../partials/head.html"></include>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sameieportalen</title>
+
+    <style>
+      /* ===== Mini CSS for Sameieportalen ===== */
+      :root {
+          --gap: 12px;
+          --radius: 12px;
+          --border: #e5e7eb;
+          --bg: #fafafa;
+          --fg: #1f2937;
+          --link: #0b5bd3;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+          margin: 0;
+          background: var(--bg);
+          color: var(--fg);
+          font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+          display: grid;
+          grid-template-areas:
+              "header header"
+              "nav    main"
+              "nav    footer";
+          grid-template-columns: 220px 1fr;
+          grid-template-rows: auto 1fr auto;
+      }
+
+      /* Layout */
+      #top-bar {
+          grid-area: header;
+          background: white;
+          border-bottom: 1px solid var(--border);
+          padding: 10px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+      }
+
+      #main-menu {
+        grid-area: nav;
+        background: #f9fafb;
+        border-right: 1px solid var(--border);
+        padding: 20px;
+      }
+
+      #content-area {
+        grid-area: main;
+        padding: 20px;
+      }
+
+      /* Nav */
+      #main-menu ul {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+      }
+      #main-menu a {
+          display: block;
+          color: var(--link);
+          text-decoration: none;
+          padding: 8px 12px;
+          border-radius: 8px;
+          margin-bottom: 5px;
+      }
+      #main-menu a:hover, #main-menu a:focus-visible, #main-menu a.active {
+        background: #eef3ff;
+        outline: none;
+        font-weight: 600;
+      }
+
+    </style>
 </head>
 <body>
-  <include src="../partials/header.html"></include>
-  <main>
-    <h1>Velkommen til Sameieportalen</h1>
-    <p>Dette er forsiden. Her kan du legge til oversikt, meldinger eller introduksjonstekst.</p>
 
-    <section>
-      <include src="../partials/card.html"></include>
-    </section>
-  </main>
-  <include src="../partials/footer.html"></include>
+    <header id="top-bar">
+        <h1>Sameieportalen</h1>
+        <div id="user-info"></div>
+    </header>
+
+    <nav id="main-menu">
+        <ul></ul>
+    </nav>
+
+    <main id="content-area">
+        <h2>Laster...</h2>
+    </main>
+
+    <script>
+      // =================================================================
+      // Sameieportalen Frontend - Hovedapplikasjon (Hjernen)
+      // =================================================================
+
+      // ---------- DOM-elementer (hurtigreferanser) ----------
+      const contentArea = document.getElementById('content-area');
+      const mainMenuUl = document.querySelector('#main-menu ul');
+      const userInfoDiv = document.getElementById('user-info');
+
+
+      // ---------- Konfigurasjon av Meny ----------
+      const MENU_CONFIG = [
+        { name: 'Dashboard', requiredRoles: ['Beboer', 'Seksjonseier', 'Leietaker', 'Styremedlem', 'Admin', 'Vaktmester'], action: loadDashboard },
+        { name: 'Oppslag', requiredRoles: ['Beboer', 'Seksjonseier', 'Leietaker', 'Styremedlem', 'Admin', 'Vaktmester'], action: loadAnnouncements },
+        // ------------------ STYRET ------------------
+        { name: 'Møter & Protokoller', requiredRoles: ['Styremedlem', 'Admin'], action: loadMeetings },
+        { name: 'Send Oppslag', requiredRoles: ['Styremedlem', 'Admin'], action: openNewAnnouncementUI },
+        { name: 'Brukeradmin', requiredRoles: ['Admin'], action: loadUserAdmin },
+        // ------------------ VAKTMESTER ------------------
+        { name: 'Mine Oppgaver', requiredRoles: ['Vaktmester'], action: loadJanitorTasks },
+      ];
+
+
+      // ---------- App-Initialisering (Kjøres ved start) ----------
+      function init() {
+          setLoadingState('Laster brukerinformasjon...');
+
+          google.script.run
+          .withSuccessHandler(response => {
+              if (response && response.ok) {
+                  console.log("Brukerdata mottatt:", response.user);
+                  renderUserInfo(response.user);
+                  buildMenu(response.user.roles || ['Gjest']);
+                  loadDashboard();
+              } else {
+                  setErrorState('Klarte ikke å laste brukerdata: ' + (response.error || 'Ukjent feil.'));
+              }
+          })
+          .withFailureHandler(error => {
+              setErrorState('Klarte ikke å laste brukerdata: ' + error.message);
+              console.error(error);
+          })
+          .uiBootstrap();
+      }
+
+
+      // ---------- Hjelpefunksjoner for UI-bygging ----------
+      function renderUserInfo(user) {
+          if (!user || !user.email) {
+              userInfoDiv.innerHTML = '<span>Ikke innlogget</span>';
+              return;
+          }
+          userInfoDiv.innerHTML = `
+            <span>Logget inn som: <strong>${user.name || user.email}</strong></span>
+            <a href="#" id="logout-btn" style="margin-left: 15px;">Logg ut</a>
+          `;
+      }
+
+      function buildMenu(userRoles) {
+          mainMenuUl.innerHTML = '';
+          MENU_CONFIG.forEach(item => {
+              const hasAccess = item.requiredRoles.some(requiredRole => userRoles.includes(requiredRole));
+              if (hasAccess) {
+                  const li = document.createElement('li');
+                  const a = document.createElement('a');
+                  a.href = '#';
+                  a.textContent = item.name;
+                  a.addEventListener('click', (e) => {
+                      e.preventDefault();
+                      document.querySelectorAll('#main-menu a').forEach(el => el.classList.remove('active'));
+                      a.classList.add('active');
+                      item.action();
+                  });
+                  li.appendChild(a);
+                  mainMenuUl.appendChild(li);
+              }
+          });
+      }
+
+      function setLoadingState(message) {
+          contentArea.innerHTML = `<h2>${message}</h2>`;
+      }
+
+      function setErrorState(message) {
+          contentArea.innerHTML = `<h2 style="color: red;">${message}</h2>`;
+      }
+
+
+      // ---------- Funksjoner for å Laste Innhold (Arbeidshestene) ----------
+      function loadDashboard() {
+          contentArea.innerHTML = '<h2>Dashboard</h2><p>Velkommen til Sameieportalen! Innholdet for dashbordet vil vises her.</p>';
+      }
+
+      function loadAnnouncements() {
+          contentArea.innerHTML = '<h2>Oppslag</h2><p>Listen over alle kunngjøringer vil vises her.</p>';
+      }
+
+      function loadMeetings() {
+          setLoadingState('Laster møteoversikt...');
+          google.script.run
+          .withSuccessHandler(meetings => {
+              let html = '<h2>Møter & Protokoller</h2>';
+              if (!meetings || meetings.length === 0) {
+                  html += '<p>Ingen kommende møter funnet.</p>';
+              } else {
+                  html += '<ul>';
+                  meetings.forEach(meeting => {
+                      const meetingDate = new Date(meeting.dato).toLocaleDateString('no-NO');
+                      html += `<li><strong>${meeting.tittel}</strong> - ${meetingDate}</li>`;
+                  });
+                  html += '</ul>';
+              }
+              contentArea.innerHTML = html;
+          })
+          .withFailureHandler(err => {
+              setErrorState('Kunne ikke laste møter: ' + err.message);
+          })
+          .listMeetings_({ scope: 'planned' });
+      }
+
+      function openNewAnnouncementUI() {
+          setLoadingState('Åpner dialog for nytt oppslag...');
+          google.script.run
+          .withSuccessHandler(() => {
+              setTimeout(() => loadDashboard(), 500);
+          })
+          .withFailureHandler(err => {
+              setErrorState('Kunne ikke åpne dialogen: ' + err.message);
+          })
+          .openNyttOppslagUI();
+      }
+
+      function loadUserAdmin() {
+          contentArea.innerHTML = '<h2>Brukeradministrasjon</h2><p>Verktøy for å administrere brukere og roller vil vises her.</p>';
+      }
+
+      function loadJanitorTasks() {
+          contentArea.innerHTML = '<h2>Mine Oppgaver</h2><p>Listen over dine tildelte oppgaver som vaktmester vil vises her.</p>';
+      }
+
+
+      // ---------- Start Applikasjonen ----------
+      document.addEventListener('DOMContentLoaded', init);
+    </script>
+
 </body>
 </html>

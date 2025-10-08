@@ -19,7 +19,6 @@
 │       │   └── 57_Budsjett_App.js
 │       └── [01;34mshared-budget[0m
 │           └── BudgetCore.js
-├── Booking.js
 ├── [01;34mdist[0m
 │   ├── [01;34massets[0m
 │   │   ├── app.css
@@ -96,6 +95,7 @@
 │   ├── Admin_Panel.html
 │   ├── Auth.gs
 │   ├── Booking.html
+│   ├── Booking.js
 │   ├── CalendarExport.gs
 │   ├── calendar.js
 │   ├── Config_Service Dashbord.js
@@ -15654,7 +15654,10 @@
 ├── [01;34mpublic[0m
 │   ├── [01;34massets[0m
 │   │   └── app.css
+│   ├── [01;34mcss[0m
+│   │   └── app.html
 │   └── [01;34mjs[0m
+│       ├── app.html
 │       ├── app.js
 │       ├── [01;34mcore[0m
 │       │   └── BudgetCore.js
@@ -15691,4 +15694,4 @@
 │       └── head.html
 └── vite.config.js
 
-1929 directories, 13763 files
+1930 directories, 13765 files

@@ -1,0 +1,166 @@
+<script>
+// ====================================================================
+// SAMEIEPORTALEN FRONTEND (HOVEDKODE)
+// ====================================================================
+
+// ---------- DOM-referanser ----------
+const contentArea = document.getElementById('content-area');
+const mainMenuUl  = document.querySelector('#main-menu ul');
+const userInfoDiv = document.getElementById('user-info');
+
+// ---------- Spinner (lasteskjerm) ----------
+function showSpinner(){
+  const el = document.getElementById('app-spinner');
+  if (el) el.classList.add('show');
+}
+function hideSpinner(){
+  const el = document.getElementById('app-spinner');
+  if (el) el.classList.remove('show');
+}
+
+// ---------- Lokal fallback-meny (hvis backend ikke sender meny) ----------
+const MENU_CONFIG = [
+  { name: 'Dashboard', roles: ['Gjest','Beboer','Seksjonseier','Leietaker','Styremedlem','Admin','Vaktmester'], action: 'loadDashboard' },
+  { name: 'Oppslag', roles: ['Gjest','Beboer','Seksjonseier','Leietaker','Styremedlem','Admin','Vaktmester'], action: 'loadAnnouncements' },
+  { name: 'Møter & Protokoller', roles: ['Styremedlem','Admin'], action: 'loadMeetings' },
+  { name: 'Send Oppslag', roles: ['Styremedlem','Admin'], action: 'openNewAnnouncementUI' },
+  { name: 'Brukeradmin', roles: ['Admin'], action: 'loadUserAdmin' },
+  { name: 'Mine Oppgaver', roles: ['Vaktmester'], action: 'loadJanitorTasks' },
+];
+
+// ====================================================================
+// INIT
+// ====================================================================
+function init() {
+  setLoadingState('Laster brukerinformasjon …');
+  showSpinner();
+
+  google.script.run
+    .withSuccessHandler(userData => {
+      hideSpinner();
+      const user = userData && userData.user ? userData.user : { name:'Gjest', email:'', roles:['Gjest'] };
+      renderUserInfo(user);
+
+      const serverMenu = Array.isArray(userData && userData.menu) ? userData.menu : null;
+      const menuItems = (serverMenu && serverMenu.length)
+                        ? serverMenu
+                        : deriveMenuFromRoles(user.roles || ['Gjest']);
+      buildMenu(menuItems);
+
+      const firstAction = (menuItems[0] && menuItems[0].action) || 'loadDashboard';
+      runMenuAction(firstAction);
+    })
+    .withFailureHandler(error => {
+      hideSpinner();
+      setErrorState('Klarte ikke å laste brukerdata: ' + (error && error.message ? error.message : error));
+      renderUserInfo({ name:'Gjest', email:'', roles:['Gjest'] });
+      const fallbackMenu = deriveMenuFromRoles(['Gjest']);
+      buildMenu(fallbackMenu);
+      runMenuAction('loadDashboard');
+    })
+    .uiBootstrap();
+}
+
+// ====================================================================
+// UI-HJELPERE
+// ====================================================================
+function renderUserInfo(user){
+  if (!user || !user.email) {
+    userInfoDiv.innerHTML = '<span>Ikke innlogget</span>';
+    return;
+  }
+  userInfoDiv.innerHTML = `
+    <span>Logget inn som: <strong>${user.name || user.email}</strong></span>
+    <a href="#" id="logout-btn">Logg ut</a>
+  `;
+}
+function setLoadingState(msg){ contentArea.innerHTML = `<h2>${msg}</h2>`; }
+function setErrorState(msg){ contentArea.innerHTML = `<h2 style="color:red">${msg}</h2>`; }
+
+// ====================================================================
+// MENY-LOGIKK
+// ====================================================================
+function deriveMenuFromRoles(roles){
+  roles = Array.isArray(roles) ? roles : ['Gjest'];
+  return MENU_CONFIG
+    .filter(item => item.roles.some(r => roles.includes(r)))
+    .map(item => ({ name:item.name, action:item.action }));
+}
+function buildMenu(menuItems){
+  mainMenuUl.innerHTML = '';
+  if (!menuItems || !menuItems.length) {
+    mainMenuUl.innerHTML = '<li><em>Ingen menypunkter tilgjengelig</em></li>';
+    return;
+  }
+  menuItems.forEach(item => {
+    const li = document.createElement('li');
+    const a  = document.createElement('a');
+    a.href = '#';
+    a.textContent = item.name;
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelectorAll('#main-menu a').forEach(el => el.classList.remove('active'));
+      a.classList.add('active');
+      runMenuAction(item.action);
+    });
+    li.appendChild(a);
+    mainMenuUl.appendChild(li);
+  });
+}
+function runMenuAction(actionName){
+  const fn = typeof actionName === 'string' ? window[actionName] : null;
+  if (typeof fn === 'function') fn();
+  else contentArea.innerHTML = `<p>Funksjonen <b>${actionName}</b> finnes ikke.</p>`;
+}
+
+// ====================================================================
+// SIDE-FUNKSJONER
+// ====================================================================
+function loadDashboard(){
+  contentArea.innerHTML = '<h2>Dashboard</h2><p>Velkommen til Sameieportalen!</p>';
+}
+function loadAnnouncements(){
+  contentArea.innerHTML = '<h2>Oppslag</h2><p>Listen over kunngjøringer vises her.</p>';
+}
+function loadMeetings(){
+  setLoadingState('Laster møteoversikt …');
+  showSpinner();
+  google.script.run
+    .withSuccessHandler(meetings => {
+      hideSpinner();
+      let html = '<h2>Møter & Protokoller</h2>';
+      if (!meetings || !meetings.length) html += '<p>Ingen kommende møter funnet.</p>';
+      else {
+        html += '<ul>' + meetings.map(m => {
+          const d = new Date(m.dato).toLocaleDateString('no-NO');
+          return `<li><strong>${m.tittel}</strong> – ${d}</li>`;
+        }).join('') + '</ul>';
+      }
+      contentArea.innerHTML = html;
+    })
+    .withFailureHandler(err => {
+      hideSpinner();
+      setErrorState('Kunne ikke laste møter: ' + (err && err.message ? err.message : err));
+    })
+    .listMeetings_({ scope: 'planned' });
+}
+function openNewAnnouncementUI(){
+  contentArea.insertAdjacentHTML('beforeend','<p>Åpner dialog for nytt oppslag …</p>');
+  showSpinner();
+  google.script.run
+    .withSuccessHandler(() => { hideSpinner(); setTimeout(() => loadDashboard(), 800); })
+    .withFailureHandler(err => { hideSpinner(); setErrorState('Kunne ikke åpne dialogen: ' + (err && err.message ? err.message : err)); })
+    .openNyttOppslagUI();
+}
+function loadUserAdmin(){
+  contentArea.innerHTML = '<h2>Brukeradministrasjon</h2><p>Verktøy for å administrere brukere og roller vil vises her.</p>';
+}
+function loadJanitorTasks(){
+  contentArea.innerHTML = '<h2>Mine Oppgaver</h2><p>Listen over dine tildelte oppgaver som vaktmester vil vises her.</p>';
+}
+
+// ====================================================================
+// START APP
+// ====================================================================
+document.addEventListener('DOMContentLoaded', init);
+</script>

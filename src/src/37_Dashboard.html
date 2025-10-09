@@ -1,0 +1,162 @@
+<? var FILE = '37_Dashboard.html'; var VERSION = '1.3.0'; var UPDATED = '2025-09-20'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportal — Dashbord</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .title{font-size:22px;font-weight:700}
+    .muted{color:var(--muted);font-size:13px}
+    .badge{display:inline-block;margin-left:8px;padding:3px 8px;border:1px solid var(--border);border-radius:999px;font-size:12px;color:#cbd5e1;background:#0b1b33}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+    .card h3{margin:0 0 10px;font-size:16px}
+    .kpis{display:flex;gap:10px;flex-wrap:wrap}
+    .kpi{border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:#0b1b33}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:10px}
+    .link{padding:12px;border:1px solid var(--border);border-radius:10px;background:#0c1526;cursor:pointer}
+    .link:hover{background:#101a33}
+    .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
+    .toast.ok{background:var(--success)}
+    .toast.err{background:var(--danger)}
+    /* --- NEW: Skeleton Loader --- */
+    .skeleton{background-color:var(--border);color:transparent;border-radius:4px;animation:pulse 1.5s cubic-bezier(0.4,0,0.6,1) infinite}
+    @keyframes pulse{50%{opacity:.5}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <div class="title">Dashbord
+          <span id="roleBadge" class="badge" style="display:none"></span>
+        </div>
+        <div class="muted">Versjon <?= VERSION ?> • <span id="status" aria-live="polite">Laster inn...</span></div>
+      </div>
+      <button class="btn" id="btnRefresh">Oppdater tall</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Krever handling</h3>
+        <div class="muted">Nøkkeltall fra arkene.</div>
+        <div class="kpis" style="margin-top:8px">
+          <span class="kpi">Kommende møter: <b id="kMeet">–</b></span>
+          <span class="kpi">Åpne oppgaver: <b id="kTasks">–</b></span>
+          <span class="kpi">Mine oppgaver: <b id="kMy">–</b></span>
+          <span class="kpi">Til godkjenning: <b id="kAppr">–</b></span>
+        </div>
+      </div>
+
+      <div id="cardQuick" class="card" style="display:none">
+        <h3>Hurtigvalg</h3>
+        <div class="links">
+          <div class="link" onclick="openMod('MOTEOVERSIKT')">🗓️ Møteoversikt & protokoller</div>
+          <div class="link" onclick="openMod('VAKTMESTER')">🧰 Vaktmester</div>
+          <div class="link" onclick="openMod('PROTOKOLL_GODKJENNING')">📝 Protokoll-godkjenning</div>
+          <div class="link" onclick="openMod('SEKSJON_HISTORIKK')">🏠 Seksjonshistorikk</div>
+          <div class="link" onclick="openMod('EIERSKIFTE')">🔑 Eierskifte</div>
+          <div class="link" onclick="openMod('MOTE_SAK_EDITOR')">🧩 Møtesaker (editor)</div>
+          <div class="link" onclick="openMod('QNA_AGENT')">🤖 Spørsmål & Svar Agent</div>
+          <div class="link" onclick="openMod('QNA_SETTINGS')">⚙️ Q&A Innstillinger</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const kpiElements = [
+      document.getElementById('kMeet'),
+      document.getElementById('kTasks'),
+      document.getElementById('kMy'),
+      document.getElementById('kAppr'),
+    ];
+
+    function toast(msg, kind){ 
+      const t=document.createElement('div'); t.className='toast ' + (kind||'');
+      t.textContent=String(msg||''); document.body.appendChild(t);
+      setTimeout(()=>t.remove(), 2800);
+    }
+
+    function toggleSkeletons(isLoading) {
+      kpiElements.forEach(el => {
+        if (isLoading) {
+          el.textContent = '00'; // Placeholder for width
+          el.classList.add('skeleton');
+        } else {
+          el.classList.remove('skeleton');
+        }
+      });
+    }
+
+    function applyPermissions(res){
+      const badge = document.getElementById('roleBadge');
+      if (res?.user?.isAdmin){
+        badge.textContent = 'ADMIN'; badge.style.display='inline-block';
+        document.getElementById('cardQuick').style.display = 'block';
+      } else {
+        badge.textContent = 'BRUKER'; badge.style.display='inline-block';
+        document.getElementById('cardQuick').style.display = 'none';
+      }
+    }
+
+    function renderKpis(r){
+      kpiElements[0].textContent = r.counts.upcomingMeetings;
+      kpiElements[1].textContent = r.counts.openTasks;
+      kpiElements[2].textContent = r.counts.myTasks;
+      kpiElements[3].textContent = r.counts.pendingApprovals;
+    }
+
+    function refresh(forceFresh){
+      const btn = document.getElementById('btnRefresh');
+      const statusEl = document.getElementById('status');
+      
+      btn.disabled = true; 
+      statusEl.textContent = 'Oppdaterer…';
+      toggleSkeletons(true);
+
+      google.script.run
+        .withSuccessHandler(function(r){
+          btn.disabled = false; 
+          statusEl.textContent = `Sist oppdatert ${new Date().toLocaleTimeString()}`;
+          toggleSkeletons(false);
+          
+          if (!r || !r.ok) { toast('Kunne ikke hente tall', 'err'); return; }
+          applyPermissions(r); 
+          renderKpis(r);
+          if (forceFresh) toast('Tall oppdatert', 'ok');
+        })
+        .withFailureHandler(function(e){
+          btn.disabled = false; 
+          statusEl.textContent = 'Feil ved lasting';
+          toggleSkeletons(false);
+          kpiElements.forEach(el => el.textContent = '!'); // Show error indicator
+          
+          toast((e && e.message) ? e.message : 'Ukjent feil', 'err');
+        })
+        .dashMetrics(!!forceFresh);
+    }
+
+    function openMod(key){
+      google.script.run
+        .withFailureHandler(function(e){ 
+          const errorMessage = (e && e.message) ? e.message : 'Tilgang nektet eller ukjent feil';
+          toast(errorMessage, 'err');
+        })
+        .dashOpen(key, {});
+    }
+
+    document.getElementById('btnRefresh').addEventListener('click', ()=>refresh(true));
+    refresh(false); // Initial load (from cache if available)
+  </script>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<? var FILE = '41_LeverandorOversikt.html'; var VERSION = '1.0.0'; var UPDATED = '2025-09-28'; ?>
+<?!= include && include('AppMetaPartial') ?>
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportal — Leverandøroversikt</title>
+  <style>
+    :root{--bg:#0b1220;--card:#0f172a;--muted:#94a3b8;--border:#1f2937;--primary:#3b82f6;--success:#10b981;--danger:#ef4444;--tbl-head:#0c1526}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:#fff;font-size:14px}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .title{font-size:22px;font-weight:700}
+    .btn{display:inline-flex;gap:8px;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#0b1b33;color:#e2e8f0;cursor:pointer;font-size:14px}
+    .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn.danger{background:var(--danger);border-color:var(--danger);color:#fff}
+    .btn:disabled{cursor:not-allowed;opacity:0.6}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:16px}
+    .table-wrap{overflow-x:auto}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
+    th{background:var(--tbl-head);font-weight:600;font-size:13px;text-transform:uppercase;color:var(--muted)}
+    td .actions{display:flex;gap:8px}
+    .modal-backdrop{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:999;display:flex;align-items:center;justify-content:center}
+    .modal-content{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px;width:95%;max-width:600px}
+    .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+    .modal-title{font-size:18px;font-weight:700}
+    .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
+    .form-field{display:flex;flex-direction:column}
+    .form-field.full-width{grid-column:1/-1}
+    .form-field label{margin-bottom:6px;font-weight:500;color:var(--muted)}
+    .form-field input,.form-field textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:#0c1526;color:#fff;font-size:14px}
+    .modal-foot{display:flex;justify-content:flex-end;gap:12px;margin-top:24px}
+    .toast{position:fixed;top:20px;right:20px;background:#0b1b33;color:#fff;padding:12px 14px;border:1px solid var(--border);border-radius:10px;z-index:1000;min-width:200px}
+    .toast.ok{background:var(--success)}.toast.err{background:var(--danger)}
+    #loader{margin-top:20px;text-align:center;font-size:16px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1 class="title">Leverandøroversikt</h1>
+      <button class="btn primary" id="addSupplierBtn">Legg til ny leverandør</button>
+    </div>
+    <div id="status" aria-live="polite"></div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table id="supplierTable">
+          <thead>
+            <tr>
+              <th>Navn</th>
+              <th>Kontaktperson</th>
+              <th>Telefon</th>
+              <th>E-post</th>
+              <th>Avtalenr.</th>
+              <th>Tjenester</th>
+              <th>Handlinger</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Supplier rows will be injected here -->
+          </tbody>
+        </table>
+        <div id="loader">Laster data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Add/Edit Supplier -->
+  <div id="supplierModal" class="modal-backdrop" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2 id="modalTitle" class="modal-title">Legg til ny leverandør</h2>
+        <button class="btn" onclick="closeModal()">&times;</button>
+      </div>
+      <form id="supplierForm">
+        <input type="hidden" id="supplierId" name="id">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="name">Navn</label>
+            <input type="text" id="name" name="name" required>
+          </div>
+          <div class="form-field">
+            <label for="contactPerson">Kontaktperson</label>
+            <input type="text" id="contactPerson" name="contactPerson">
+          </div>
+          <div class="form-field">
+            <label for="phone">Telefon</label>
+            <input type="tel" id="phone" name="phone">
+          </div>
+          <div class="form-field">
+            <label for="email">E-post</label>
+            <input type="email" id="email" name="email">
+          </div>
+          <div class="form-field">
+            <label for="contractId">Avtalenr.</label>
+            <input type="text" id="contractId" name="contractId">
+          </div>
+          <div class="form-field">
+            <label for="services">Tjenester</label>
+            <input type="text" id="services" name="services">
+          </div>
+          <div class="form-field full-width">
+            <label for="notes">Notater</label>
+            <textarea id="notes" name="notes" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" onclick="closeModal()">Avbryt</button>
+          <button type="submit" class="btn primary" id="saveBtn">Lagre</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script>
+  let suppliers = [];
+  const tableBody = document.querySelector('#supplierTable tbody');
+  const loader = document.getElementById('loader');
+  const modal = document.getElementById('supplierModal');
+  const form = document.getElementById('supplierForm');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function toast(msg, kind){
+    const t=document.createElement('div'); t.className='toast '+(kind||'');
+    t.textContent=String(msg||''); document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 2800);
+  }
+
+  function renderTable() {
+    tableBody.innerHTML = '';
+    if (suppliers.length === 0) {
+      loader.textContent = 'Ingen leverandører funnet.';
+      return;
+    }
+    loader.style.display = 'none';
+
+    suppliers.forEach(s => {
+      const row = tableBody.insertRow();
+      row.innerHTML = `
+        <td>${s.name || ''}</td>
+        <td>${s.contactPerson || ''}</td>
+        <td>${s.phone || ''}</td>
+        <td>${s.email || ''}</td>
+        <td>${s.contractId || ''}</td>
+        <td>${s.services || ''}</td>
+        <td class="actions">
+          <button class="btn" onclick="editSupplier('${s.id}')">Rediger</button>
+          <button class="btn" onclick="confirmDelete('${s.id}')">Slett</button>
+        </td>
+      `;
+    });
+  }
+
+  function fetchSuppliers() {
+    loader.style.display = 'block';
+    loader.textContent = 'Laster data...';
+    google.script.run
+      .withSuccessHandler(response => {
+        if (response.ok) {
+          suppliers = response.suppliers;
+          renderTable();
+        } else {
+          loader.textContent = 'Feil ved lasting av data.';
+          toast(response.message, 'err');
+        }
+      })
+      .withFailureHandler(error => {
+        loader.textContent = 'Feil ved lasting av data.';
+        toast(error.message, 'err');
+      })
+      .getSuppliers();
+  }
+
+  function openModal(supplierId = null) {
+    form.reset();
+    if (supplierId) {
+      const supplier = suppliers.find(s => s.id === supplierId);
+      if (supplier) {
+        modalTitle.textContent = 'Rediger leverandør';
+        for (const key in supplier) {
+          if (form.elements[key]) {
+            form.elements[key].value = supplier[key];
+          }
+        }
+      }
+    } else {
+      modalTitle.textContent = 'Legg til ny leverandør';
+      form.elements.id.value = '';
+    }
+    modal.style.display = 'flex';
+  }
+
+  function closeModal() {
+    modal.style.display = 'none';
+  }
+
+  function editSupplier(id) {
+    openModal(id);
+  }
+
+  function confirmDelete(id) {
+    if (confirm('Er du sikker på at du vil slette denne leverandøren?')) {
+      loader.style.display = 'block';
+      loader.textContent = 'Sletter...';
+      google.script.run
+        .withSuccessHandler(response => {
+          if (response.ok) {
+            toast('Leverandør slettet.', 'ok');
+            fetchSuppliers();
+          } else {
+            toast(response.message, 'err');
+            loader.style.display = 'none';
+          }
+        })
+        .withFailureHandler(error => {
+          toast(error.message, 'err');
+          loader.style.display = 'none';
+        })
+        .deleteSupplier(id);
+    }
+  }
+
+  document.getElementById('addSupplierBtn').addEventListener('click', () => openModal());
+
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Lagrer...';
+
+    const formData = new FormData(form);
+    const payload = Object.fromEntries(formData.entries());
+
+    google.script.run
+      .withSuccessHandler(response => {
+        if (response.ok) {
+          toast('Leverandør lagret!', 'ok');
+          closeModal();
+          fetchSuppliers();
+        } else {
+          toast(response.message, 'err');
+        }
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Lagre';
+      })
+      .withFailureHandler(error => {
+        toast(error.message, 'err');
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Lagre';
+      })
+      .saveSupplier(payload);
+  });
+
+  // Initial load
+  document.addEventListener('DOMContentLoaded', fetchSuppliers);
+</script>
+</body>
+</html>

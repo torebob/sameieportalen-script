@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sameieportalen</title>
+  <!-- FIKS: Laster Tailwind CSS direkte for å garantere at det er tilgjengelig -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Beholder din opprinnelige CSS-fil for eventuelle egne stiler -->
+  <?!= include('public_css_app'); ?>
+</head>
+<body>
+  <!-- Spinner overlay -->
+<div id="app-spinner" class="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-75">
+  <div class="flex flex-col items-center">
+    <div class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-primary border-t-transparent"></div>
+    <p class="mt-4 text-lg font-semibold text-gray-700">Laster portalen...</p>
+  </div>
+</div>
+  <!-- Spinner overlay -->
+  <div id="app-spinner" class="fixed inset-0 z-50 flex items-center justify-center bg-white bg-opacity-75">
+    <div class="flex flex-col items-center">
+      <div class="h-16 w-16 animate-spin rounded-full border-4 border-solid border-primary border-t-transparent"></div>
+      <p class="mt-4 text-lg font-semibold text-gray-700">Laster portalen...</p>
+    </div>
+  </div>
+
+  <!-- Topplinje -->
+  <header id="top-bar" class="sticky top-0 z-40 flex items-center justify-between bg-gray-800 p-4 text-white shadow-md">
+    <div class="brand text-xl font-bold">Sameieportalen</div>
+    <div class="user flex items-center space-x-4 text-sm">
+      <span id="user-info" class="text-gray-300">Laster…</span>
+      <a id="logout-btn" href="#logout" class="rounded-md bg-red-600 py-1 px-3 font-medium text-white transition duration-150 hover:bg-red-700">Logg ut</a>
+    </div>
+  </header>
+
+  <!-- Layout: venstre sidebar + innhold -->
+  <div id="app-shell" class="flex min-h-screen pt-16">
+    <aside id="sidebar" class="fixed h-full w-64 overflow-y-auto bg-gray-100 p-4 shadow-lg">
+      <nav id="main-menu" class="space-y-2 text-gray-700">
+        <ul class="space-y-1">
+          <!-- Meny-elementer fylles inn her -->
+        </ul>
+      </nav>
+      
+      <div id="debug-info" class="mt-8 space-y-1 border-t border-gray-300 pt-4 text-xs text-gray-500">
+          <p>Status: <span id="debug-status">Laster HTML...</span></p>
+          <p>Bruker ID: <span id="debug-user-id"></span></p>
+      </div>
+    </aside>
+    <main id="content-area" role="main" tabindex="-1" class="flex-grow p-8 transition-all duration-300 ml-64">
+      <h2 class="text-2xl font-semibold text-gray-500">Venter på JavaScript...</h2>
+    </main>
+  </div>
+
+  <!-- All JavaScript er nå inkludert direkte her for å unngå feil -->
+  <script>
+    // Global konfigurasjon for Tailwind CSS
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#DC2626', // Rød-600
+          },
+        },
+      },
+    };
+
+    /** Hjelper for å sikre at tall sendes som tall */
+    function normalizeInput(obj) {
+      const normalized = {};
+      for (const key in obj) {
+        if (obj.hasOwnProperty(key)) {
+          let value = obj[key];
+          if (value !== '' && !isNaN(value) && typeof value === 'string') {
+            normalized[key] = parseFloat(value);
+          } else {
+            normalized[key] = value;
+          }
+        }
+      }
+      return normalized;
+    }
+
+    /** Skjuler spinneren trygt etter at innholdet er lastet. */
+    function hideSpinner() {
+      const spinner = document.getElementById('app-spinner');
+      if (spinner) {
+        setTimeout(function() {
+          spinner.classList.add('opacity-0', 'pointer-events-none');
+          setTimeout(function() {
+            spinner.style.display = 'none';
+          }, 300);
+        }, 0);
+      }
+      document.getElementById('content-area').focus();
+    }
+
+    /** Viser en feilmelding i hovedinnholdet */
+    function errorHandler(error) {
+      const contentArea = document.getElementById('content-area');
+      contentArea.innerHTML = `
+        <div class="p-6">
+          <h1 class="text-xl font-bold text-red-700">Oppstart feilet</h1>
+          <p class="text-gray-600 mb-4">Dette kan skyldes feil i koden, eller manglende data.</p>
+          <pre class="relative overflow-x-auto rounded border border-red-400 bg-red-100 px-4 py-3 text-sm text-red-700">
+            <strong>FEILMELDING:</strong> ${error.message || error}
+            <br>
+            Kontroller Apps Script Logger for detaljer.
+          </pre>
+        </div>
+      `;
+      hideSpinner();
+    }
+
+    /** Wrapper for alle Serverkall. */
+    function callServer(functionName, args) {
+      return new Promise(function(resolve, reject) {
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+          console.warn('Google Script Run er ikke tilgjengelig. Bruker MOCK for: ' + functionName);
+          // MOCK data for lokal testing...
+          setTimeout(() => resolve({ success: true, message: 'Mock response' }), 500);
+          return;
+        }
+
+        const runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject);
+
+        if (args !== undefined) {
+          runner[functionName](args);
+        } else {
+          runner[functionName]();
+        }
+      });
+    }
+
+    /** Laster inn en HTML-fil i hovedinnholdet. */
+    function loadPage(pageName, data) {
+      const contentArea = document.getElementById('content-area');
+      contentArea.innerHTML = '<h2>Laster ' + pageName + '...</h2>';
+
+      const fileName = pageName.replace('load', '').toLowerCase() + '-page';
+
+      callServer('getHtmlContent', fileName)
+        .then(function(htmlContent) {
+          contentArea.innerHTML = htmlContent;
+          const initFuncName = pageName.replace('load', '').toLowerCase() + '-pageInit';
+          if (typeof window[initFuncName] === 'function') {
+            window[initFuncName](data);
+          }
+        })
+        .catch(function(error) {
+          errorHandler(new Error('Klarte ikke laste siden: ' + pageName));
+          console.error("Feil ved lasting av side:", error);
+        });
+    }
+
+    /** Bygger navigasjonsmenyen. */
+    function buildMenu(menu) {
+      const menuList = document.querySelector('#main-menu ul');
+      if (!menuList) return;
+      menuList.innerHTML = '';
+
+      if (!Array.isArray(menu) || menu.length === 0) {
+        menuList.innerHTML = '<li><a href="#dashboard" class="block p-2 text-gray-500">Meny mangler</a></li>';
+        return;
+      }
+
+      menu.forEach(function(item) {
+        const action = String(item.action || '').replace('load', '');
+        const hash = '#' + action.charAt(0).toLowerCase() + action.slice(1);
+        const link = document.createElement('a');
+        link.href = hash;
+        link.textContent = item.name;
+        link.className = 'block rounded-md p-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200';
+        const listItem = document.createElement('li');
+        listItem.appendChild(link);
+        menuList.appendChild(listItem);
+      });
+    }
+
+    /** Håndterer ruting basert på URL hash. */
+    function handleRoute() {
+      const hash = window.location.hash || '#dashboard';
+      const action = hash.substring(1);
+      const pageName = 'load' + action.charAt(0).toUpperCase() + action.slice(1);
+
+      if (typeof window[pageName] === 'function') {
+        window[pageName]();
+      } else {
+        loadPage(pageName);
+      }
+    }
+
+    /** Initierer applikasjonen. */
+    window.onload = function() {
+      document.getElementById('debug-status').textContent = 'Kjører JS...';
+
+      callServer('uiBootstrap')
+        .then(function(result) {
+          if (!result || !result.user || !result.menu) {
+            throw new Error('Ufullstendig respons fra uiBootstrap.');
+          }
+
+          document.getElementById('user-info').textContent = `${result.user.name} (${result.user.roles[0]})`;
+          document.getElementById('debug-user-id').textContent = result.user.email;
+          document.getElementById('sidebar').className = 'fixed h-full w-64 overflow-y-auto bg-gray-800 p-4 text-white shadow-lg';
+          document.getElementById('logout-btn').href = 'https://accounts.google.com/logout';
+
+          buildMenu(result.menu);
+          handleRoute();
+          window.addEventListener('hashchange', handleRoute);
+          hideSpinner();
+        })
+        .catch(errorHandler);
+    };
+
+    // Definerer side-funksjoner
+    function loadDashboard() { loadPage('dashboard'); }
+    function loadStyret() { loadPage('styret'); }
+    function loadBooking() { loadPage('booking'); }
+    function loadDokumenter() { loadPage('dokumenter'); }
+    function loadAvvikNew() { loadPage('avvik-new'); }
+  </script>
+
+</body>
+</html>
+

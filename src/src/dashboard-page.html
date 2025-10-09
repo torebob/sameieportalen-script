@@ -1,0 +1,32 @@
+<!--
+FIL: dashboard-page.html
+FORMÅL: Innholdet som vises når brukeren klikker på "Dashboard".
+-->
+<div class="space-y-6">
+    <h1 class="text-3xl font-bold text-gray-800">Velkommen til Sameieportalen</h1>
+    <p class="text-gray-600">
+        Dette er ditt dashboard. Her vil du etter hvert finne snarveier til de viktigste funksjonene,
+        siste nytt fra styret og annen relevant informasjon.
+    </p>
+
+    <!-- Eksempel på et "kort" for hurtighandlinger -->
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div class="rounded-lg border bg-white p-6 shadow-sm transition hover:shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700">Meld inn et avvik</h2>
+            <p class="mt-2 text-gray-500">Har du oppdaget en feil eller mangel? Rapporter det her.</p>
+            <a href="#avvikNew" class="mt-4 inline-block rounded-md bg-primary px-4 py-2 text-white transition hover:bg-red-700">Start her</a>
+        </div>
+
+        <div class="rounded-lg border bg-white p-6 shadow-sm transition hover:shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700">Booking</h2>
+            <p class="mt-2 text-gray-500">Reserver fellesrom, gjesteparkering eller andre ressurser.</p>
+            <a href="#booking" class="mt-4 inline-block rounded-md bg-gray-600 px-4 py-2 text-white transition hover:bg-gray-700">Gå til booking</a>
+        </div>
+
+        <div class="rounded-lg border bg-white p-6 shadow-sm transition hover:shadow-md">
+            <h2 class="text-xl font-semibold text-gray-700">Dokumenter</h2>
+            <p class="mt-2 text-gray-500">Finn vedtekter, husordensregler og protokoller fra årsmøter.</p>
+            <a href="#dokumenter" class="mt-4 inline-block rounded-md bg-gray-600 px-4 py-2 text-white transition hover:bg-gray-700">Se dokumentarkiv</a>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,6 @@
+<section class="filters">
+  <label>År:
+    <input id="filter-year" type="number" min="2000" max="2100" value="<?= defaultYear || new Date().getFullYear() ?>" />
+  </label>
+  <button onclick="applyBudgetFilters()">Filtrer</button>
+</section>

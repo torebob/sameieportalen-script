@@ -1,0 +1,112 @@
+<!--
+ ==================================================================
+   FILE: 35_ProtokollGodkjenningSkjema.html
+   VERSION: 1.0.0
+   UPDATED: 2025-09-28
+   PURPOSE: Brukergrensesnitt for digital signering av protokoll.
+ ==================================================================
+-->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>Protokoll Godkjenning</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 2em;
+    }
+    #protokoll-container {
+      border: 1px solid #ccc;
+      padding: 1em;
+      margin-bottom: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>Protokoll Godkjenning</h1>
+  <p>Vennligst se over protokollen nedenfor og signer med BankID.</p>
+
+  <div id="protokoll-container">
+    <!-- Protocol content will be loaded here -->
+    <p>Laster protokoll...</p>
+  </div>
+
+  <button id="signer-med-bankid">Signer med BankID</button>
+  <div id="status-message" style="margin-top: 1em; color: #666;"></div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const moteId = "<?!= moteId ?>";
+      const signButton = document.getElementById('signer-med-bankid');
+      const statusMessage = document.getElementById('status-message');
+      const protokollContainer = document.getElementById('protokoll-container');
+
+      // Function to load protocol URL
+      function loadProtocol() {
+        google.script.run
+          .withSuccessHandler(function(response) {
+              if (response && response.url) {
+                  protokollContainer.innerHTML = `<p>Protokoll klar for visning. <a href="${response.url}" target="_blank" rel="noopener">Klikk her for å åpne i ny fane</a>.</p>`;
+              } else {
+                  protokollContainer.innerHTML = '<p>Kunne ikke laste protokoll-URLen.</p>';
+              }
+          })
+          .withFailureHandler(function(error) {
+              protokollContainer.innerHTML = `<p>Feil under lasting av protokoll: ${error.message}</p>`;
+          })
+          .getProtocolPreviewUrl(moteId);
+      }
+
+      // Attach event listener to the sign button
+      signButton.addEventListener('click', function() {
+        statusMessage.textContent = 'Starter BankID-signering...';
+        signButton.disabled = true;
+
+        // 1. Initiate the signing process
+        google.script.run
+          .withSuccessHandler(function(initiateResponse) {
+            if (initiateResponse.ok && initiateResponse.redirectUrl) {
+              statusMessage.innerHTML = `Signering initiert. Vennligst fullfør i BankID. Sjekker status... <a href="${initiateResponse.redirectUrl}" target="_blank">(Mock-lenke)</a>`;
+
+              // 2. Simulate waiting for the user to sign (e.g., 3 seconds)
+              setTimeout(function() {
+                statusMessage.textContent = 'Fullfører signering, vennligst vent...';
+
+                // 3. Call back to the server to finalize the signing
+                google.script.run
+                  .withSuccessHandler(function(finalizeResponse) {
+                    if (finalizeResponse.ok) {
+                      statusMessage.textContent = 'Protokollen er herved signert!';
+                      signButton.textContent = 'Signert';
+                      // Button remains disabled
+                    } else {
+                      statusMessage.textContent = 'Feil under fullføring: ' + (finalizeResponse.message || 'Ukjent feil.');
+                      signButton.disabled = false; // Re-enable on failure
+                    }
+                  })
+                  .withFailureHandler(function(error) {
+                    statusMessage.textContent = 'Feil under fullføring: ' + error.message;
+                    signButton.disabled = false;
+                  })
+                  .finalizeBankIDSigning(moteId); // This function will be created in the next step
+              }, 3000);
+
+            } else {
+              statusMessage.textContent = 'Feil ved initiering: ' + (initiateResponse.message || 'Ukjent feil.');
+              signButton.disabled = false;
+            }
+          })
+          .withFailureHandler(function(error) {
+            statusMessage.textContent = 'En feil oppstod ved initiering: ' + error.message;
+            signButton.disabled = false;
+          })
+          .initiateBankIDSigning(moteId);
+      });
+
+      // Initial call to load the protocol
+      loadProtocol();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+"scripts": {
+  "lint": "eslint SRC/src --max-warnings=0",
+  "dup:check": "jscpd --config .jscpd.json SRC/src",
+  "test": "npm run lint && npm run dup:check"
+}
+{
+  "name": "sameieportalen-script",
+  "version": "1.0.0",
+  "description": "This repository contains the code and documentation for the project related to INFRA-01.",
+  "main": "Booking.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/torebob/sameieportalen-script.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/torebob/sameieportalen-script/issues"
+  },
+  "homepage": "https://github.com/torebob/sameieportalen-script#readme",
+  "devDependencies": {
+    "eslint": "^9.36.0",
+    "eslint-plugin-sonarjs": "^3.0.5",
+    "jscpd": "^4.0.5"
+  }
+}

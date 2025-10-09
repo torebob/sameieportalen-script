@@ -7,7 +7,7 @@
  * Åpner brukergrensesnittet for å sende et nytt oppslag.
  */
 function openNyttOppslagUI() {
-  const html = HtmlService.createHtmlOutputFromFile('36_NyttOppslag.html')
+  const html = HtmlService.createHtmlOutputFromFile('NyttOppslag.html')
     .setWidth(600).setHeight(550);
   SpreadsheetApp.getUi().showModalDialog(html, 'Send nytt oppslag');
 }

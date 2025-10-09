@@ -1,40 +1,40 @@
 /* ======================= Møter & Agenda (Komplett API) =======================
- * FILE: 20_Moter_API.gs | VERSION: 1.6.1 | UPDATED: 2025-09-14
- * FORMÅL: Komplett, høytytende backend for den avanserte møtemodulen.
- * Støtter sanntidspolling, indeksering, innspill og avstemming.
- * ============================================================================== */
+ * FILE: 20_Moter_API.gs | VERSION: 1.6.1 | UPDATED: 2025-09-14
+ * FORMÅL: Komplett, høytytende backend for den avanserte møtemodulen.
+ * Støtter sanntidspolling, indeksering, innspill og avstemming.
+ * ============================================================================== */
 
 (function (global) {
-  // -------------------- KONFIG --------------------
-  const PROPS = PropertiesService.getScriptProperties();
+  // -------------------- KONFIG --------------------
+  const PROPS = PropertiesService.getScriptProperties();
 
-  const MEETINGS_SHEET = SHEETS.MOTER;
-  const SAKER_SHEET    = SHEETS.MOTE_SAKER;
-  const INNSPILL_SHEET = SHEETS.MOTE_KOMMENTARER;
+  const MEETINGS_SHEET = SHEETS.MOTER;
+  const SAKER_SHEET    = SHEETS.MOTE_SAKER;
+  const INNSPILL_SHEET = SHEETS.MOTE_KOMMENTARER;
   const STEMMER_SHEET  = SHEETS.MOTE_STEMMER;
 
-  const MEETINGS_HEADERS = ['id','type','dato','start','slutt','sted','tittel','agenda','status','created_ts','updated_ts'];
-  const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslagAv', 'gdprNote', 'bakgrunn', 'forslagVedtak', 'vedtak', 'status', 'ansvarlig', 'created_ts', 'updated_ts'];
-  const INNSPILL_HEADERS = ['sak_id','ts','from','text'];
+  const MEETINGS_HEADERS = ['id','type','dato','start','slutt','sted','tittel','agenda','status','created_ts','updated_ts'];
+  const SAKER_HEADERS = ['mote_id', 'sak_id', 'saksnr', 'tittel', 'forslagAv', 'gdprNote', 'bakgrunn', 'forslagVedtak', 'vedtak', 'status', 'ansvarlig', 'created_ts', 'updated_ts'];
+  const INNSPILL_HEADERS = ['sak_id','ts','from','text'];
   const STEMMER_HEADERS = ['vote_id','sak_id','mote_id','email','name','vote','ts'];
 
-  // -------------------- HELPERE --------------------
-  function tz_() { return Session.getScriptTimeZone() || 'Europe/Oslo'; }
-  function log_(topic, msg) { try { if (typeof _logEvent === 'function') _logEvent(topic, msg); } catch (_) {} }
-  
-  function ensureSheet_(name, headers) {
+  // -------------------- HELPERE --------------------
+  function tz_() { return Session.getScriptTimeZone() || 'Europe/Oslo'; }
+  function log_(topic, msg) { try { if (typeof _logEvent === 'function') _logEvent(topic, msg); } catch (_) {} }
+  
+  function ensureSheet_(name, headers) {
     if (typeof _ensureSheetWithHeaders_ === 'function') {
         return _ensureSheetWithHeaders_(name, headers);
     }
-    const ss = SpreadsheetApp.getActive();
-    let sh = ss.getSheetByName(name);
-    if (!sh) {
-      sh = ss.insertSheet(name);
-      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
-      sh.setFrozenRows(1);
-    }
-    return sh;
-  }
+    const ss = SpreadsheetApp.getActive();
+    let sh = ss.getSheetByName(name);
+    if (!sh) {
+      sh = ss.insertSheet(name);
+      sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
+      sh.setFrozenRows(1);
+    }
+    return sh;
+  }
   function getCurrentUser_() {
     const email = (Session.getActiveUser()?.getEmail() || Session.getEffectiveUser()?.getEmail() || '').toLowerCase();
     let name = '';
@@ -68,93 +68,93 @@
     return sakerSheet.getRange(rowNum, cMoteId + 1).getValue();
   }
 
-  // -------------------- RAD-INDEKSERING --------------------
-  const Indexer = {
-    getKey: (sheetName) => `IDX::${sheetName}`,
-    get: function(sheetName, headers, idHeader) {
-      const raw = PROPS.getProperty(this.getKey(sheetName));
-      if (!raw) return this.rebuild(sheetName, headers, idHeader);
-      try {
-        const parsed = JSON.parse(raw);
-        return (parsed && parsed.h === idHeader && typeof parsed.m === 'object') ? parsed.m : this.rebuild(sheetName, headers, idHeader);
-      } catch (_) {
-        return this.rebuild(sheetName, headers, idHeader);
-      }
-    },
-    set: function(sheetName, idHeader, id, row) {
-      const key = this.getKey(sheetName);
-      const data = JSON.parse(PROPS.getProperty(key) || '{}');
-      if (!data.h) data.h = idHeader;
-      if (!data.m) data.m = {};
-      data.m[id] = row;
-      PROPS.setProperty(key, JSON.stringify(data));
-    },
-    rebuild: function(sheetName, headers, idHeader) {
-      const sh = ensureSheet_(sheetName, headers);
-      const H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-      const idCol = H.indexOf(idHeader);
-      if (idCol < 0) throw new Error(`Fant ikke ID-kolonne '${idHeader}' i ${sheetName}`);
-      
-      const map = {};
-      const last = sh.getLastRow();
-      if (last > 1) {
-        const ids = sh.getRange(2, idCol + 1, last - 1, 1).getValues();
-        for (let i = 0; i < ids.length; i++) {
-          if (ids[i][0]) map[ids[i][0]] = i + 2;
-        }
-      }
-      PROPS.setProperty(this.getKey(sheetName), JSON.stringify({ h: idHeader, m: map }));
-      log_('Indexer', `Indeks for ${sheetName} ble gjenoppbygd.`);
-      return map;
-    }
-  };
+  // -------------------- RAD-INDEKSERING --------------------
+  const Indexer = {
+    getKey: (sheetName) => `IDX::${sheetName}`,
+    get: function(sheetName, headers, idHeader) {
+      const raw = PROPS.getProperty(this.getKey(sheetName));
+      if (!raw) return this.rebuild(sheetName, headers, idHeader);
+      try {
+        const parsed = JSON.parse(raw);
+        return (parsed && parsed.h === idHeader && typeof parsed.m === 'object') ? parsed.m : this.rebuild(sheetName, headers, idHeader);
+      } catch (_) {
+        return this.rebuild(sheetName, headers, idHeader);
+      }
+    },
+    set: function(sheetName, idHeader, id, row) {
+      const key = this.getKey(sheetName);
+      const data = JSON.parse(PROPS.getProperty(key) || '{}');
+      if (!data.h) data.h = idHeader;
+      if (!data.m) data.m = {};
+      data.m[id] = row;
+      PROPS.setProperty(key, JSON.stringify(data));
+    },
+    rebuild: function(sheetName, headers, idHeader) {
+      const sh = ensureSheet_(sheetName, headers);
+      const H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+      const idCol = H.indexOf(idHeader);
+      if (idCol < 0) throw new Error(`Fant ikke ID-kolonne '${idHeader}' i ${sheetName}`);
+      
+      const map = {};
+      const last = sh.getLastRow();
+      if (last > 1) {
+        const ids = sh.getRange(2, idCol + 1, last - 1, 1).getValues();
+        for (let i = 0; i < ids.length; i++) {
+          if (ids[i][0]) map[ids[i][0]] = i + 2;
+        }
+      }
+      PROPS.setProperty(this.getKey(sheetName), JSON.stringify({ h: idHeader, m: map }));
+      log_('Indexer', `Indeks for ${sheetName} ble gjenoppbygd.`);
+      return map;
+    }
+  };
   
   function getVoteIndex_(sakId){
-    const key = `VOTEIDX::${sakId}`;
-    const raw = PROPS.getProperty(key);
-    if (raw) { try { return JSON.parse(raw) || {}; } catch(_){ return {}; } }
-    const sh = ensureSheet_(STEMMER_SHEET, STEMMER_HEADERS);
-    const H = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
-    const last = sh.getLastRow();
-    const map = {};
-    if (last > 1){
-      const vals = sh.getRange(2,1,last-1,sh.getLastColumn()).getValues();
-      const iS = H.indexOf('sak_id'), iE = H.indexOf('email');
-      for (let i=0;i<vals.length;i++){
-        if (String(vals[i][iS]) === String(sakId)) {
-          const em = String(vals[i][iE]||'').toLowerCase();
-          if (em) map[em] = i+2;
-        }
-      }
-    }
-    PROPS.setProperty(key, JSON.stringify(map));
-    return map;
-  }
-  function setVoteIndexRow_(sakId, email, row){
-    const key = `VOTEIDX::${sakId}`;
-    const map = JSON.parse(PROPS.getProperty(key) || '{}');
-    map[String(email).toLowerCase()] = row;
-    PROPS.setProperty(key, JSON.stringify(map));
-  }
+    const key = `VOTEIDX::${sakId}`;
+    const raw = PROPS.getProperty(key);
+    if (raw) { try { return JSON.parse(raw) || {}; } catch(_){ return {}; } }
+    const sh = ensureSheet_(STEMMER_SHEET, STEMMER_HEADERS);
+    const H = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0];
+    const last = sh.getLastRow();
+    const map = {};
+    if (last > 1){
+      const vals = sh.getRange(2,1,last-1,sh.getLastColumn()).getValues();
+      const iS = H.indexOf('sak_id'), iE = H.indexOf('email');
+      for (let i=0;i<vals.length;i++){
+        if (String(vals[i][iS]) === String(sakId)) {
+          const em = String(vals[i][iE]||'').toLowerCase();
+          if (em) map[em] = i+2;
+        }
+      }
+    }
+    PROPS.setProperty(key, JSON.stringify(map));
+    return map;
+  }
+  function setVoteIndexRow_(sakId, email, row){
+    const key = `VOTEIDX::${sakId}`;
+    const map = JSON.parse(PROPS.getProperty(key) || '{}');
+    map[String(email).toLowerCase()] = row;
+    PROPS.setProperty(key, JSON.stringify(map));
+  }
 
-  // -------------------- UI & API --------------------
-  function openMeetingsUI() {
-    const tpl = HtmlService.createTemplateFromFile('30_Moteoversikt.html');
-    tpl.FILE = '30_Moteoversikt.html';
-    tpl.APP_VERSION = APP.VERSION;
-    tpl.TITLE = 'Møteoversikt & Protokoller';
-    tpl.PURPOSE = 'UI for møter, agenda, innspill og vedtak.';
-    
-    const html = tpl.evaluate().setWidth(1100).setHeight(760);
-    SpreadsheetApp.getUi().showModalDialog(html, 'Møteoversikt & Protokoller');
-  }
-  
-  function uiBootstrap(){
+  // -------------------- UI & API --------------------
+  function openMeetingsUI() {
+    const tpl = HtmlService.createTemplateFromFile('Moteoversikt.html');
+    tpl.FILE = 'Moteoversikt.html';
+    tpl.APP_VERSION = APP.VERSION;
+    tpl.TITLE = 'Møteoversikt & Protokoller';
+    tpl.PURPOSE = 'UI for møter, agenda, innspill og vedtak.';
+    
+    const html = tpl.evaluate().setWidth(1100).setHeight(760);
+    SpreadsheetApp.getUi().showModalDialog(html, 'Møteoversikt & Protokoller');
+  }
+  
+  function uiBootstrap(){
     const { email, name } = getCurrentUser_();
     return { user: { email, name } };
   }
 
-  // ==================== MØTER, SAKER, INNSPILL, STEMMING ====================
+  // ==================== MØTER, SAKER, INNSPILL, STEMMING ====================
   function upsertMeeting(payload) {
     const lock = LockService.getScriptLock();
     lock.waitLock(15000);
@@ -499,10 +499,10 @@
     }
     return { serverNow, meetingUpdated, updatedSaker, newInnspill };
   }
-  
-  // -------------------- EKSPORT --------------------
-  global.openMeetingsUI = openMeetingsUI;
-  global.uiBootstrap = uiBootstrap;
+  
+  // -------------------- EKSPORT --------------------
+  global.openMeetingsUI = openMeetingsUI;
+  global.uiBootstrap = uiBootstrap;
   // global.upsertMeeting = upsertMeeting;
   // global.listMeetings_ = listMeetings_;
   // global.addAgendaItem = addAgendaItem;
@@ -514,8 +514,8 @@
   // global.listInnspill = listInnspill;
   // global.castVote = castVote;
   // global.getVoteSummary = getVoteSummary;
-  global.rtServerNow = rtServerNow;
-  global.rtGetChanges = rtGetChanges;
+  global.rtServerNow = rtServerNow;
+  global.rtGetChanges = rtGetChanges;
 
 })(this);
 

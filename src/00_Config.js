@@ -132,10 +132,10 @@ var SHEET_METADATA = Object.freeze({
 /* ============================== UI-register =============================== */
 
 var CONFIG_UI = Object.freeze({
-  DASHBOARD: { file: '37_Dashboard.html', title: 'Sameieportalen – Dashbord', width: 1280, height: 840, resizable: true, modal: true, requiredRole: 'user' },
+  DASHBOARD: { file: 'Dashboard.html', title: 'Sameieportalen – Dashbord', width: 1280, height: 840, resizable: true, modal: true, requiredRole: 'user' },
   BEBOERREGISTER: { file: '12_Beboerregister.html', title: 'Beboerregister', width: 1200, height: 800, resizable: true, modal: true, requiredRole: 'admin' },
-  MOTE_OVERSIKT: { file: '30_Moteoversikt.html', title: 'Møteoversikt', width: 1100, height: 760, resizable: true, modal: true, requiredRole: 'user' },
-  MOTE_SAK_EDITOR: { file: '31_MoteSakEditor.html', title: 'Møtesaker – Editor', width: 1100, height: 760, resizable: true, modal: true, requiredRole: 'admin' },
+  MOTE_OVERSIKT: { file: 'Moteoversikt.html', title: 'Møteoversikt', width: 1100, height: 760, resizable: true, modal: true, requiredRole: 'user' },
+  MOTE_SAK_EDITOR: { file: 'MoteSakEditor.html', title: 'Møtesaker – Editor', width: 1100, height: 760, resizable: true, modal: true, requiredRole: 'admin' },
   SYNC_WIZARD: { file: '20_SyncWizard.html', title: 'Krav Sync – Veiviser', width: 980, height: 720, resizable: true, modal: true, requiredRole: 'admin' },
   ANALYSIS_DASH: { file: '38_AnalysisDashboard.html', title: 'Analyse – Oversikt', width: 1280, height: 860, resizable: true, modal: true, requiredRole: 'admin' }
 });

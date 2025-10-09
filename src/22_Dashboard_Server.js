@@ -1,6 +1,6 @@
 /* ====================== Dashboard Server (Backend) ======================
  * FILE: 22_Dashboard_Server.gs | VERSION: 1.2.0 | UPDATED: 2025-09-14
- * PURPOSE: KPI-er og sikre åpner-funksjoner for 37_Dashboard.html
+ * PURPOSE: KPI-er og sikre åpner-funksjoner for Dashboard.html
  * - dashMetrics(forceFresh?)  → returnerer {ok,user,counts,ts}
  * - dashOpen(key, params?)    → åpner whitelista UI-moduler trygt
  * - Ytelse: CacheService (45s) pr bruker

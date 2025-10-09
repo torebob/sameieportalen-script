@@ -1,0 +1,82 @@
+<!--
+FIL: ny-henvendelse-page.html
+FORMÅL: Et skjema for beboere til å sende inn henvendelser som behandles av AI.
+-->
+<div class="space-y-4">
+    <h1 class="text-3xl font-bold text-gray-800">Ny Henvendelse til Styret</h1>
+    <p class="text-gray-600">
+        Beskriv din henvendelse nedenfor. En AI-assistent vil gjøre en før-sortering
+        før saken sendes til styret for manuell behandling.
+    </p>
+
+    <div class="rounded-lg border bg-white p-6 shadow-sm space-y-4">
+        <div>
+            <label for="henvendelse-tittel" class="block text-sm font-medium text-gray-700">Tittel</label>
+            <input type="text" id="henvendelse-tittel" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="F.eks. Lås på ytterdør er ødelagt">
+        </div>
+        <div>
+            <label for="henvendelse-beskrivelse" class="block text-sm font-medium text-gray-700">Beskrivelse</label>
+            <textarea id="henvendelse-beskrivelse" rows="6" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="Beskriv problemet så detaljert som mulig. Hvor er det? Når skjedde det?"></textarea>
+        </div>
+        <div>
+            <button id="send-henvendelse-btn" class="w-full rounded-md bg-primary px-4 py-2 text-white font-semibold shadow-sm hover:bg-red-700">
+                Send Henvendelse
+            </button>
+        </div>
+    </div>
+    
+    <!-- Status-område for tilbakemelding -->
+    <div id="status-melding" class="hidden rounded-md bg-blue-50 p-4">
+        <p class="text-sm text-blue-700"></p>
+    </div>
+</div>
+
+<script>
+    function sendHenvendelse() {
+        const tittel = document.getElementById('henvendelse-tittel').value;
+        const beskrivelse = document.getElementById('henvendelse-beskrivelse').value;
+        const statusDiv = document.getElementById('status-melding');
+        const statusText = statusDiv.querySelector('p');
+        const sendBtn = document.getElementById('send-henvendelse-btn');
+
+        if (!tittel || !beskrivelse) {
+            alert("Både tittel og beskrivelse må fylles ut.");
+            return;
+        }
+
+        const fullTekst = `Tittel: ${tittel}\n\nBeskrivelse: ${beskrivelse}`;
+        
+        // Deaktiver knapp og vis melding
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Behandler...';
+        statusDiv.classList.remove('hidden');
+        statusText.textContent = 'Sender henvendelsen til AI-assistenten for analyse. Vennligst vent...';
+        
+        // Her ville man hentet e-post fra en global variabel eller funksjon
+        const brukerEpost = document.getElementById('debug-user-id').textContent || 'ukjent.bruker@epost.no';
+
+        google.script.run
+            .withSuccessHandler(function(oppgaveId) {
+                statusDiv.classList.replace('bg-blue-50', 'bg-green-50');
+                statusText.classList.replace('text-blue-700', 'text-green-700');
+                statusText.innerHTML = `<strong>Takk for din henvendelse!</strong> Saken er registrert med saksnummer: <strong>${oppgaveId}</strong>. Styret vil behandle saken så snart som mulig.`;
+                
+                // Tømmer skjemaet
+                document.getElementById('henvendelse-tittel').value = '';
+                document.getElementById('henvendelse-beskrivelse').value = '';
+            })
+            .withFailureHandler(function(error) {
+                statusDiv.classList.replace('bg-blue-50', 'bg-red-50');
+                statusText.classList.replace('text-blue-700', 'text-red-700');
+                statusText.innerHTML = `<strong>En feil oppstod:</strong> ${error.message}. Vennligst prøv igjen, eller kontakt styret direkte.`;
+            })
+            .withFinally(function() {
+                // Aktiver knapp igjen
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send Henvendelse';
+            })
+            .behandleHenvendelseMedAI(fullTekst, brukerEpost);
+    }
+
+    document.getElementById('send-henvendelse-btn').addEventListener('click', sendHenvendelse);
+</script>

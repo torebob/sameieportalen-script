@@ -1,0 +1,486 @@
+<!-- 
+  ╔════════════════════════════════════════════════════════════════════════╗
+  ║  SAMEIEPORTALEN - BASE STYLES & RESET                                  ║
+  ║  Versjon: 1.0.0                                                        ║
+  ║  Dato: 9. oktober 2025                                                 ║
+  ║                                                                        ║
+  ║  FORMÅL:                                                               ║
+  ║  - Reset nettleser-defaults                                           ║
+  ║  - Base typography og element-styling                                 ║
+  ║  - WCAG 2.2 AA fokus-ringer                                           ║
+  ║  - Responsive images og media                                         ║
+  ║                                                                        ║
+  ║  BRUK:                                                                 ║
+  ║  <?!= include('_base') ?>                                             ║
+  ╚════════════════════════════════════════════════════════════════════════╝
+-->
+
+<style>
+  /* ========================================================================
+     MODERN CSS RESET
+     Basert på: https://piccalil.li/blog/a-modern-css-reset/
+     ======================================================================== */
+  
+  /* Box sizing rules */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  
+  /* Remove default margin */
+  * {
+    margin: 0;
+  }
+  
+  /* Allow percentage-based heights in the application */
+  html,
+  body {
+    height: 100%;
+  }
+  
+  /* ========================================================================
+     BASE DOCUMENT STYLES
+     ======================================================================== */
+  
+  html {
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    
+    /* Font rendering */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    
+    /* Text size adjust */
+    -webkit-text-size-adjust: 100%;
+  }
+  
+  body {
+    /* Typography */
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
+    font-weight: var(--font-normal);
+    
+    /* Colors */
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    
+    /* Layout */
+    min-height: 100vh;
+    
+    /* Prevent horizontal scroll */
+    overflow-x: hidden;
+  }
+  
+  /* ========================================================================
+     TYPOGRAPHY - HEADINGS
+     ======================================================================== */
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: var(--font-semibold);
+    line-height: var(--leading-tight);
+    color: var(--text-primary);
+    margin-bottom: var(--space-4);
+  }
+  
+  h1 {
+    font-size: var(--text-4xl);
+    font-weight: var(--font-bold);
+  }
+  
+  h2 {
+    font-size: var(--text-3xl);
+  }
+  
+  h3 {
+    font-size: var(--text-2xl);
+  }
+  
+  h4 {
+    font-size: var(--text-xl);
+  }
+  
+  h5 {
+    font-size: var(--text-lg);
+  }
+  
+  h6 {
+    font-size: var(--text-base);
+  }
+  
+  /* ========================================================================
+     TYPOGRAPHY - TEXT ELEMENTS
+     ======================================================================== */
+  
+  p {
+    margin-bottom: var(--space-4);
+  }
+  
+  a {
+    color: var(--color-primary);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+  
+  a:hover {
+    color: var(--color-primary-hover);
+    text-decoration: underline;
+  }
+  
+  strong, b {
+    font-weight: var(--font-bold);
+  }
+  
+  em, i {
+    font-style: italic;
+  }
+  
+  small {
+    font-size: var(--text-sm);
+  }
+  
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background-color: var(--color-gray-100);
+    padding: 0.125rem 0.25rem;
+    border-radius: var(--radius-sm);
+  }
+  
+  pre {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    background-color: var(--color-gray-100);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin-bottom: var(--space-4);
+  }
+  
+  pre code {
+    background-color: transparent;
+    padding: 0;
+  }
+  
+  /* ========================================================================
+     LISTS
+     ======================================================================== */
+  
+  ul, ol {
+    padding-left: var(--space-6);
+    margin-bottom: var(--space-4);
+  }
+  
+  li {
+    margin-bottom: var(--space-2);
+  }
+  
+  /* Remove list styles on ul, ol elements with a list role */
+  ul[role='list'],
+  ol[role='list'] {
+    list-style: none;
+    padding: 0;
+  }
+  
+  /* ========================================================================
+     IMAGES & MEDIA
+     ======================================================================== */
+  
+  img,
+  picture,
+  video,
+  canvas,
+  svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  
+  /* ========================================================================
+     FORMS
+     ======================================================================== */
+  
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
+  
+  button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  
+  /* ========================================================================
+     TABLES
+     ======================================================================== */
+  
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: var(--space-4);
+  }
+  
+  th {
+    text-align: left;
+    font-weight: var(--font-semibold);
+    padding: var(--space-3);
+    border-bottom: 2px solid var(--border-color);
+  }
+  
+  td {
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  /* ========================================================================
+     FOCUS STYLES (WCAG 2.2 AA COMPLIANT)
+     KRITISK for tilgjengelighet - aldri fjern!
+     ======================================================================== */
+  
+  /* Remove default browser focus outline */
+  *:focus {
+    outline: none;
+  }
+  
+  /* Custom focus ring for all interactive elements */
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+  
+  /* Special focus for buttons with background */
+  button:focus-visible {
+    box-shadow: 0 0 0 3px var(--color-primary-light);
+  }
+  
+  /* ========================================================================
+     SKIP TO CONTENT LINK (WCAG 2.2 AA)
+     ======================================================================== */
+  
+  .skip-to-content {
+    position: absolute;
+    top: -100px;
+    left: var(--space-4);
+    background: var(--color-primary);
+    color: white;
+    padding: var(--space-2) var(--space-4);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    font-weight: var(--font-medium);
+    z-index: var(--z-tooltip);
+    transition: top var(--transition-fast);
+  }
+  
+  .skip-to-content:focus {
+    top: var(--space-4);
+  }
+  
+  /* ========================================================================
+     UTILITIES - REDUCED MOTION
+     ======================================================================== */
+  
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  
+  /* ========================================================================
+     UTILITIES - HIGH CONTRAST MODE
+     ======================================================================== */
+  
+  @media (prefers-contrast: high) {
+    :root {
+      --border-color: var(--color-black);
+    }
+    
+    button,
+    a {
+      text-decoration: underline;
+    }
+  }
+  
+  /* ========================================================================
+     RESPONSIVE - BREAKPOINTS
+     ======================================================================== */
+  
+  /* Mobile first: base styles above are for mobile */
+  
+  /* Tablet and up (768px+) */
+  @media (min-width: 768px) {
+    body {
+      font-size: var(--text-base);
+    }
+    
+    h1 {
+      font-size: var(--text-5xl);
+    }
+    
+    h2 {
+      font-size: var(--text-4xl);
+    }
+    
+    h3 {
+      font-size: var(--text-3xl);
+    }
+  }
+  
+  /* Desktop and up (1024px+) */
+  @media (min-width: 1024px) {
+    body {
+      font-size: 1.0625rem; /* 17px */
+    }
+  }
+  
+  /* ========================================================================
+     PRINT STYLES
+     ======================================================================== */
+  
+  @media print {
+    *,
+    *::before,
+    *::after {
+      background: transparent !important;
+      color: #000 !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+    
+    a,
+    a:visited {
+      text-decoration: underline;
+    }
+    
+    a[href]::after {
+      content: " (" attr(href) ")";
+    }
+    
+    abbr[title]::after {
+      content: " (" attr(title) ")";
+    }
+    
+    pre,
+    blockquote {
+      border: 1px solid #999;
+      page-break-inside: avoid;
+    }
+    
+    thead {
+      display: table-header-group;
+    }
+    
+    tr,
+    img {
+      page-break-inside: avoid;
+    }
+    
+    p,
+    h2,
+    h3 {
+      orphans: 3;
+      widows: 3;
+    }
+    
+    h2,
+    h3 {
+      page-break-after: avoid;
+    }
+    
+    /* Hide non-essential elements when printing */
+    nav,
+    aside,
+    .no-print {
+      display: none !important;
+    }
+  }
+  
+  /* ========================================================================
+     SELECTION
+     ======================================================================== */
+  
+  ::selection {
+    background-color: var(--color-primary-light);
+    color: var(--color-primary-dark);
+  }
+  
+  /* ========================================================================
+     SCROLLBAR (Webkit)
+     ======================================================================== */
+  
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: var(--color-gray-100);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-gray-400);
+    border-radius: var(--radius-full);
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-gray-500);
+  }
+  
+  /* ========================================================================
+     UTILITIES - CONTAINER
+     ======================================================================== */
+  
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+  
+  @media (min-width: 640px) {
+    .container {
+      max-width: 640px;
+    }
+  }
+  
+  @media (min-width: 768px) {
+    .container {
+      max-width: 768px;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .container {
+      max-width: 1024px;
+      padding-left: var(--space-6);
+      padding-right: var(--space-6);
+    }
+  }
+  
+  @media (min-width: 1280px) {
+    .container {
+      max-width: 1280px;
+    }
+  }
+</style>

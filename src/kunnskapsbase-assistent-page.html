@@ -1,0 +1,72 @@
+<!--
+FIL: kunnskapsbase-assistent-page.html
+FORMÅL: Viser et grensesnitt for styret til å spørre kunnskapsbasen (Fase 2).
+-->
+<div class="space-y-6 max-w-3xl mx-auto">
+    <div class="text-center">
+        <h1 class="text-3xl font-bold text-gray-800">Spør Kunnskapsbasen</h1>
+        <p class="text-gray-600 mt-2">
+            Still et spørsmål, så vil AI-assistenten lete etter svar i sameiets dokumenter (f.eks. husordensregler, vedtekter).
+        </p>
+    </div>
+
+    <div class="rounded-lg border bg-white p-6 shadow-sm">
+        <div class="flex gap-4">
+            <input type="text" id="question-input" class="flex-grow block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary" placeholder="Eksempel: Hva er reglene for dyrehold?">
+            <button id="ask-btn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary hover:bg-primary/90">
+                Spør
+            </button>
+        </div>
+    </div>
+    
+    <div id="answer-container" class="hidden rounded-lg border bg-gray-50 p-6 shadow-sm">
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Svar fra assistenten:</h3>
+        <div id="answer-text" class="prose max-w-none text-gray-700">
+            <!-- Svaret vises her -->
+        </div>
+    </div>
+</div>
+
+<script>
+    const askBtn = document.getElementById('ask-btn');
+    const questionInput = document.getElementById('question-input');
+    const answerContainer = document.getElementById('answer-container');
+    const answerText = document.getElementById('answer-text');
+
+    function setLoading(isLoading) {
+        askBtn.disabled = isLoading;
+        askBtn.textContent = isLoading ? 'Søker...' : 'Spør';
+    }
+
+    askBtn.addEventListener('click', function() {
+        const question = questionInput.value.trim();
+        if (!question) {
+            alert('Vennligst skriv et spørsmål.');
+            return;
+        }
+
+        setLoading(true);
+        answerContainer.classList.remove('hidden');
+        answerText.innerHTML = '<p>Leter etter svar i kunnskapsbasen...</p>';
+
+        google.script.run
+            .withSuccessHandler(function(answer) {
+                setLoading(false);
+                // Enkel formatering for å gjøre linjeskift synlige
+                answerText.innerHTML = answer.replace(/\n/g, '<br>'); 
+            })
+            .withFailureHandler(function(error) {
+                setLoading(false);
+                answerText.innerHTML = `<p class="text-red-600"><strong>Feil:</strong> ${error.message}</p>`;
+            })
+            .sporKunnskapsbasen(question);
+    });
+
+    // Gjør det mulig å trykke Enter for å søke
+    questionInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            askBtn.click();
+        }
+    });
+</script>

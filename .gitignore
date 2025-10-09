@@ -1,42 +1,31 @@
-# Node modules (hvis du bruker npm)
+# ZIP og arkiver
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Package locks (kan regenereres)
+package-lock.json
+
+# Temporary files
+mappestruktur.txt
+
+# Large CSS (bruk CDN i stedet)
+report/
+
+# Clasp
+.clasprc.json
+
+# Node
 node_modules/
 
 # Logs
 *.log
-logs/
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
 # IDE
 .vscode/
 .idea/
-
-# Temporary files
-*.tmp
-*.temp
-~*
-
-# Large files
-*.zip
-*.tar.gz
-*.rar
-*.7z
-
-# Database dumps
-*.sql
-*.sqlite
-*.db
-
-# PDFs og store dokumenter (hvis du ikke trenger dem i Git)
-# *.pdf
-
-# Bilder (hvis du ikke trenger dem i Git)
-# *.jpg
-# *.jpeg
-# *.png
-# *.gif
-
-# Clasp credentials
-.clasprc.json

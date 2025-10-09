@@ -1,1 +1,42 @@
-node_modules
+# Node modules (hvis du bruker npm)
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.temp
+~*
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Database dumps
+*.sql
+*.sqlite
+*.db
+
+# PDFs og store dokumenter (hvis du ikke trenger dem i Git)
+# *.pdf
+
+# Bilder (hvis du ikke trenger dem i Git)
+# *.jpg
+# *.jpeg
+# *.png
+# *.gif
+
+# Clasp credentials
+.clasprc.json
